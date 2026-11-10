@@ -1,0 +1,578 @@
+# SkyFleet — Architecture Context
+
+## 1. Architecture Overview
+
+SkyFleet is an autonomous urban drone delivery and AI operations platform built around a continuously running logistics simulation.
+
+The system is designed as a **modular monolith with a separate Simulation Worker process**.
+
+The architecture should provide clear domain boundaries, maintainable code, predictable operational behavior, and straightforward deployment.
+
+The initial implementation should avoid unnecessary distributed infrastructure. Components should be separated according to their responsibilities without introducing microservices or infrastructure complexity prematurely.
+
+### Core Architectural Principles
+
+- Clear separation between frontend and backend.
+- Modular backend organized around business domains.
+- Backend owns all operational state and simulation logic.
+- Frontend focuses on presentation and user interaction.
+- Deterministic business logic for operational decisions.
+- Real-time communication for simulation updates.
+- Controlled integration of AI through backend tools.
+- Explicit and consistent domain state transitions.
+- Testability and maintainability over unnecessary abstraction.
+
+## 2. Technology Stack
+
+The following technologies define the intended implementation direction.
+
+### Frontend
+
+- React.
+- TypeScript.
+- Tailwind CSS for styling.
+- Mapbox GL JS for interactive maps.
+- A suitable React state management solution, selected according to actual application complexity.
+- REST API communication with the backend.
+- WebSocket communication for real-time operational updates.
+
+### Backend
+
+- Python.
+- FastAPI.
+- Pydantic for data validation and API schemas.
+- SQLAlchemy for database access and persistence.
+- Pytest for automated testing.
+
+### Simulation
+
+- A separate Python Simulation Worker process.
+- Shared domain logic and persistence with the main backend.
+- Configurable simulation execution interval.
+- Backend-controlled state transitions and event generation.
+
+### AI Integration
+
+- An LLM accessed through a controlled backend integration.
+- Tool calling for retrieving operational information.
+- Explicit approval for state-changing AI-assisted operations.
+
+### Infrastructure
+
+- Database selection remains open.
+- Environment-based configuration and secret management.
+- Docker and Docker Compose may be used to simplify local development and deployment.
+- Frontend and backend may be deployed independently.
+- The Simulation Worker must run independently of frontend sessions.
+
+Do not introduce additional technologies without a concrete technical reason.
+
+## 3. High-Level System Structure
+
+The system consists of three primary logical areas.
+
+### 3.1 Core Operations
+
+Responsible for managing the business domain and operational workflows.
+
+Modules:
+
+- Orders
+- Drones
+- Hubs
+- Pickup Stations
+- Delivery Points
+- Dispatch
+- Missions
+- Charging
+- Maintenance
+- Incidents
+- System Events
+
+Responsibilities:
+
+- Manage operational entities.
+- Enforce business rules.
+- Validate state transitions.
+- Expose REST API endpoints.
+- Coordinate dispatch and mission execution.
+- Persist operational data.
+
+### 3.2 Simulation Runtime
+
+Responsible for continuously generating and processing simulated operational activity.
+
+Components:
+
+- Simulation Worker
+- Flight State Engine
+- Telemetry Generator
+- Event Processing
+- Incident Detection
+- Simulation Lifecycle Management
+
+Responsibilities:
+
+- Generate incoming orders.
+- Advance mission states.
+- Simulate drone movement.
+- Generate telemetry.
+- Simulate battery consumption and charging.
+- Detect simulated incidents.
+- Update operational state.
+- Produce events for frontend consumption.
+
+The Simulation Worker must operate independently of the frontend and should not require an active browser session.
+
+The main backend and Simulation Worker may run as separate processes while sharing application modules and persistence.
+
+### 3.3 AI Operations Intelligence
+
+Responsible for assisting operators in understanding and managing the simulated network.
+
+Primary component:
+
+- Fleet Operations Agent.
+
+Responsibilities:
+
+- Answer natural-language questions about the operational system.
+- Retrieve relevant information through controlled backend tools.
+- Investigate incidents.
+- Explain operational decisions.
+- Generate reports and recommendations.
+- Propose selected operational actions subject to human approval.
+
+AI must not bypass domain rules or directly manipulate persistence.
+
+## 4. Backend Architecture
+
+Use a modular backend structure with clear separation of responsibilities.
+
+A logical organization may look like:
+
+- `api/` — REST endpoints, request handling, and WebSocket interfaces.
+- `domains/` — business entities, rules, and domain operations.
+- `simulation/` — simulation lifecycle and runtime components.
+- `ai/` — LLM integration, agent orchestration, and tool definitions.
+- `infrastructure/` — persistence, configuration, and external integrations.
+- `shared/` — common utilities and cross-domain primitives.
+
+The exact directory structure may evolve as the project grows.
+
+### Architectural Rules
+
+- Keep API route handlers thin.
+- Keep business logic outside HTTP route handlers.
+- Keep domain logic independent of frontend implementation.
+- Avoid unnecessary circular dependencies between domains.
+- Use explicit interfaces between modules where appropriate.
+- Validate incoming data at application boundaries.
+- Keep persistence concerns separate from domain behavior where practical.
+- Avoid creating abstractions without a concrete need.
+
+## 5. Domain Model
+
+The initial domain includes the following entities.
+
+### Drone
+
+Represents an autonomous delivery drone.
+
+Potential attributes:
+- Identifier.
+- Name or model.
+- Operational status.
+- Battery level.
+- Current location.
+- Assigned mission.
+- Operational capabilities.
+- Simulated telemetry.
+
+### Hub
+
+Represents an operational base for drones.
+
+Potential attributes:
+- Identifier.
+- Name.
+- Location and coordinates.
+- Operational status.
+- Capacity.
+- Available charging resources.
+
+### Pickup Station
+
+Represents a parcel collection point associated with a retail location.
+
+A Drone Hub and Pickup Station are distinct entities.
+
+One Drone Hub may support multiple Pickup Stations.
+
+### Delivery Point
+
+Represents a predefined destination for a simulated delivery.
+
+### Order
+
+Represents a customer delivery request.
+
+An order should reference a Pickup Station and a Delivery Point and maintain a clear fulfillment status.
+
+### Mission
+
+Represents an operational task assigned to a drone.
+
+A mission may involve:
+- Traveling to a pickup location.
+- Collecting a parcel.
+- Traveling to a delivery destination.
+- Completing delivery.
+- Returning to a suitable hub.
+
+### Incident
+
+Represents a simulated operational problem requiring attention.
+
+Incidents should reference relevant entities and preserve their status and history.
+
+### Telemetry Record
+
+Represents simulated technical measurements generated during drone operation.
+
+Examples include:
+- Battery level.
+- Motor temperature.
+- Battery temperature.
+- Position.
+- Speed.
+- Other relevant simulated measurements.
+
+### System Event
+
+Represents an important event in the operational lifecycle.
+
+Events provide an auditable history of state changes and operational decisions.
+
+The final entity attributes, relationships, and state definitions should be specified when implementing each domain.
+
+Do not over-engineer the initial domain model.
+
+## 6. Operational Workflows
+
+### 6.1 Order Fulfillment
+
+A typical order workflow:
+
+1. An order enters the system.
+2. The order references a Pickup Station and Delivery Point.
+3. The system evaluates available drones.
+4. Dispatch selects an eligible drone.
+5. A mission is created.
+6. The drone travels to the pickup location.
+7. The parcel is collected.
+8. The drone travels to the delivery point.
+9. Delivery is completed or an exception is recorded.
+10. The drone returns to a suitable hub.
+
+The system must preserve consistent relationships between orders, missions, and drones.
+
+### 6.2 Drone Return & Hub Selection
+
+After completing a mission, a drone should return to an appropriate Drone Hub.
+
+The destination does not have to be the original departure hub.
+
+Hub selection should consider the simulated operational situation, including distance, availability, and capacity.
+
+### 6.3 Charging & Maintenance
+
+Drones may enter charging or maintenance states.
+
+These states must affect drone availability and eligibility for future missions.
+
+The simulation should represent these transitions consistently.
+
+## 7. Dispatch Engine
+
+Dispatch is deterministic business logic implemented in Python.
+
+Its responsibility is to select an eligible drone for an incoming order.
+
+Potential evaluation factors:
+
+- Payload capacity.
+- Battery level.
+- Distance to the pickup location.
+- Estimated mission duration.
+- Current operational status.
+- Current workload.
+- Relevant operational constraints.
+
+The dispatch process should:
+
+1. Identify eligible drones.
+2. Filter candidates using operational constraints.
+3. Rank remaining candidates.
+4. Select the best candidate according to defined rules.
+5. Record the decision and its reasoning.
+
+The engine must be predictable, testable, and reproducible.
+
+AI may later provide recommendations or explain dispatch decisions, but must not replace or bypass deterministic eligibility rules.
+
+## 8. Simulation Architecture
+
+The simulation is a backend-owned process that operates independently of the frontend.
+
+### Simulation Responsibilities
+
+- Generate mock orders.
+- Advance drone movement.
+- Progress missions.
+- Generate telemetry.
+- Simulate battery consumption.
+- Manage charging and waiting.
+- Generate operational events.
+- Detect simulated incidents.
+- Apply consistent state transitions.
+
+### Simulation Design Principles
+
+- Use a configurable simulation interval.
+- Keep simulation logic independent of HTTP request handling.
+- Avoid tying simulation execution to WebSocket connections.
+- Ensure frontend disconnection does not stop simulation.
+- Persist important operational state and events.
+- Make simulation behavior testable.
+- Prevent invalid or contradictory state transitions.
+
+The simulation should be believable rather than physically accurate.
+
+Do not implement real flight physics, hardware control, or unnecessary external integrations.
+
+## 9. Event-Driven Internal Communication
+
+Use domain events where they provide meaningful separation between operational processes.
+
+Examples:
+
+- `OrderCreated`
+- `DroneAssigned`
+- `MissionStarted`
+- `ParcelCollected`
+- `DeliveryCompleted`
+- `DroneReturnedToHub`
+- `ChargingStarted`
+- `IncidentDetected`
+
+Events should help coordinate state changes and maintain an understandable operational history.
+
+Do not introduce a message broker or distributed event infrastructure unless future requirements justify it.
+
+For the MVP, an appropriately structured in-process event mechanism and persisted system event history are sufficient.
+
+## 10. API & Real-Time Communication
+
+### REST API
+
+Use REST endpoints for:
+
+- Retrieving operational entities.
+- Creating and updating orders.
+- Managing hubs and other resources.
+- Inspecting drones and missions.
+- Retrieving incidents and system events.
+- Performing explicitly authorized operational actions.
+
+Follow consistent resource naming, HTTP methods, response structures, validation, and error handling.
+
+### WebSocket
+
+Use WebSocket for real-time operational updates.
+
+Potential updates include:
+
+- Drone position changes.
+- Telemetry updates.
+- Mission state transitions.
+- New orders.
+- Incident notifications.
+- Hub capacity changes.
+- Simulation status.
+
+The backend remains the source of truth. WebSocket messages communicate changes; they do not transfer ownership of operational logic to the frontend.
+
+## 11. AI Operations Architecture
+
+SkyFleet includes one primary Fleet Operations Agent.
+
+The agent interacts with the application through explicitly defined backend tools.
+
+Potential read-only tools:
+
+- `get_fleet_status`
+- `get_active_missions`
+- `get_incident_details`
+- `get_drone_telemetry`
+- `get_dispatch_candidates`
+- `get_hub_capacity`
+- `get_order_history`
+
+Potential controlled actions:
+
+- `pause_simulation`
+- `resume_simulation`
+- `request_drone_return`
+- `retry_dispatch`
+- `create_maintenance_request`
+
+### AI Design Rules
+
+- Do not expose unrestricted database access to the model.
+- Do not allow arbitrary SQL execution.
+- Use typed, narrowly scoped tool interfaces.
+- Validate all tool arguments.
+- Keep operational rules in deterministic backend services.
+- Require explicit operator approval for state-changing actions.
+- Validate approved operations again on the backend.
+- Record approved AI-assisted actions as system events.
+- Provide understandable explanations for recommendations.
+
+### Incident Investigation
+
+Incident detection should be deterministic.
+
+The system detects a simulated threshold violation or operational exception and creates an incident.
+
+The AI agent may then retrieve relevant telemetry, mission information, and event history to explain what happened and recommend next steps.
+
+AI is an investigation and decision-support layer, not a safety controller.
+
+## 12. Frontend Architecture
+
+The frontend is a presentation and interaction layer.
+
+It communicates with the backend through REST and WebSocket interfaces.
+
+### Frontend Responsibilities
+
+- Render the operational dashboard.
+- Display the Mapbox map.
+- Display Drone Hubs, drones, and other relevant locations.
+- Present orders, missions, and incidents.
+- Visualize backend-provided telemetry.
+- Provide contextual detail views.
+- Display AI-generated explanations and recommendations.
+- Send authorized operator actions to the backend.
+
+### Frontend Rules
+
+- Do not implement business-critical dispatch logic in React.
+- Do not make the frontend the owner of simulation state.
+- Keep API communication separate from presentation components.
+- Use TypeScript types for API contracts.
+- Handle loading, empty, and error states.
+- Keep components focused and reusable.
+- Avoid unnecessary global state management.
+- Use Tailwind CSS consistently according to `ui-context.md`.
+
+### Map & Geospatial Data
+
+Mapbox GL JS is the selected map technology.
+
+The initial map should focus on the Tricity area and use a dark visual style.
+
+Map-related functionality should be separated from general dashboard presentation.
+
+Geographic data should be provided by the backend where it represents operational entities.
+
+The frontend may handle map rendering, visual marker placement, camera interactions, and presentation-specific transformations.
+
+Do not hardcode operational entities in map components.
+
+## 13. Persistence & Database
+
+The database technology has not been finalized.
+
+The choice should consider:
+- Local development simplicity.
+- Deployment compatibility.
+- Persistence requirements.
+- Simulation runtime behavior.
+- Data relationships.
+- Operational event history.
+
+SQLite and PostgreSQL are possible candidates.
+
+Do not select a database solely because it is mentioned in an example or assumed to be mandatory.
+
+The final choice should be made before implementing the persistence layer in depth.
+
+Use SQLAlchemy to keep database access structured and maintainable.
+
+## 14. Deployment & Runtime
+
+The application should be accessible through a public URL for the recruitment demonstration.
+
+The intended deployment model may include:
+
+- Frontend hosted separately.
+- FastAPI backend hosted as an API service.
+- Simulation Worker running as an independent background process.
+- Shared persistent database accessible to the required backend processes.
+
+The exact hosting provider and infrastructure remain open.
+
+Docker Compose may be used to provide a reproducible local environment.
+
+### Deployment Principles
+
+- The simulation must continue without an open browser.
+- Store secrets in environment variables or the hosting provider's secret management.
+- Never commit real API keys or credentials.
+- Provide example environment configuration.
+- Include clear startup instructions.
+- Ensure the deployed frontend can communicate with the backend.
+- Configure CORS explicitly.
+
+## 15. Testing Strategy
+
+Testing should focus on important business behavior and system boundaries.
+
+Priorities:
+
+- Domain logic and state transitions.
+- Dispatch eligibility and ranking.
+- Order and mission workflows.
+- Simulation behavior.
+- Incident detection.
+- API validation and responses.
+- Persistence behavior.
+- AI tool validation and approval workflows.
+
+Prefer focused unit tests for deterministic logic and integration tests for important workflows.
+
+Do not pursue test coverage numbers at the expense of meaningful verification.
+
+## 16. Architecture Decision Rules
+
+When making architectural decisions:
+
+1. Prefer the simplest solution that satisfies the actual requirement.
+2. Preserve clear domain boundaries.
+3. Keep operational logic in the backend.
+4. Avoid premature microservices and distributed infrastructure.
+5. Do not introduce dependencies without a clear benefit.
+6. Prefer explicit and testable state transitions.
+7. Consider deployment requirements early.
+8. Document significant architectural decisions.
+9. Keep the implementation aligned with the MVP and `progress-tracker.md`.
+
+---
+
+## 17. Architectural North Star
+
+**SkyFleet should be a maintainable, modular operational platform in which deterministic backend services own the business processes, an independent simulation runtime drives the network, and the frontend provides a clear real-time view of the entire operation.**
+
+AI should enhance operator understanding and decision-making without replacing predictable business logic.
