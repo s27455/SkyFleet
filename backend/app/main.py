@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import drones, health, hubs
+from app.api.routes import drones, health, hubs, orders
 from app.config import Settings, get_settings
 
 
@@ -23,6 +23,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router, prefix="/api")
     app.include_router(hubs.router, prefix="/api")
     app.include_router(drones.router, prefix="/api")
+    app.include_router(orders.router, prefix="/api")
     return app
 
 

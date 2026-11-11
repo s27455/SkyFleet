@@ -103,6 +103,26 @@ changes status yet. The drone seed only inserts missing rows and never resets ex
 *assigned* to a Hub regardless of flight status, and it is enforced **only while seeding**; no
 runtime check exists yet.
 
+**Delivery orders (Feature 007):** after the Hubs exist, seed ten illustrative orders (repeatable) and
+read them from the API:
+
+```bash
+cd backend
+uv run alembic upgrade head              # includes migration 0003 (orders)
+uv run python -m app.hubs.seed
+uv run python -m app.orders.seed         # ORD-001..010 across the four Hubs, insert-only
+# GET http://127.0.0.1:8000/api/orders  and  /api/orders/{id}  (e.g. ORD-001)
+```
+
+An order is one package handed over at an explicit origin Hub, with a destination address and
+coordinates, a package weight (above 0 and at most 3.0 kg, the SF-1 payload; enforced by the
+database), a status and created/updated timestamps. Seeded orders are all `READY_FOR_PICKUP`; only the
+confirmed initial states `CREATED`, `AWAITING_HANDOVER` and `READY_FOR_PICKUP` exist so far. The
+endpoints are read-only: there is no create/update/delete, no drone assignment (a future Mission
+feature owns that), no Partner entity and no feasibility check, so an order whose destination is far
+from its Hub is still stored. Addresses and coordinates are illustrative simulation data, not
+verified customer addresses.
+
 Backend tests use SQLite (in-memory, plus temporary files for the migration test) and need neither
 Docker nor PostgreSQL. Known limitation: they do not exercise PostgreSQL itself.
 

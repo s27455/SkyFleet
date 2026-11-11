@@ -17,6 +17,8 @@ from app.drones.seed import build_sf1_model
 from app.hubs import models as hub_models  # noqa: F401  (registers tables on Base.metadata)
 from app.hubs.seed import seed_hubs
 from app.main import create_app
+from app.orders import models as order_models  # noqa: F401  (registers tables on Base.metadata)
+from app.orders.models import DeliveryOrder, OrderStatus
 
 
 def _enable_sqlite_foreign_keys(dbapi_connection: SQLiteConnection, _: ConnectionPoolEntry) -> None:
@@ -81,5 +83,25 @@ def make_drone() -> Callable[..., Drone]:
         }
         values.update(overrides)
         return Drone(**values)
+
+    return factory
+
+
+@pytest.fixture
+def make_order() -> Callable[..., DeliveryOrder]:
+    """Factory for a valid order from the Forum Gdańsk Hub; override fields as needed."""
+
+    def factory(**overrides: object) -> DeliveryOrder:
+        values: dict[str, object] = {
+            "id": "ORD-900",
+            "origin_hub_id": "hub-forum-gdansk",
+            "destination_address": "ul. Testowa 1, Gdańsk",
+            "destination_longitude": 18.65,
+            "destination_latitude": 54.35,
+            "package_weight_kg": 1.5,
+            "status": OrderStatus.READY_FOR_PICKUP.value,
+        }
+        values.update(overrides)
+        return DeliveryOrder(**values)
 
     return factory

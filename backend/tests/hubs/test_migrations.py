@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from app.db.session import Base
 from app.drones import models as drone_models  # noqa: F401  (registers tables on Base.metadata)
 from app.hubs import models as hub_models  # noqa: F401  (registers tables on Base.metadata)
+from app.orders import models as order_models  # noqa: F401  (registers tables on Base.metadata)
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -52,7 +53,7 @@ def test_migrations_can_downgrade_to_base(tmp_path: Path) -> None:
             )
         )
     engine.dispose()
-    assert not {"hubs", "drones", "drone_models"} & tables
+    assert not {"hubs", "drones", "drone_models", "orders"} & tables
 
 
 def test_downgrade_to_0001_drops_only_the_drone_tables(tmp_path: Path) -> None:
@@ -71,7 +72,7 @@ def test_downgrade_to_0001_drops_only_the_drone_tables(tmp_path: Path) -> None:
         }
     engine.dispose()
     assert "hubs" in tables
-    assert not {"drones", "drone_models"} & tables
+    assert not {"drones", "drone_models", "orders"} & tables
 
     command.upgrade(config, "head")
 
