@@ -61,7 +61,7 @@ The following technologies define the intended implementation direction.
 
 ### Infrastructure
 
-- Database selection remains open.
+- Database: PostgreSQL 17 (see `docs/decisions/0001-postgresql-database.md`).
 - Environment-based configuration and secret management.
 - Docker and Docker Compose may be used to simplify local development and deployment.
 - Frontend and backend may be deployed independently.
@@ -507,21 +507,17 @@ Do not hardcode operational entities in map components.
 
 ## 13. Persistence & Database
 
-The database technology has not been finalized.
+The database is **PostgreSQL 17** in development and production (ADR 0001).
 
-The choice should consider:
-- Local development simplicity.
-- Deployment compatibility.
-- Persistence requirements.
-- Simulation runtime behavior.
-- Data relationships.
-- Operational event history.
-
-SQLite and PostgreSQL are possible candidates.
-
-Do not select a database solely because it is mentioned in an example or assumed to be mandatory.
-
-The final choice should be made before implementing the persistence layer in depth.
+Standard development setup:
+- PostgreSQL runs in Docker Compose (`docker-compose.yml`, service `db`).
+- Host port **55432** maps to container port 5432.
+- Data is stored in the persistent named volume `skyfleet-db`.
+- The FastAPI backend and worker run locally on Windows and connect through `localhost:55432`
+  (`DATABASE_URL`, default in `backend/app/config.py`).
+- The Windows PostgreSQL instance on port 5432 is unrelated to SkyFleet: never modify, stop, or use it.
+- Schema changes go through Alembic migrations (`backend/migrations`). Backend unit and API tests use
+  SQLite and do not need Docker.
 
 Use SQLAlchemy to keep database access structured and maintainable.
 

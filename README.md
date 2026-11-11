@@ -13,7 +13,7 @@ backend-owned continuously running simulation, and an AI Fleet Operations Agent.
 | Frontend (operations dashboard) | React, TypeScript, Vite, Tailwind CSS v4 (Mapbox GL JS in Phase 2) | `frontend/` |
 | Backend API | Python 3.13, FastAPI, Pydantic | `backend/app/main.py` |
 | Simulation Worker | Separate Python process sharing backend modules | `backend/app/worker.py` |
-| Database (from Phase 3) | PostgreSQL via Docker Compose | `docker-compose.yml` |
+| Database | PostgreSQL 17 via Docker Compose (host port 55432) | `docker-compose.yml` |
 
 The backend owns all operational state; the frontend only displays it. The worker runs independently
 of any browser session. Details: [`architecture-context.md`](context/architecture-context.md) and
@@ -54,7 +54,32 @@ Run each in its own terminal:
 | API | `uv run uvicorn app.main:app --reload` (`backend/`) | http://localhost:8000 — OpenAPI docs at `/docs` |
 | Simulation Worker | `uv run python -m app.worker` (`backend/`) | logs ticks to the console |
 | Frontend | `npm run dev` (`frontend/`) | http://localhost:5173 |
-| Database *(Phase 3+)* | `docker compose up -d db` (repo root) | localhost:5432 |
+| Database | `docker compose up -d db` (repo root) | localhost:55432 (PostgreSQL 17 in Docker) |
+
+**Database and Hubs API (Feature 003):** start PostgreSQL, create the schema, and seed the four Hubs
+(the seed can be run repeatedly), then start the API:
+
+```bash
+docker compose up -d db                  # repo root
+cd backend
+uv run alembic upgrade head              # create/upgrade the schema
+uv run python -m app.hubs.seed           # idempotent
+uv run uvicorn app.main:app --reload
+# GET http://localhost:8000/api/hubs  and  /api/hubs/{id}  (e.g. hub-forum-gdansk)
+```
+
+**Standard development database:** PostgreSQL 17 runs in Docker Compose and is published on host
+port **55432** (container port 5432), with data in the named volume `skyfleet-db`. The backend runs
+natively on Windows and connects through `localhost:55432`. `DATABASE_URL` defaults to
+`postgresql+psycopg://skyfleet:skyfleet@localhost:55432/skyfleet`; override it in `backend/.env` if
+needed. Port 5432 is intentionally not used, so a PostgreSQL installed on Windows does not conflict
+and must not be used by SkyFleet. `docker compose down` keeps the data; `docker compose down -v`
+deletes it.
+
+The seed only inserts missing Hubs; it never modifies existing rows.
+
+Backend tests use SQLite (in-memory, plus temporary files for the migration test) and need neither
+Docker nor PostgreSQL. Known limitation: they do not exercise PostgreSQL itself.
 
 The dashboard header shows **Backend connected** / **Backend unreachable**, which also confirms CORS
 is configured correctly.
@@ -86,6 +111,7 @@ Real `.env` / `.env.local` files are git-ignored and must never be committed.
 | `APP_ENV` | backend | `development` / `test` / `production` |
 | `CORS_ORIGINS` | backend | Comma-separated allowed frontend origins |
 | `SIM_TICK_SECONDS` | backend | Simulation Worker tick interval |
+| `DATABASE_URL` | backend | SQLAlchemy URL; defaults to the Docker Compose PostgreSQL (`postgresql+psycopg://skyfleet:skyfleet@localhost:55432/skyfleet`) |
 | `LOG_LEVEL` | backend | Python logging level |
 | `VITE_API_BASE_URL` | frontend | Backend base URL |
 | `VITE_MAPBOX_TOKEN` | frontend | *(Phase 2)* **Public** Mapbox token (`pk.…`), URL-restricted |

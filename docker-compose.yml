@@ -1,5 +1,6 @@
-# Local development database only. The API, worker and frontend run natively
-# for fast reloads. Not used by the application until Phase 3 (persistence).
+# Standard local development database (PostgreSQL 17). The API, worker and frontend run natively
+# for fast reloads. Host port 55432 -> container 5432, so it never collides with a PostgreSQL
+# installed on Windows (which uses 5432). Data lives in the named volume `skyfleet-db`.
 services:
   db:
     image: postgres:17-alpine
@@ -8,7 +9,7 @@ services:
       POSTGRES_PASSWORD: skyfleet # local-only development credential
       POSTGRES_DB: skyfleet
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - skyfleet-db:/var/lib/postgresql/data
     healthcheck:

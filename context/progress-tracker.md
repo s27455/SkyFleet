@@ -59,7 +59,7 @@ A clean, understandable repository with a working frontend and backend skeleton,
 **Priority:** Critical  
 **Status:** Core map working (task 001, verified in browser 2026-11-11) — remaining: pan limits, overlay/panel visual language
 
-Task spec: `docs/tasks/001-mapbox-initial-setup.md`
+Task spec: `docs/features/001-mapbox-initial-setup.md`
 
 ### Objectives
 
@@ -87,14 +87,14 @@ A working, dark, Mapbox-powered map of the Tricity area that serves as the main 
 ## Phase 3 — Mall Pickup Hubs
 
 **Priority:** Critical  
-**Status:** In progress — frontend slice done with mock data (task 002, approved; automated checks pass, manual map check passed on the earlier Hub set). Backend model and REST endpoint remain.
+**Status:** Complete — frontend slice with mock data (`docs/features/002-drone-hubs-map.md`, approved; manual map check passed on the earlier Hub set) and backend Hub model, seed and read-only REST API (`docs/features/003-hubs-backend-api (1).md`, approved; verified against PostgreSQL 17). The frontend still uses mock data until Phase 4.
 
 ### Objectives
 
-- [ ] Define the initial Hub data model (Mall Pickup Hub: name, mall/location description, coordinates, status, `drone_capacity` = 50).
+- [x] Define the initial Hub data model (feature 003: `id` slug, `name`, `address`, `longitude`, `latitude`, `drone_capacity` = 50; no `status`/`city` field yet, added only when real data backs it).
 - [x] Prepare a small set of realistic demo hubs located in malls across the Tricity area (task 002: Galeria Bałtycka, Forum Gdańsk, Centrum Riviera, Centrum Handlowe Osowa; local mock data in `frontend/src/features/hubs/mockHubs.ts`).
-- [ ] Implement the backend representation of Hubs.
-- [ ] Expose a REST endpoint for retrieving hubs.
+- [x] Implement the backend representation of Hubs (`backend/app/hubs/`, Alembic migration `0001`, idempotent insert-only seed).
+- [x] Expose a REST endpoint for retrieving hubs (`GET /api/hubs`, `GET /api/hubs/{id}`).
 - [x] Add visually distinct Hub markers to the Mapbox map (task 002, frontend mock data).
 - [x] Implement marker interaction (mouse/touch/keyboard).
 - [x] Display a hub information panel when a marker is selected.
@@ -341,11 +341,10 @@ A publicly accessible application and a complete GitHub repository ready for the
 
 ## Current Focus
 
-**Active milestone: Phase 3 — Mall Pickup Hubs** (Phase 1 complete; Phase 2 core map done — pan limits and overlay visual language remain)
+**Active milestone: Phase 4 — First Frontend–Backend Integration** (Phase 1 and Phase 3 complete; Phase 2 core map done — pan limits and overlay visual language remain)
 
 **Next milestones:**
-1. Implement the backend Hub model and REST endpoint (Phase 3 remainder).
-2. Connect hub data to the backend API (Phase 4); replace `getHubs()` mock source.
+1. Connect hub data to the backend API (Phase 4); replace the `getHubs()` mock source. Backend Hubs have no `city`/`status` fields, which the frontend panel currently shows from mock data.
 
 **Current confirmed decisions:**
 - Initial demo Hubs (task 002): Galeria Bałtycka, Forum Gdańsk, Centrum Riviera (Gdynia), Centrum Handlowe Osowa, with owner-supplied coordinates; illustrative, not real partnerships.
@@ -358,7 +357,7 @@ A publicly accessible application and a complete GitHub repository ready for the
 - AI: Controlled operational assistant with human approval for state-changing actions.
 - Frontend tooling: Vite + React + TypeScript, Tailwind CSS v4, npm, oxlint, Prettier, Vitest + React Testing Library.
 - Backend tooling: Python 3.13, uv, Ruff, mypy (strict), pytest.
-- Database: PostgreSQL in dev and prod; local instance via Docker Compose (see `docs/decisions/0001-postgresql-database.md`).
+- Database: PostgreSQL 17 in dev and prod; local instance via Docker Compose on host port 55432 (container 5432) with the named volume `skyfleet-db`; backend runs natively on Windows and connects via `localhost:55432`; the Windows PostgreSQL on port 5432 is never used or modified (see `docs/decisions/0001-postgresql-database.md`).
 - Real-time bridge: worker persists events, API polls the DB and pushes over WebSocket (see `docs/decisions/0002-realtime-bridge-db-polling.md`).
 - Git: default branch `main`; no pre-commit hooks for now.
 - Business model and operational rules (B2B, Hubs as handover points and drone bases, return to nearest suitable Hub, etc.): see `business-rules.md`. Not duplicated here.

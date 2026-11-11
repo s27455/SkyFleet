@@ -84,7 +84,9 @@ The intended technology stack is:
 - Fleet Operations Agent.
 - Human approval for state-changing AI-assisted actions.
 
-Some implementation decisions, including the database and hosting provider, remain open.
+Database (decided): PostgreSQL 17 in Docker Compose, published on host port 55432 (container 5432), with the named volume `skyfleet-db`. The backend runs natively on Windows and connects via `localhost:55432`. Never modify, stop, or use the Windows PostgreSQL instance on port 5432. See `docs/decisions/0001-postgresql-database.md`.
+
+Some implementation decisions, including the hosting provider, remain open.
 
 Do not assume that an undecided technology has already been selected.
 

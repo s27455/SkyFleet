@@ -18,6 +18,9 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173"]
     )
 
+    # Matches the local PostgreSQL service in docker-compose.yml (development credential only).
+    database_url: str = "postgresql+psycopg://skyfleet:skyfleet@localhost:55432/skyfleet"
+
     # Seconds between Simulation Worker ticks.
     sim_tick_seconds: float = Field(default=1.0, gt=0)
 
