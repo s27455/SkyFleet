@@ -120,10 +120,9 @@ Use consistent domain terminology throughout the application.
 
 Prefer established terms such as:
 
+- `Partner`
 - `Drone`
-- `Hub`
-- `PickupStation`
-- `DeliveryPoint`
+- `Hub` (Mall Pickup Hub: parcel handover point and drone base)
 - `Order`
 - `Mission`
 - `Incident`

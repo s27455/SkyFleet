@@ -50,7 +50,7 @@ Detailed operational information should be available when needed, rather than pe
 
 Examples:
 - Selecting a drone opens its operational details.
-- Selecting a Drone Hub reveals its capacity and status.
+- Selecting a Mall Pickup Hub reveals its location and status.
 - Selecting an incident provides access to its details and history.
 - Advanced telemetry can be displayed in contextual detail views.
 
@@ -191,7 +191,7 @@ It should occupy a prominent part of the main operational dashboard and provide 
 The main dashboard should prioritize:
 - Geographic awareness.
 - Drone locations and operational states.
-- Drone Hub locations.
+- Mall Pickup Hub locations.
 - Active deliveries and missions.
 - Important operational alerts.
 - Quick access to relevant details.
@@ -242,7 +242,7 @@ SkyFleet presents operational and technical information, so data visualization s
 Examples include:
 - Battery level indicators.
 - Drone operational status.
-- Hub capacity.
+- Hub status and orders awaiting pickup.
 - Mission progress.
 - Telemetry values.
 - Incident severity.

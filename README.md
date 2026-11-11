@@ -4,7 +4,7 @@
 operating across the Tricity area (Gdańsk, Sopot, Gdynia), with a map-first operations dashboard, a
 backend-owned continuously running simulation, and an AI Fleet Operations Agent.
 
-> Status: **Phase 1 — runnable skeleton.** See [`progress-tracker.md`](progress-tracker.md).
+> Status: **Phase 1 — runnable skeleton.** See [`progress-tracker.md`](context/progress-tracker.md).
 
 ## Architecture at a glance
 
@@ -16,7 +16,7 @@ backend-owned continuously running simulation, and an AI Fleet Operations Agent.
 | Database (from Phase 3) | PostgreSQL via Docker Compose | `docker-compose.yml` |
 
 The backend owns all operational state; the frontend only displays it. The worker runs independently
-of any browser session. Details: [`architecture-context.md`](architecture-context.md) and
+of any browser session. Details: [`architecture-context.md`](context/architecture-context.md) and
 [`docs/decisions/`](docs/decisions/).
 
 ## Prerequisites
@@ -99,16 +99,17 @@ token is public by design and should be restricted to the app's URLs in the Mapb
 backend/    FastAPI app (app/), Simulation Worker (app/worker.py), tests/
 frontend/   React app: src/api (HTTP client), src/types (API contracts),
             src/features (feature modules), src/components/ui (shared UI)
-docs/       Architecture decision records (decisions/) and feature specs (features/)
-*.md        Project context documents (overview, architecture, standards, UI, workflow, progress)
+context/    Project context documents (business rules, overview, architecture, standards, UI, workflow, progress)
+docs/       Architecture decision records (decisions/), task specs (tasks/), BPMN diagrams (diagrams/)
 ```
 
 ## Project documentation
 
-- [`project-overview.md`](project-overview.md) — product vision and scope
-- [`architecture-context.md`](architecture-context.md) — system architecture
-- [`code-standards.md`](code-standards.md) — coding conventions
-- [`ui-context.md`](ui-context.md) — UI/UX direction
-- [`ai-workflow-rules.md`](ai-workflow-rules.md) — AI-assisted development workflow
-- [`progress-tracker.md`](progress-tracker.md) — roadmap and status
+- [`business-rules.md`](context/business-rules.md) — confirmed business rules and open questions
+- [`project-overview.md`](context/project-overview.md) — product vision and scope
+- [`architecture-context.md`](context/architecture-context.md) — system architecture
+- [`code-standards.md`](context/code-standards.md) — coding conventions
+- [`ui-context.md`](context/ui-context.md) — UI/UX direction
+- [`ai-workflow-rules.md`](context/ai-workflow-rules.md) — AI-assisted development workflow
+- [`progress-tracker.md`](context/progress-tracker.md) — roadmap and status
 - [`CLAUDE.md`](CLAUDE.md) — Claude Code project instructions

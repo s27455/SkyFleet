@@ -6,7 +6,7 @@ SkyFleet is an Autonomous Urban Drone Delivery & AI Operations Platform.
 
 It simulates a fictional logistics company operating a fleet of autonomous delivery drones across the Tricity area in Poland.
 
-The platform allows operators to monitor drones, manage orders and missions, inspect Drone Hubs, track simulated telemetry, investigate incidents, and interact with an AI-powered Fleet Operations Agent.
+The platform allows operators to monitor drones, manage partner delivery orders and missions, inspect Mall Pickup Hubs, track simulated telemetry, investigate incidents, and interact with an AI-powered Fleet Operations Agent.
 
 The application is a recruitment project focused on demonstrating:
 
@@ -29,6 +29,7 @@ The following files define the project context:
 
 | Document | Purpose |
 |---|---|
+| `business-rules.md` | Confirmed business rules and MVP behavior, plus open business questions (authoritative for business behavior) |
 | `project-overview.md` | Product vision, business concept, workflows, and MVP scope |
 | `architecture-context.md` | System architecture, technologies, domain boundaries, and integrations |
 | `code-standards.md` | Coding conventions, implementation standards, and testing expectations |
@@ -40,6 +41,7 @@ These documents are the primary source of truth.
 
 ### Documentation Rules
 
+- Read `business-rules.md` before implementing or changing any business behavior.
 - Read `project-overview.md` and `architecture-context.md` before proposing major architectural changes.
 - Read `code-standards.md` before implementing application code.
 - Read `ui-context.md` before designing or modifying frontend interfaces.
@@ -49,31 +51,35 @@ These documents are the primary source of truth.
 
 Do not silently introduce architectural or product decisions that contradict these documents.
 
-If documentation is ambiguous or conflicting, identify the conflict and ask for clarification before proceeding with consequential changes.
+If documentation is ambiguous or conflicting, identify the conflict. Classify unresolved questions as: (1) Blocker — a decision is genuinely required before the current task can proceed safely; (2) MVP simplification — use a clearly stated, reversible assumption when it does not contradict an approved business rule; or (3) Future — record it for later without blocking the current task. Ask the user only about Blockers. Never present an assumption or recommendation as an approved business decision. Consult `context/business-rules.md` for confirmed rules and open questions. Avoid repeatedly raising questions already answered there.
 
 ## 3. Technology Direction
 
 The intended technology stack is:
 
 ### Frontend
+
 - React.
 - TypeScript.
 - Tailwind CSS.
 - Mapbox GL JS.
 
 ### Backend
+
 - Python.
 - FastAPI.
 - Pydantic.
 - SQLAlchemy.
 
 ### Runtime & Testing
+
 - Separate Simulation Worker process.
 - Pytest.
 - REST API.
 - WebSocket for real-time updates.
 
 ### AI
+
 - LLM integration through controlled backend tools.
 - Fleet Operations Agent.
 - Human approval for state-changing AI-assisted actions.
@@ -92,7 +98,8 @@ The backend is the source of truth for:
 
 - Orders.
 - Drones.
-- Drone Hubs.
+- Partners.
+- Mall Pickup Hubs (parcel handover locations and drone operational bases).
 - Missions.
 - Dispatch decisions.
 - Charging.
@@ -159,6 +166,7 @@ For small, clearly defined tasks, avoid unnecessary planning overhead.
 The project is an MVP with a defined delivery deadline.
 
 Prioritize:
+
 - Working end-to-end workflows.
 - Clear architecture.
 - Reliable simulation behavior.
@@ -166,6 +174,7 @@ Prioritize:
 - Meaningful demonstration value.
 
 Avoid:
+
 - Premature optimization.
 - Unnecessary abstractions.
 - Over-engineering.
@@ -211,11 +220,12 @@ Do not allow API handlers to become containers for simulation or domain logic.
 The simulation represents believable business operations using mock data and simulated events.
 
 It should support:
+
 - Automatically generated orders.
 - Drone movement.
 - Mission progression.
 - Pickup and delivery.
-- Drone returns to suitable hubs.
+- Post-delivery return to the nearest suitable Hub, with or without the parcel (see `business-rules.md`).
 - Battery consumption and charging.
 - Operational waiting states.
 - Simulated telemetry.
@@ -225,13 +235,14 @@ Simulation logic must remain independent of frontend rendering.
 
 Do not implement real flight physics, real hardware integration, or unnecessary aviation-specific validation.
 
-The goal is a coherent operational simulation, not a physically accurate drone simulator.
+The goal is a coherent operational simulation, not a physically accurate drone simulator. Weather and airspace availability are simulated inputs; do not integrate real services. Re-check simulated operating conditions immediately before takeoff. After each delivery attempt, a drone returns to the nearest suitable Hub; it returns with the parcel if delivery/collection fails. At the Hub, returned parcels are unloaded and drones receive a quick inspection before charging, maintenance, or waiting for another task. Idle, sufficiently charged drones may be repositioned to balance Hub fleet distribution, subject to Hub capacity and deterministic rules. See `business-rules.md` for confirmed details and unresolved policy choices.
 
 ## 10. AI Integration Rules
 
 Implement AI only where it provides meaningful operational value.
 
 Prioritize:
+
 1. Fleet Operations Agent.
 2. Incident investigation.
 3. Operational explanations and recommendations.

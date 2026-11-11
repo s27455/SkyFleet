@@ -19,7 +19,7 @@ The implementation order is intentionally adjusted to prioritize visible progres
 1. Set up the repository and project structure.
 2. Establish the frontend and backend foundations.
 3. Build the dark Mapbox map focused on the Tricity area.
-4. Implement Drone Hubs and display them on the map.
+4. Implement Mall Pickup Hubs and display them on the map.
 5. Connect the frontend map to the backend API.
 6. Expand the operational domain: drones, orders, missions, and dispatch.
 7. Implement the independent simulation runtime.
@@ -33,11 +33,11 @@ The implementation order is intentionally adjusted to prioritize visible progres
 ## Phase 1 — Project Foundation & Repository Structure
 
 **Priority:** Critical  
-**Status:** Skeleton implemented and verified (2026-11-11) — remaining: GitHub remote + first commit
+**Status:** Complete — skeleton implemented and verified (2026-11-11); GitHub remote `origin` configured and `main` tracks `origin/main`
 
 ### Objectives
 
-- [ ] Create the GitHub repository (local repo + project structure done; remote not created yet).
+- [x] Create the GitHub repository (`origin` is configured; `main` tracks `origin/main`).
 - [x] Create separate frontend and backend application directories.
 - [x] Add the project documentation and context files.
 - [x] Create the root `CLAUDE.md` and configure project-level instructions for Claude Code.
@@ -84,34 +84,33 @@ A working, dark, Mapbox-powered map of the Tricity area that serves as the main 
 
 ---
 
-## Phase 3 — Drone Hubs
+## Phase 3 — Mall Pickup Hubs
 
 **Priority:** Critical  
 **Status:** Planned
 
 ### Objectives
 
-- [ ] Define the initial Drone Hub data model.
-- [ ] Prepare a small set of realistic demo hubs located across the Tricity area.
-- [ ] Define hub coordinates and basic operational properties.
-- [ ] Implement the backend representation of Drone Hubs.
+- [ ] Define the initial Hub data model (Mall Pickup Hub: name, mall/location description, coordinates, status, `drone_capacity` = 50).
+- [ ] Prepare a small set of realistic demo hubs located in malls across the Tricity area.
+- [ ] Implement the backend representation of Hubs.
 - [ ] Expose a REST endpoint for retrieving hubs.
-- [ ] Add visually distinct Drone Hub markers to the Mapbox map.
+- [ ] Add visually distinct Hub markers to the Mapbox map.
 - [ ] Implement marker interaction.
 - [ ] Display a hub information panel when a marker is selected.
-- [ ] Show basic information such as hub name, location, operational status, and available capacity.
+- [ ] Show basic information such as hub name, mall/location, operational status, and drone capacity.
 - [ ] Keep map rendering and hub data retrieval separate.
 
 ### Expected Result
 
-Drone Hubs are represented as backend-managed entities and displayed as interactive markers on the map.
+Mall Pickup Hubs are represented as backend-managed entities and displayed as interactive markers on the map.
 
-Selecting a hub should reveal its basic operational information.
+Selecting a hub should reveal its basic information.
 
 ### Scope Notes
 
-- Drone Hubs are distinct from Pickup Stations.
-- A hub may serve multiple Pickup Stations.
+- A Hub is both a parcel handover/pickup point and a drone base; there is no separate DroneBase or PickupStation entity (see `business-rules.md` §2).
+- `drone_capacity` is the number of drones a Hub can accommodate (50 initially), not parcel capacity. Occupancy semantics are an open rule (`business-rules.md` §8, Q8); Phase 3 only exposes the capacity value.
 - Use realistic but fictional demo data.
 - Avoid implementing the complete hub management system at this stage.
 
@@ -135,7 +134,7 @@ Selecting a hub should reveal its basic operational information.
 
 ### Expected Result
 
-The map displays Drone Hubs retrieved from the backend API.
+The map displays Mall Pickup Hubs retrieved from the backend API.
 
 This is the first complete vertical slice of the application: backend data, API communication, and frontend visualization working together.
 
@@ -150,10 +149,9 @@ This is the first complete vertical slice of the application: backend data, API 
 
 Develop the foundational operational entities and their relationships.
 
+- [ ] Define the Partner entity.
 - [ ] Define the Drone entity.
-- [ ] Define the Pickup Station entity.
-- [ ] Define the Delivery Point entity.
-- [ ] Define the Order entity.
+- [ ] Define the Order entity (B2B request: partner, pickup hub, delivery address stored on the Order; initial states `CREATED`, `AWAITING_HANDOVER`, `READY_FOR_PICKUP`).
 - [ ] Define the Mission entity.
 - [ ] Define the Incident entity.
 - [ ] Define the System Event entity.
@@ -190,6 +188,8 @@ The backend provides a coherent operational domain that can support dispatching,
 - [ ] Implement mission state transitions.
 - [ ] Handle cases where no suitable drone is available.
 - [ ] Record important dispatch decisions as system events.
+- [ ] Planned: check simulated operating conditions (weather, airspace) before assigning a mission (`business-rules.md` §4; retry/status semantics open, Q7).
+- [ ] Planned: fleet repositioning of idle, sufficiently charged drones between Hubs, respecting Hub `drone_capacity` and never interrupting an active mission (thresholds open, Q4).
 
 ### Expected Result
 
@@ -212,17 +212,22 @@ The system can assign orders to suitable drones using predictable, testable busi
 - [ ] Implement a simulation process independent of the frontend.
 - [ ] Establish the simulation lifecycle and configurable execution interval.
 - [ ] Implement drone operational states.
-- [ ] Simulate drone movement between hubs, pickup stations, and delivery points.
+- [ ] Simulate drone movement between pickup hubs and delivery addresses.
 - [ ] Generate mock telemetry.
-- [ ] Simulate order arrivals.
+- [ ] Simulate Partner delivery request arrivals.
 - [ ] Simulate mission progression.
-- [ ] Implement drone return-to-hub behavior.
-- [ ] Simulate charging and waiting.
-- [ ] Implement basic maintenance states.
+- [ ] Implement post-delivery return to the nearest suitable Hub (with or without the parcel).
+- [ ] Simulate charging and waiting at Hubs.
+- [ ] Implement basic maintenance states at Hubs.
 - [ ] Generate operational events.
 - [ ] Implement deterministic incident detection.
 - [ ] Support pausing and resuming the simulation.
 - [ ] Expose real-time updates through WebSocket.
+- [ ] Planned: repeat the weather/airspace check immediately before takeoff; a simulated restriction may prevent or delay takeoff.
+- [ ] Planned: simulate fleet repositioning between Hubs (rules from Phase 6).
+- [ ] Planned: Hub occupancy monitoring — drones present at each Hub vs. `drone_capacity`, shown to the operator (counting semantics open, Q8).
+- [ ] Planned: operator interventions (cancel/abort, request return, request landing) as backend-validated commands (exact semantics open, Q5).
+- [ ] Planned, subject to MVP prioritization: contextual drone detail view with live telemetry and a 3D drone representation, driven by backend telemetry.
 
 ### Expected Result
 
@@ -336,13 +341,11 @@ A publicly accessible application and a complete GitHub repository ready for the
 
 ## Current Focus
 
-**Active milestone: Phase 1 — Project Foundation & Repository Structure**
+**Active milestone: Phase 3 — Mall Pickup Hubs** (Phase 1 complete; Phase 2 core map done — pan limits and overlay visual language remain)
 
 **Next milestones:**
-1. Establish the repository and application structure.
-2. Integrate Mapbox and configure the dark Tricity map.
-3. Implement Drone Hubs and their map markers.
-4. Connect hub data to the backend API.
+1. Implement Mall Pickup Hubs and their map markers.
+2. Connect hub data to the backend API.
 
 **Current confirmed decisions:**
 - Map provider: Mapbox GL JS.
@@ -357,9 +360,11 @@ A publicly accessible application and a complete GitHub repository ready for the
 - Database: PostgreSQL in dev and prod; local instance via Docker Compose (see `docs/decisions/0001-postgresql-database.md`).
 - Real-time bridge: worker persists events, API polls the DB and pushes over WebSocket (see `docs/decisions/0002-realtime-bridge-db-polling.md`).
 - Git: default branch `main`; no pre-commit hooks for now.
+- Business model and operational rules (B2B, Hubs as handover points and drone bases, return to nearest suitable Hub, etc.): see `business-rules.md`. Not duplicated here.
 
 **Open decisions:**
 - Frontend supporting libraries (e.g. server-state handling) — decide in Phase 4.
 - LLM provider — decide in Phase 8.
 - Hosting provider and deployment configuration.
-- Final initial set of demo Drone Hubs and their coordinates.
+- Final initial set of demo Mall Pickup Hubs and their coordinates.
+- Open business questions (order lifecycle after `READY_FOR_PICKUP`, suitable return Hub, returned-parcel handling, fleet balancing, operator interventions, emergency outcomes, weather/airspace retry, Hub occupancy semantics): tracked in `business-rules.md` §8. Resolve each only when the relevant feature needs it.

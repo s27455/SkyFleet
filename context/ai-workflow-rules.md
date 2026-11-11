@@ -230,8 +230,8 @@ Examples include:
 - A drone travelling to a delivery location.
 - A successful delivery.
 - A failed delivery and return with the package.
-- A drone returning to an appropriate hub.
-- A drone charging or waiting for another mission.
+- A drone returning to the nearest suitable Hub after a delivery attempt.
+- A drone charging or waiting for another mission at a Hub.
 - An incident changing the operational status of a drone.
 
 Implement business rules in the appropriate backend layer.
