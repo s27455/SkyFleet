@@ -23,5 +23,10 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   if (!response.ok) {
     throw new ApiError(`Request failed with status ${response.status}`, response.status)
   }
-  return (await response.json()) as T
+  try {
+    return (await response.json()) as T
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error
+    throw new ApiError('Backend returned a response that is not valid JSON', response.status)
+  }
 }

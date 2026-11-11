@@ -58,17 +58,15 @@ const TEST_HUBS: Hub[] = [
   {
     id: 'hub-a',
     name: 'Hub A',
-    city: 'Gdańsk',
+    address: 'Ulica A 1, Gdańsk',
     coordinates: [18.6, 54.4],
-    status: 'operational',
     droneCapacity: 50,
   },
   {
     id: 'hub-b',
     name: 'Hub B',
-    city: 'Gdynia',
+    address: 'Ulica B 2, Gdynia',
     coordinates: [18.5, 54.5],
-    status: 'operational',
     droneCapacity: 50,
   },
 ]
@@ -154,7 +152,9 @@ describe('MapView', () => {
         [18.6, 54.4],
         [18.5, 54.5],
       ])
-      expect(screen.getByRole('button', { name: 'Hub: Hub A, Gdańsk' })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Hub: Hub A, Ulica A 1, Gdańsk' }),
+      ).toBeInTheDocument()
     })
 
     it('reports the selected hub when a marker is clicked', () => {
@@ -163,7 +163,7 @@ describe('MapView', () => {
 
       render(<MapView hubs={TEST_HUBS} onSelectHub={onSelectHub} />)
       act(() => fake.instances[0].handlers.load())
-      fireEvent.click(screen.getByRole('button', { name: 'Hub: Hub B, Gdynia' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Hub: Hub B, Ulica B 2, Gdynia' }))
 
       expect(onSelectHub).toHaveBeenCalledWith('hub-b')
     })

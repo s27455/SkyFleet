@@ -84,6 +84,15 @@ Docker nor PostgreSQL. Known limitation: they do not exercise PostgreSQL itself.
 The dashboard header shows **Backend connected** / **Backend unreachable**, which also confirms CORS
 is configured correctly.
 
+**Hubs on the map (Feature 004):** the frontend loads Hubs from `GET /api/hubs` on page load; there is
+no mock fallback. Start the database, migrate, seed, and run the API (above) before opening
+http://localhost:5173. While loading, empty, or failed, a banner explains the state (failures offer
+**Retry**) and the map stays usable. The browser calls the API directly, so the frontend origin must
+be in the backend's `CORS_ORIGINS` (default `http://localhost:5173`; use `localhost`, not
+`127.0.0.1`). `VITE_API_BASE_URL` (code default `http://localhost:8000`; `.env.example` uses `http://127.0.0.1:8000`
+because on some Windows/WSL setups `localhost` can resolve to a different listener on IPv6 port 8000)
+is the only frontend setting for this; never put database credentials in a `VITE_` variable.
+
 ## Quality checks
 
 ```bash

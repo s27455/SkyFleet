@@ -29,7 +29,7 @@ function createHubMarkerElement(hub: Hub, onClick: () => void) {
   const element = document.createElement('button')
   element.type = 'button'
   element.className = HUB_MARKER_CLASS
-  element.setAttribute('aria-label', `Hub: ${hub.name}, ${hub.city}`)
+  element.setAttribute('aria-label', `Hub: ${hub.name}, ${hub.address}`)
   element.textContent = 'H'
   element.addEventListener('click', onClick)
   setHubMarkerSelected(element, false)

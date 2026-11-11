@@ -7,27 +7,27 @@ import { HubDetailPanel } from './HubDetailPanel'
 const HUB: Hub = {
   id: 'hub-test',
   name: 'Test Mall',
-  city: 'Gdynia',
+  address: 'Testowa 1, Gdynia',
   coordinates: [18.5, 54.5],
-  status: 'operational',
   droneCapacity: 50,
 }
 
 describe('HubDetailPanel', () => {
-  it('shows hub identity and the maximum drone capacity', () => {
+  it('shows hub identity, address and the maximum drone capacity', () => {
     render(<HubDetailPanel hub={HUB} onClose={() => {}} />)
 
     expect(screen.getByRole('heading', { name: 'Test Mall' })).toBeInTheDocument()
-    expect(screen.getByText('Gdynia')).toBeInTheDocument()
+    expect(screen.getByText('Testowa 1, Gdynia')).toBeInTheDocument()
     expect(screen.getByText('Maximum drone capacity').nextElementSibling).toHaveTextContent('50')
   })
 
-  it('labels the status as illustrative mock data and shows no occupancy', () => {
+  it('shows no status, mock data notice or occupancy', () => {
     render(<HubDetailPanel hub={HUB} onClose={() => {}} />)
 
-    expect(screen.getByText(/Operational \(illustrative\)/)).toBeInTheDocument()
-    expect(screen.getByText(/Mock data — not a live measurement/)).toBeInTheDocument()
+    expect(screen.queryByText('Status')).not.toBeInTheDocument()
+    expect(screen.queryByText(/mock data/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/occupancy/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/not a real SkyFleet facility/)).toBeInTheDocument()
   })
 
   it('closes via the close button', () => {

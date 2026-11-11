@@ -1,13 +1,6 @@
 import { useEffect } from 'react'
 
-import { StatusIndicator, type StatusTone } from '../../components/ui/StatusIndicator'
-import type { Hub, HubStatus } from '../../types/hub'
-
-const STATUS_DISPLAY: Record<HubStatus, { tone: StatusTone; label: string }> = {
-  operational: { tone: 'ok', label: 'Operational' },
-  limited: { tone: 'warning', label: 'Limited' },
-  offline: { tone: 'neutral', label: 'Offline' },
-}
+import type { Hub } from '../../types/hub'
 
 interface HubDetailPanelProps {
   hub: Hub
@@ -23,8 +16,6 @@ export function HubDetailPanel({ hub, onClose }: HubDetailPanelProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose])
 
-  const status = STATUS_DISPLAY[hub.status]
-
   return (
     <aside
       aria-label={`Hub details: ${hub.name}`}
@@ -33,7 +24,7 @@ export function HubDetailPanel({ hub, onClose }: HubDetailPanelProps) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">{hub.name}</h2>
-          <p className="text-sm text-fg-muted">{hub.city}</p>
+          <p className="text-sm text-fg-muted">{hub.address}</p>
         </div>
         <button
           type="button"
@@ -47,20 +38,13 @@ export function HubDetailPanel({ hub, onClose }: HubDetailPanelProps) {
 
       <dl className="mt-3 space-y-2 text-sm">
         <div className="flex items-center justify-between gap-3">
-          <dt className="text-fg-muted">Status</dt>
-          <dd>
-            <StatusIndicator tone={status.tone} label={`${status.label} (illustrative)`} />
-          </dd>
-        </div>
-        <div className="flex items-center justify-between gap-3">
           <dt className="text-fg-muted">Maximum drone capacity</dt>
           <dd className="font-mono tabular-nums">{hub.droneCapacity}</dd>
         </div>
       </dl>
 
       <p className="mt-3 border-t border-line pt-3 text-xs text-fg-muted">
-        Mock data — not a live measurement. Illustrative mall location, not a real SkyFleet
-        facility.
+        Illustrative mall location, not a real SkyFleet facility.
       </p>
     </aside>
   )

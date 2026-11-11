@@ -87,7 +87,7 @@ A working, dark, Mapbox-powered map of the Tricity area that serves as the main 
 ## Phase 3 — Mall Pickup Hubs
 
 **Priority:** Critical  
-**Status:** Complete — frontend slice with mock data (`docs/features/002-drone-hubs-map.md`, approved; manual map check passed on the earlier Hub set) and backend Hub model, seed and read-only REST API (`docs/features/003-hubs-backend-api (1).md`, approved; verified against PostgreSQL 17). The frontend still uses mock data until Phase 4.
+**Status:** Complete — frontend slice with mock data (`docs/features/002-drone-hubs-map.md`, approved; manual map check passed on the earlier Hub set) and backend Hub model, seed and read-only REST API (`docs/features/003-hubs-backend-api.md`, approved; verified against PostgreSQL 17). Phase 4 (feature 004) later switched the frontend to this API.
 
 ### Objectives
 
@@ -119,18 +119,18 @@ Selecting a hub should reveal its basic information.
 ## Phase 4 — First Frontend–Backend Integration
 
 **Priority:** Critical  
-**Status:** Planned
+**Status:** Complete — feature 004 (`docs/features/004-hubs-api-frontend-integration.md`, approved). Automated checks and an API/CORS smoke test against Docker PostgreSQL pass; rendering in a real browser was not verified by Claude.
 
 ### Objectives
 
-- [ ] Establish frontend-to-backend API communication.
-- [ ] Configure CORS correctly (base allow-list configured in Phase 1; verify for hub requests).
-- [ ] Consume the hub retrieval endpoint implemented in Phase 3.
-- [ ] Fetch hub data from the backend.
-- [ ] Display API-provided hubs on the map.
-- [ ] Add loading and error states.
-- [ ] Handle an empty hub collection gracefully.
-- [ ] Verify that frontend components do not depend on hardcoded hub data.
+- [x] Establish frontend-to-backend API communication (`src/api/client.ts`, `src/api/hubs.ts`).
+- [x] Configure CORS correctly (Phase 1 allow-list; verified for `GET /api/hubs` with origin `http://localhost:5173`, rejected for `http://127.0.0.1:5173`).
+- [x] Consume the hub retrieval endpoint implemented in Phase 3.
+- [x] Fetch hub data from the backend (`useHubs`).
+- [x] Display API-provided hubs on the map (component tests with a stubbed map; real-map rendering NOT VERIFIED in a browser).
+- [x] Add loading and error states (with Retry).
+- [x] Handle an empty hub collection gracefully.
+- [x] Verify that frontend components do not depend on hardcoded hub data (mock source removed; no fallback).
 
 ### Expected Result
 
@@ -341,10 +341,10 @@ A publicly accessible application and a complete GitHub repository ready for the
 
 ## Current Focus
 
-**Active milestone: Phase 4 — First Frontend–Backend Integration** (Phase 1 and Phase 3 complete; Phase 2 core map done — pan limits and overlay visual language remain)
+**Active milestone: Phase 5 — Core Operations Domain** (Phases 1, 3 and 4 complete; Phase 2 core map done — pan limits and overlay visual language remain)
 
 **Next milestones:**
-1. Connect hub data to the backend API (Phase 4); replace the `getHubs()` mock source. Backend Hubs have no `city`/`status` fields, which the frontend panel currently shows from mock data.
+1. Expand the operational domain (Phase 5): partners, drones, orders, missions. Hubs have no `status`/`city` fields in the API; the UI shows `address` only. Verify the Hub map once in a real browser (see feature 004 spec).
 
 **Current confirmed decisions:**
 - Initial demo Hubs (task 002): Galeria Bałtycka, Forum Gdańsk, Centrum Riviera (Gdynia), Centrum Handlowe Osowa, with owner-supplied coordinates; illustrative, not real partnerships.
@@ -363,7 +363,7 @@ A publicly accessible application and a complete GitHub repository ready for the
 - Business model and operational rules (B2B, Hubs as handover points and drone bases, return to nearest suitable Hub, etc.): see `business-rules.md`. Not duplicated here.
 
 **Open decisions:**
-- Frontend supporting libraries (e.g. server-state handling) — decide in Phase 4.
+- Frontend supporting libraries (e.g. server-state handling): feature 004 used plain `fetch` and a small hook; revisit only if polling/WebSocket state needs it.
 - LLM provider — decide in Phase 8.
 - Hosting provider and deployment configuration.
 - Open business questions (order lifecycle after `READY_FOR_PICKUP`, suitable return Hub, returned-parcel handling, fleet balancing, operator interventions, emergency outcomes, weather/airspace retry, Hub occupancy semantics): tracked in `business-rules.md` §8. Resolve each only when the relevant feature needs it.

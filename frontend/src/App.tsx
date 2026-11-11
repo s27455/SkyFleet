@@ -1,13 +1,17 @@
 import { useCallback, useState } from 'react'
 
 import { HubDetailPanel } from './features/hubs/HubDetailPanel'
-import { getHubs } from './features/hubs/mockHubs'
+import { HubsStatusBanner } from './features/hubs/HubsStatusBanner'
+import { useHubs } from './features/hubs/useHubs'
 import { MapView } from './features/map/MapView'
 import { BackendStatus } from './features/system-status/BackendStatus'
+import type { Hub } from './types/hub'
 
-const hubs = getHubs()
+const NO_HUBS: readonly Hub[] = []
 
 function App() {
+  const { state, retry } = useHubs()
+  const hubs = state.status === 'ready' ? state.hubs : NO_HUBS
   const [selectedHubId, setSelectedHubId] = useState<string | null>(null)
   const selectedHub = hubs.find((hub) => hub.id === selectedHubId)
   const clearSelection = useCallback(() => setSelectedHubId(null), [])
@@ -26,6 +30,7 @@ function App() {
 
       <main className="relative min-h-0 flex-1">
         <MapView hubs={hubs} selectedHubId={selectedHubId} onSelectHub={setSelectedHubId} />
+        <HubsStatusBanner state={state} onRetry={retry} />
         {selectedHub && <HubDetailPanel hub={selectedHub} onClose={clearSelection} />}
       </main>
     </div>
