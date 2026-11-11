@@ -52,7 +52,7 @@ A typical delivery follows this process:
 
 1. A customer places an order with a SkyFleet Partner and chooses drone delivery, providing a delivery address.
 2. The Partner submits a delivery request (with order information) to SkyFleet.
-3. The Partner prepares the parcel and transfers it to a designated Mall Pickup Hub.
+3. The customer deposits the parcel in a partner parcel locker, and it is transported to the selected Mall Pickup Hub; an order can exist before the parcel reaches the Hub, and only a parcel confirmed at the Hub can be assigned to a drone.
 4. The system evaluates available delivery resources and the Dispatch Engine selects a suitable drone.
 5. The drone receives a mission, arrives at the hub, and collects the parcel.
 6. The drone delivers the parcel to the delivery address from the order.
@@ -67,12 +67,12 @@ The system should represent this workflow through coherent operational states an
 
 A Hub is a location inside a shopping mall (potentially on an upper floor or designated logistics area) that combines two responsibilities:
 
-- Parcel handover and pickup: Partners place prepared parcels in the Hub's designated parcel compartment/locker. For the MVP, parcel validation is assumed to have been completed successfully before SkyFleet begins the delivery workflow.
+- Parcel handover and pickup: parcels deposited by customers in partner parcel lockers are transported to the Hub, where they are held in the Hub's designated parcel compartment/locker until a drone collects them. For the MVP, parcel validation is assumed to have been completed successfully before SkyFleet begins the delivery workflow, and parcel-locker integration is out of scope.
 - Drone operations: Hubs are also the locations where drones are stored, charged, inspected, maintained, prepared, and made ready for missions.
 
 A Hub therefore serves both as a parcel pickup point and as the operational home/base for the drone fleet. Do not model a separate DroneBase for the MVP.
 
-The initial planning capacity is 50 drones per Hub. This is drone accommodation capacity, not parcel or order capacity. The system should expose occupancy/capacity and prevent ordinary assignment or repositioning from exceeding the limit. Emergency-return behavior when a Hub is full remains an open rule and must not be invented.
+The initial planning capacity is 50 drones per Hub. This is drone accommodation capacity, not parcel or order capacity. Occupancy counts only drones physically docked at the Hub: a drone in flight occupies no Hub, mission assignment reserves nothing, and actual occupancy must never exceed 50. Return-Hub capacity is checked when a mission is planned; the flight simulation rechecks it before landing. The operational target is about 40 occupied places (80%), above which a future rebalancing feature should relocate suitable idle drones (see `business-rules.md`).
 
 Partners may use any available Hub in the SkyFleet network. A specific Order identifies the Hub where its parcel will be handed over; a Partner is not permanently restricted to one Hub.
 
@@ -184,7 +184,7 @@ The simulation should generate and evolve:
 - Return flights to the nearest suitable Hub, with or without the parcel.
 - Post-flight unloading, quick inspection, charging, and maintenance.
 - Drone availability changes and telemetry updates.
-- Fleet balancing: when operationally appropriate and a drone is idle and sufficiently charged, the dispatcher may reposition it to a Hub with greater need, while respecting Hub capacity.
+- Fleet balancing (future feature): when operationally appropriate and a drone is idle and sufficiently charged, the dispatcher may reposition it to a Hub with greater need, while respecting Hub capacity. The target is about 40 of 50 places occupied per Hub.
 - Operational events and simulated incidents.
 
 The simulation must remain coherent and independent of an open frontend session. All movement, weather, airspace, and telemetry are simulated; physical accuracy is not the objective.

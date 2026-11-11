@@ -26,6 +26,13 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    # Mission planning (simulation assumptions, not certified performance). Extra energy per km
+    # when carrying the full rated payload, as a fraction of the empty rate (0.5 = +50%).
+    mission_payload_energy_factor: float = Field(default=0.5, ge=0)
+    # A drone counts as docked at a Hub when its stored position is this close (metres). A
+    # simulation approximation until docking hardware confirms presence.
+    hub_dock_proximity_m: float = Field(default=50.0, gt=0)
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_origins(cls, value: object) -> object:

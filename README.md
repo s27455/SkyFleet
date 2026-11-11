@@ -99,9 +99,10 @@ not an authorization to fly in real airspace.
 
 Limitations: seeded drones are `IDLE` snapshots at their Hub's coordinates; nothing moves, charges or
 changes status yet. The drone seed only inserts missing rows and never resets existing drone state
-(so changing SF-1 values later needs a migration). Hub capacity means the number of drones
-*assigned* to a Hub regardless of flight status, and it is enforced **only while seeding**; no
-runtime check exists yet.
+(so changing SF-1 values later needs a migration). The seed checks each Hub's assigned drones against
+its capacity; every seeded drone starts docked at its assigned Hub, so this bounds the initial
+physical occupancy. At runtime a Hub's occupancy is the number of drones physically docked there (see
+Mission planning below).
 
 **Delivery orders (Feature 007):** after the Hubs exist, seed ten illustrative orders (repeatable) and
 read them from the API:
@@ -122,6 +123,62 @@ endpoints are read-only: there is no create/update/delete, no drone assignment (
 feature owns that), no Partner entity and no feasibility check, so an order whose destination is far
 from its Hub is still stored. Addresses and coordinates are illustrative simulation data, not
 verified customer addresses.
+
+**Mission planning (Feature 009):** an operator can check whether a drone can serve an order, confirm
+the assignment, and cancel it before takeoff. Nothing flies: confirming creates an `ASSIGNED`
+mission only, and never changes the order, the drone, its battery or any Hub.
+
+```bash
+cd backend
+uv run alembic upgrade head              # includes migration 0004 (missions)
+# GET  http://127.0.0.1:8000/api/missions/plan?order_id=ORD-001&drone_id=DRN-010   (read-only preview)
+# POST http://127.0.0.1:8000/api/missions          {"order_id": "ORD-001", "drone_id": "DRN-010"}
+# POST http://127.0.0.1:8000/api/missions/{id}/cancel
+# GET  http://127.0.0.1:8000/api/missions  and  /api/missions/{id}
+```
+
+Rules (MVP simulation assumptions, not certified aircraft performance):
+
+- The order must be `READY_FOR_PICKUP` (parcel physically confirmed at its origin Hub). Assignment is
+  derived from the mission, so the order status does not change.
+- The drone must be `IDLE`, docked at the order's origin Hub (status not `IN_FLIGHT` and stored
+  position within `HUB_DOCK_PROXIMITY_M`, default 50 m, of that Hub; `hub_id` is only the assigned
+  Hub), carry no more than its model's payload, and have no active mission. At most one active
+  (`ASSIGNED` or `IN_FLIGHT`) mission can exist per order and per drone, enforced by the database.
+- Route: origin Hub, destination, then the nearest Hub to the destination that the drone can reach and
+  that has a free **physical** place, by great-circle distance. The total must stay within the model's
+  mission budget (14 km for the SF-1).
+- Energy: an empty drone uses `100 / max_range_km` % of battery per km (5% for the SF-1); a loaded drone
+  uses that rate × (1 + `MISSION_PAYLOAD_ENERGY_FACTOR` × weight / max payload). The outbound leg
+  carries the parcel and the return leg does not (expected energy). The safety check assumes the parcel
+  stays on board for the whole route, and requires that worst case plus the 20% reserve. Example (5 km
+  out, 5 km back): a 0.3 kg parcel needs 72.5% battery, a 3 kg parcel needs 95%.
+- Hub occupancy is the number of drones physically docked there (50 places); a drone in flight counts
+  at no Hub, and assigning or cancelling a mission never changes occupancy. **Nothing is reserved**:
+  the planned return Hub may fill before landing, so the flight simulation (Feature 010) must recheck
+  capacity before landing and pick another reachable Hub if needed.
+- Cancelling is allowed only while a mission is `ASSIGNED` (404 unknown, 409 otherwise); it frees the
+  order and the drone. `IN_FLIGHT` is reserved for Feature 010 and is never set by this feature.
+
+| Environment variable | Default | Purpose |
+|---|---|---|
+| `MISSION_PAYLOAD_ENERGY_FACTOR` | `0.5` | Extra energy per km at full payload (0.5 = +50%) |
+| `HUB_DOCK_PROXIMITY_M` | `50` | Metres from a Hub within which a drone counts as docked |
+
+Why a plan can be refused (`reasons` in the preview, and the 409 body of `POST /api/missions`; all that
+apply are listed): `ORDER_NOT_READY`, `ORDER_ALREADY_ASSIGNED`, `DRONE_ALREADY_ASSIGNED`,
+`DRONE_NOT_AVAILABLE`, `DRONE_NOT_AT_ORIGIN_HUB`, `OVERWEIGHT`, `ROUTE_TOO_LONG`,
+`INSUFFICIENT_BATTERY`, `RETURN_HUBS_FULL`. Status codes: 404 unknown order, drone or mission; 409 not
+eligible, lost a race, or `MISSION_NOT_CANCELLABLE`; 422 malformed input.
+
+Migration `0004` creates the `missions` table and the two partial unique indexes
+(`uq_missions_active_order`, `uq_missions_active_drone`). It only adds a table. Feature 009 versus
+later features: this feature plans, confirms and cancels; takeoff, landing and the landing-time
+capacity recheck are Feature 010; automatic dispatch is Feature 011; fleet rebalancing is Feature 012.
+
+Out of scope here: automatic dispatch (Feature 011), flight simulation (Feature 010), fleet
+rebalancing (Feature 012; target about 40 of 50 places occupied per Hub), airspace and weather checks.
+The PostgreSQL concurrency tests are opt-in and use a temporary database: `uv run pytest -m postgres`.
 
 Backend tests use SQLite (in-memory, plus temporary files for the migration test) and need neither
 Docker nor PostgreSQL. Known limitation: they do not exercise PostgreSQL itself.

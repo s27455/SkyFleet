@@ -17,11 +17,18 @@ This document records business behavior independently of implementation details.
 - Partners may use any available Hub in the SkyFleet network; they are not permanently restricted to one Hub.
 - Every Order identifies the specific Hub where its parcel is handed over and picked up by a drone.
 - Initial Hub drone capacity is 50 drones. This is capacity for accommodating drones, not parcels or orders.
-- Ordinary placement/repositioning must respect the Hub's capacity. Exceptional return behavior when a Hub is full remains open.
+- Hub occupancy counts ONLY drones physically present and docked at the Hub (50 places). A drone that takes off stops counting immediately; a drone in flight counts toward no Hub; a drone that lands and docks counts toward the Hub where it docked.
+- Mission assignment and cancellation never change physical occupancy. There are no landing-slot reservations: an active mission does not reserve capacity at its planned return Hub.
+- Actual physical occupancy must never exceed the Hub's capacity (50). Emergency returns do not exceed it.
+- In the MVP, physical presence is approximated from drone status (not in flight) and stored position (within 50 m of the Hub). This is a simulation approximation: future docking and charging hardware will confirm presence, and GPS proximity will not be the authoritative source. `Drone.hub_id` is only the administrative assignment, not presence.
+- Hubs have no operational status in the MVP; every Hub is treated as operationally available.
 
 ## 3. Order and parcel flow
 
 - An incoming Partner request does not by itself mean that the parcel has been handed over.
+- A customer deposits the parcel in a partner parcel locker, which initiates the order process; the parcel is then transported to the selected SkyFleet Hub. An order can therefore exist before the parcel physically reaches the Hub. Parcel-locker integration is out of scope for the MVP implementation.
+- The existing statuses are read as: `CREATED` — the order exists (the locker deposit may still be pending); `AWAITING_HANDOVER` — the parcel is deposited or on its way to the Hub; `READY_FOR_PICKUP` — the parcel is physically confirmed at the origin Hub and can be assigned to a drone. Only `READY_FOR_PICKUP` orders can be assigned to a mission. A distinct in-transit state may be added later if a feature needs it.
+- Assignment is derived from the mission; there is no order `ASSIGNED` status.
 - Parcel validation and acceptance checks at the Hub are assumed to have succeeded before the SkyFleet delivery workflow begins; detailed parcel validation is outside the MVP scope.
 - The confirmed initial Order states are `CREATED`, `AWAITING_HANDOVER`, and `READY_FOR_PICKUP`.
 - The complete Order lifecycle after `READY_FOR_PICKUP` is not yet finalized. Do not invent a definitive exhaustive status enum. Propose the minimum transitions needed for a specific feature and ask only if the missing decision blocks that feature.
@@ -38,9 +45,19 @@ This document records business behavior independently of implementation details.
 - A simulated restriction, such as an emergency-service flight restriction, may prevent or delay takeoff. This is a simulation scenario only; no real emergency-service or airspace integration is in scope.
 - After every delivery attempt, the drone returns to the nearest suitable Hub. The return Hub may differ from the pickup Hub.
 - After returning, a drone carrying an undelivered parcel is unloaded at the Hub. The drone receives a quick post-flight inspection and then charges, enters maintenance if needed, or waits for another task.
-- The exact meaning of “nearest suitable Hub” is not fully defined. Distance is relevant, but suitability constraints and tie-breaking rules remain open.
+- “Nearest suitable Hub”, as used for mission planning in the MVP: the nearest Hub by great-circle distance (ties go to the lower Hub id) that the drone can reach with the parcel still on board within the distance budget and battery reserve, and that has a free physical place. Suitability beyond that (for example Hub operational status or charging availability) remains open. The planned return Hub is not guaranteed or reserved: flight execution must recheck capacity before landing and, if the planned Hub is no longer available, choose another reachable suitable Hub.
 - The dispatcher may rebalance idle, sufficiently charged drones by repositioning them toward Hubs with greater fleet need, to avoid one Hub being crowded while others are under-supplied. Exact thresholds, target distribution, and prioritization are open implementation policies.
 - Repositioning must respect Hub capacity. It must not interrupt an active mission.
+- Future fleet rebalancing (planned, not implemented): the operational target is about 40 physically present drones per Hub (80% of 50). At or above 40 the system should consider relocating suitable idle drones to less occupied Hubs, aiming to keep about 10 free places. 40 is not a hard landing limit: temporary occupancy above 40 is allowed, never above 50. Rebalancing must consider battery, destination capacity, drone availability and operational demand.
+
+### Mission planning and assignment (MVP)
+
+- An operator previews a plan for one order and one drone, confirms it, and may cancel it before takeoff. Automatic drone selection and dispatch are a later feature. Confirmation recomputes and revalidates the plan (order readiness, drone availability, energy, return Hub) and never trusts an earlier preview.
+- The drone must be `IDLE`, physically docked at the order's origin Hub, able to carry the parcel (model payload, 3 kg for the SF-1), and free of any active mission. At most one active mission (`ASSIGNED` or `IN_FLIGHT`) exists per order and per drone, enforced by the database.
+- Mission statuses: `ASSIGNED`, `IN_FLIGHT` and `CANCELLED`. `IN_FLIGHT` is reserved for the flight simulation; planning, confirmation and cancellation never start a flight, move a drone or change its battery.
+- An `ASSIGNED` mission can be cancelled before takeoff, which makes the drone and the order available again; cancellation does not change Hub occupancy. A mission that is in flight cannot be cancelled this way.
+- Route: origin Hub, then the delivery destination, then the return Hub chosen as described above (it may be the origin Hub). The total must stay within the model's recommended mission distance (14 km for the SF-1).
+- Energy (simulation assumptions, not certified aircraft performance): a drone uses `100 / nominal range` percent of battery per km empty (5% per km for the SF-1's 20 km range). Carrying the parcel multiplies that by `1 + factor × weight / maximum payload`, with a configurable factor (default 0.5). The outbound leg carries the parcel and the return leg does not (expected energy). As a conservative safety check the drone must be able to fly the whole route with the parcel still on board, plus the 20% minimum battery reserve; exactly the required level is sufficient.
 
 ## 5. Monitoring, telemetry, and operator controls
 
@@ -68,13 +85,13 @@ This document records business behavior independently of implementation details.
 ## 8. Open questions — do not invent answers
 
 1. **Order lifecycle:** What exact states and transitions follow `READY_FOR_PICKUP`, including assignment, flight, successful delivery, failed delivery, cancellation, and completion? Define only as implementation requires.
-2. **Suitable return Hub:** What makes a Hub suitable beyond geographic proximity? What happens if the nearest Hub is at its 50-drone capacity? Can emergency returns exceed normal capacity, and how should that be represented?
+2. **Suitable return Hub (partly answered):** For planning, a full Hub (physical occupancy at 50) is skipped and the nearest suitable Hub with a free place is chosen; emergency returns never exceed 50 (see §2 and §4). Still open: suitability beyond distance, reachability and capacity (for example Hub operational status), and what the flight simulation does when no reachable Hub has a free place at landing time.
 3. **Returned parcel handling:** After an unsuccessful delivery and return to a Hub, is the parcel stored, made available for another attempt, or handed back to the Partner? Who/what confirms that handling?
-4. **Fleet balancing:** What thresholds or target distribution determine that a Hub has too many or too few drones? What counts as “sufficiently charged” for repositioning?
-5. **Operator interventions:** What exact states allow cancel, return-to-Hub, or land commands? What happens to the Order and parcel after each intervention?
+4. **Fleet balancing (partly answered):** The target is about 40 of 50 places occupied per Hub (see §4); exact demand-based prioritization and what counts as “sufficiently charged” for repositioning remain open (planned for the fleet rebalancing feature).
+5. **Operator interventions (partly answered):** Cancelling an `ASSIGNED` mission before takeoff is defined (§4); the order stays `READY_FOR_PICKUP`. Still open: cancel, return-to-Hub and land commands for a flight that has started, and what happens to the Order and parcel after each.
 6. **Emergency landing and drone malfunction:** What simplified outcomes should the MVP simulate, and how does the drone/mission/order state change afterward?
 7. **Weather/airspace restrictions:** What simplified statuses or retry behavior should be used when pre-flight conditions are not acceptable?
-8. **Hub occupancy semantics:** Does the 50-drone capacity count drones physically present at the Hub only, or also drones assigned to/returning to it? Define before implementing concurrency-sensitive capacity logic.
+8. **Hub occupancy semantics — answered:** the 50-drone capacity counts only drones physically present and docked at the Hub; assigned or returning drones are not counted and nothing is reserved (see §2). The MVP approximates presence from status and position; docking hardware will confirm it later.
 
 ## 9. Scope discipline for Claude Code
 

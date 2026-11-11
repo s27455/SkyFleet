@@ -5,8 +5,9 @@ Run with `uv run python -m app.drones.seed` after `alembic upgrade head` and the
 reset operational state. The SF-1 specification consists of simulation assumptions, not certified
 real-world performance.
 
-Hub capacity is checked here only: it counts drones *assigned* to a Hub regardless of flight status
-(business-rules.md §8 Q8 stays open). Nothing enforces capacity at runtime yet.
+Hub capacity is checked here against the drones assigned to each Hub. Every seeded drone starts
+docked at its assigned Hub, so this bounds the initial physical occupancy. At runtime a Hub's
+occupancy is the number of drones physically docked there (see app/missions/presence.py).
 """
 
 from collections import Counter

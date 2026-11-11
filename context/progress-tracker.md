@@ -143,7 +143,7 @@ This is the first complete vertical slice of the application: backend data, API 
 ## Phase 5 — Core Operations Domain
 
 **Priority:** High  
-**Status:** In progress — Drone entity and read-only drone API done (feature 005, `docs/features/005-drone-fleet-backend.md`, approved). Order entity and read-only orders API done (feature 007, `docs/features/007-delivery-orders-backend.md`, approved). Partner, Mission, Incident and System Event are not started.
+**Status:** In progress — Drone entity and read-only drone API done (feature 005, `docs/features/005-drone-fleet-backend.md`, approved). Order entity and read-only orders API done (feature 007, `docs/features/007-delivery-orders-backend.md`, approved). Mission entity with operator-confirmed assignment and cancellation done (feature 009, `docs/features/009-mission-planning-assignment.md`). Partner, Incident and System Event are not started.
 
 ### Objectives
 
@@ -154,7 +154,8 @@ Develop the foundational operational entities and their relationships.
 - [x] Show the drone fleet on the map (feature 006, `docs/features/006-drone-fleet-frontend-integration.md`): Hub drone-count badges, Hub-panel drone list, small markers for `IN_FLIGHT` drones only. Implemented and tested; manual browser acceptance not yet verified.
 - [x] Define the Order entity (feature 007: `orders` table with explicit origin Hub, destination address and coordinates, package weight 0 to 3.0 kg, confirmed initial states only, timestamps; read-only `GET /api/orders`, `GET /api/orders/{id}`; 10 seeded `READY_FOR_PICKUP` orders). No Partner entity, drone assignment or status transitions yet.
 - [x] Show delivery orders on the map (feature 008, `docs/features/008-delivery-orders-frontend.md`): collapsible orders list, order detail panel, small destination markers. Implemented and tested; manual browser acceptance not yet verified.
-- [ ] Define the Mission entity.
+- [x] Define the Mission entity (feature 009: `missions` table, migration 0004, statuses `ASSIGNED` / `IN_FLIGHT` (reserved) / `CANCELLED`, partial unique indexes for one active mission per order and per drone).
+- [x] Mission planning, confirmation and cancellation (feature 009: read-only `GET /api/missions/plan`, `POST /api/missions`, `POST /api/missions/{id}/cancel`, `GET /api/missions`, `GET /api/missions/{id}`; weight-aware energy estimate; return Hub chosen by physical capacity; no reservations; no flight, movement or battery change). Planning only: takeoff and landing are Feature 010, automatic dispatch Feature 011, fleet rebalancing Feature 012.
 - [ ] Define the Incident entity.
 - [ ] Define the System Event entity.
 - [ ] Establish relationships between the entities.
@@ -186,12 +187,12 @@ The backend provides a coherent operational domain that can support dispatching,
 - [ ] Filter candidates using basic operational constraints.
 - [ ] Rank eligible drones using factors such as battery level, distance, estimated delivery time, and workload.
 - [ ] Assign a suitable drone to an order.
-- [ ] Create and manage missions.
+- [ ] Create and manage missions. (Partly done: operator-confirmed assignment and pre-takeoff cancellation exist, feature 009; state transitions after takeoff are Feature 010, automatic assignment Feature 011.)
 - [ ] Implement mission state transitions.
 - [ ] Handle cases where no suitable drone is available.
 - [ ] Record important dispatch decisions as system events.
 - [ ] Planned: check simulated operating conditions (weather, airspace) before assigning a mission (`business-rules.md` §4; retry/status semantics open, Q7).
-- [ ] Planned: fleet repositioning of idle, sufficiently charged drones between Hubs, respecting Hub `drone_capacity` and never interrupting an active mission (thresholds open, Q4).
+- [ ] Planned (Feature 012): fleet repositioning of idle, sufficiently charged drones between Hubs, respecting Hub `drone_capacity` and never interrupting an active mission. Target about 40 of 50 places occupied per Hub, about 10 free; temporary occupancy above 40 allowed, never above 50 (demand-based prioritization open, Q4).
 
 ### Expected Result
 
@@ -346,13 +347,15 @@ A publicly accessible application and a complete GitHub repository ready for the
 **Active milestone: Phase 5 — Core Operations Domain** (Phases 1, 3 and 4 complete; Phase 2 core map done — pan limits and overlay visual language remain)
 
 **Next milestones:**
-1. Continue the operational domain (Phase 5): partners and missions are next (the Order entity and read-only orders API exist, feature 007; the orders are shown on the map and in a list, feature 008; the spec names assignment and flight execution as later features). Drones are seeded `IDLE` snapshots with no movement or status changes yet; the fleet is shown on the map (feature 006: docked drones as Hub badges, `IN_FLIGHT` drones as small markers). Verify the Hub, drone and order map once in a real browser (see the feature 006 and 008 specs). Hubs have no `status`/`city` fields in the API; the UI shows `address` only. Verify the Hub map once in a real browser (see feature 004 spec).
+1. Continue the operational domain (Phase 5): the Mission entity and operator-confirmed assignment exist (feature 009); partners are next, then flight simulation (Feature 010), automatic dispatch (Feature 011) and fleet rebalancing (Feature 012) (the Order entity and read-only orders API exist, feature 007; the orders are shown on the map and in a list, feature 008; the spec names assignment and flight execution as later features). Drones are seeded `IDLE` snapshots with no movement or status changes yet; the fleet is shown on the map (feature 006: docked drones as Hub badges, `IN_FLIGHT` drones as small markers). Verify the Hub, drone and order map once in a real browser (see the feature 006 and 008 specs). Hubs have no `status`/`city` fields in the API; the UI shows `address` only. Verify the Hub map once in a real browser (see feature 004 spec).
 
 **Current confirmed decisions:**
-- Drone map display (feature 006): a drone is "docked" when its status is not `IN_FLIGHT` and it is within 50 m of a Hub (MVP simplification, reversible; the occupancy rule Q8 is still open).
+- Mission planning (feature 009): Hub occupancy counts only drones physically docked (status not `IN_FLIGHT`, within 50 m of the Hub; a simulation approximation until docking hardware confirms presence). In-flight drones occupy no Hub; assignment and cancellation never change occupancy; there are no reservations, counters or reservation tables. Return-Hub capacity is checked at planning time only; Feature 010 must recheck before landing (never above 50 drones). Q8 is answered; Q2, Q4 and Q5 are partly answered (`business-rules.md` §8).
+- Mission planning (feature 009): order readiness requires `READY_FOR_PICKUP` and assignment is derived from the mission (no order `ASSIGNED` status); the drone must be `IDLE` and docked at the origin Hub; weight-aware energy model with `MISSION_PAYLOAD_ENERGY_FACTOR` default 0.5 (simulation assumption), 14 km budget, 20% reserve, worst case assumes the parcel stays on board; a mission can be cancelled only while `ASSIGNED`; mission ids are `MIS-` plus 8 hex characters. The order flow starts with a customer deposit in a partner parcel locker, transported to the Hub (no locker integration).
+- Drone map display (feature 006): a drone is "docked" when its status is not `IN_FLIGHT` and it is within 50 m of a Hub (MVP simplification; the same rule defines physical Hub occupancy, `business-rules.md` §2).
 - Orders on the map (feature 008): unknown order statuses are rejected strictly (the frontend is updated when the backend adds one); timestamps shown in UTC; the orders list is closed by default and hidden on narrow screens while a panel is open.
 - Orders (feature 007): status limited to the confirmed `CREATED`, `AWAITING_HANDOVER`, `READY_FOR_PICKUP`; later states are added when a feature needs them (business-rules Q1 stays open). Origin Hub is explicit. Drone assignment will belong to a future Mission entity (no `assigned_drone_id` on orders). Maximum package weight 3.0 kg (SF-1 payload) is an MVP order-acceptance rule; distance feasibility is a later planning concern.
-- Drones (feature 005): one seeded model, SkyFleet SF-1 Courier (3.0 kg payload; specifications are simulation assumptions), 12 seeded drones (3 per Hub). Hub capacity counts drones *assigned* to a Hub regardless of flight status and is enforced only during seeding; runtime enforcement and the final occupancy rule stay open (`business-rules.md` §8, Q8).
+- Drones (feature 005): one seeded model, SkyFleet SF-1 Courier (3.0 kg payload; specifications are simulation assumptions), 12 seeded drones (3 per Hub). The seed checks each Hub's assigned drones against its capacity (every seeded drone starts docked at its assigned Hub, so this bounds initial physical occupancy); at runtime, occupancy is physical presence (feature 009, `business-rules.md` §2).
 - Initial demo Hubs (task 002): Galeria Bałtycka, Forum Gdańsk, Centrum Riviera (Gdynia), Centrum Handlowe Osowa, with owner-supplied coordinates; illustrative, not real partnerships.
 - Map provider: Mapbox GL JS.
 - Map appearance: Dark.

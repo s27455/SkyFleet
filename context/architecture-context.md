@@ -213,7 +213,7 @@ Potential attributes:
 - Operational status.
 - `drone_capacity` — maximum number of drones the Hub can accommodate (50 for the initial Hubs). This is drone capacity, not parcel or order capacity.
 
-How occupancy is counted (drones physically present vs. also assigned/returning) is an open rule; see `business-rules.md` §8.
+Occupancy counts only drones physically docked at the Hub (a drone in flight counts toward no Hub; missions reserve nothing; actual occupancy never exceeds 50). The MVP derives presence from drone status and stored position (within 50 m of the Hub), a simulation approximation until docking hardware confirms it. See `business-rules.md` §2.
 
 Partners may use any available Hub; each Order names its pickup Hub.
 
@@ -244,6 +244,8 @@ A mission may involve:
 - Traveling to the delivery address.
 - Completing delivery.
 - Returning to the nearest suitable Hub (see Section 6.2).
+
+Feature 009 persists a mission as a planned assignment of one drone to one order. It stores the order, drone, origin Hub and planned return Hub, a status (`ASSIGNED`, `IN_FLIGHT` reserved for the flight simulation, `CANCELLED`), a snapshot of the route estimate and energy figures, and timestamps. A mission is active while `ASSIGNED` or `IN_FLIGHT`; database partial unique indexes allow at most one active mission per order and per drone. Whether an order is assigned is derived from its active mission (the order status does not change), and missions never write drones, orders or Hubs. Planning, confirmation and cancellation belong to Feature 009; takeoff, flight, landing and capacity rechecks belong to the flight simulation (Feature 010); automatic dispatch to Feature 011; fleet rebalancing to Feature 012.
 
 ### Incident
 
@@ -281,9 +283,9 @@ A typical order workflow:
 
 1. A Partner submits a delivery request; an order enters the system.
 2. The order references the Partner, the pickup Hub, and the Delivery Address.
-3. The Partner hands the parcel over at the Hub (explicit order states: `AWAITING_HANDOVER`, then `READY_FOR_PICKUP`).
+3. The customer deposits the parcel in a partner parcel locker and it is transported to the selected Hub (order states: `AWAITING_HANDOVER`, then `READY_FOR_PICKUP` once it is physically confirmed at the Hub). An order can exist before the parcel reaches the Hub.
 4. The system evaluates available drones and simulated operating conditions (weather, airspace).
-5. Dispatch selects an eligible drone.
+5. An eligible drone is selected: in the MVP an operator previews the plan, confirms it, and may cancel it before takeoff (Feature 009). Automatic selection and dispatch come later (Feature 011).
 6. A mission is created.
 7. Operating conditions are checked again immediately before takeoff.
 8. The drone travels to the pickup Hub and collects the parcel.
@@ -297,7 +299,7 @@ The system must preserve consistent relationships between orders, missions, and 
 
 After every delivery attempt the drone returns to the nearest suitable Hub, which may differ from the pickup Hub. After a successful delivery it returns without the parcel; after an unsuccessful one it returns with the parcel. Returned parcels are unloaded at the Hub.
 
-The exact meaning of "suitable" (beyond distance), the behavior when the nearest Hub is full, and handling of returned parcels are open rules; see `business-rules.md` §8.
+For mission planning, "suitable" means reachable with the parcel still on board within the distance budget and battery reserve, and having a free physical place; a full Hub is skipped at planning time. The planned return Hub is not reserved, so the flight simulation (Feature 010) must recheck capacity before landing and pick another reachable Hub if needed. Suitability beyond that and handling of returned parcels remain open; see `business-rules.md` §8.
 
 ### 6.3 Charging, Maintenance & Fleet Balancing
 
@@ -305,7 +307,7 @@ At the Hub, a returning drone receives a quick post-flight inspection and then c
 
 Drone states must affect availability and eligibility for future missions. The simulation should represent these transitions consistently.
 
-Idle, sufficiently charged drones may be repositioned between Hubs to balance fleet availability. Repositioning must respect Hub `drone_capacity` and must not interrupt an active mission. Thresholds and prioritization are open implementation policies (`business-rules.md` §8).
+Idle, sufficiently charged drones may be repositioned between Hubs to balance fleet availability (a later feature, not part of mission planning). Repositioning must respect Hub `drone_capacity` and must not interrupt an active mission. The operational target is about 40 of 50 places occupied per Hub; demand-based prioritization remains open (`business-rules.md` §8).
 
 ## 7. Dispatch Engine
 

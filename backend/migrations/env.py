@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.db.session import Base
 from app.drones import models as drone_models  # noqa: F401  (registers tables on Base.metadata)
 from app.hubs import models  # noqa: F401  (registers tables on Base.metadata)
+from app.missions import models as mission_models  # noqa: F401  (registers tables on Base.metadata)
 from app.orders import models as order_models  # noqa: F401  (registers tables on Base.metadata)
 
 target_metadata = Base.metadata

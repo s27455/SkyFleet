@@ -192,7 +192,7 @@ Use the existing `/api` routing conventions and existing database session/depend
 
 ## 13. Decisions confirmed during planning
 
-- Hub capacity means the number of drones **assigned** to a Hub, regardless of flight status. It is enforced during seeding only. This is an MVP simplification and does not settle the open occupancy question in `business-rules.md` §8 (Q8).
+- Hub capacity means the number of drones **assigned** to a Hub, regardless of flight status. It is enforced during seeding only. This was an MVP simplification at the time. **Superseded for runtime occupancy by Feature 009:** Q8 is answered, and a Hub's occupancy is the number of drones physically docked there (`business-rules.md` §2). The seed-time check remains valid because every seeded drone starts docked at its assigned Hub.
 - SF-1 payload capacity stays at 3.0 kg.
 - Existing PostgreSQL data was preserved; the Docker volume was not reset.
 

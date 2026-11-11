@@ -77,7 +77,8 @@ class Drone(Base):
     # Stable unit id, e.g. "DRN-001".
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     model_id: Mapped[str] = mapped_column(ForeignKey("drone_models.id", ondelete="RESTRICT"))
-    # Assigned/home Hub. Hub capacity counts drones assigned here, regardless of flight status.
+    # Assigned/home Hub (administrative), not where the drone is. Physical presence at a Hub is
+    # derived from status and position (see app/missions/presence.py).
     hub_id: Mapped[str] = mapped_column(ForeignKey("hubs.id", ondelete="RESTRICT"))
     status: Mapped[str] = mapped_column(String(16))
     battery_pct: Mapped[int] = mapped_column(Integer)

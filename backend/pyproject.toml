@@ -31,6 +31,9 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Tests marked `postgres` need the Docker PostgreSQL server and are opt-in: `pytest -m postgres`.
+addopts = "-m 'not postgres'"
+markers = ["postgres: opt-in tests that use a temporary PostgreSQL database"]
 
 [dependency-groups]
 dev = [

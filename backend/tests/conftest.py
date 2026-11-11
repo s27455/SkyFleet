@@ -13,12 +13,14 @@ from app.config import Settings
 from app.db.session import Base, get_session
 from app.drones import models as drone_models  # noqa: F401  (registers tables on Base.metadata)
 from app.drones.models import Drone, DroneStatus
-from app.drones.seed import build_sf1_model
+from app.drones.seed import build_sf1_model, seed_drones
 from app.hubs import models as hub_models  # noqa: F401  (registers tables on Base.metadata)
 from app.hubs.seed import seed_hubs
 from app.main import create_app
+from app.missions import models as mission_models  # noqa: F401  (registers tables on Base.metadata)
 from app.orders import models as order_models  # noqa: F401  (registers tables on Base.metadata)
 from app.orders.models import DeliveryOrder, OrderStatus
+from app.orders.seed import seed_orders
 
 
 def _enable_sqlite_foreign_keys(dbapi_connection: SQLiteConnection, _: ConnectionPoolEntry) -> None:
@@ -105,3 +107,17 @@ def make_order() -> Callable[..., DeliveryOrder]:
         return DeliveryOrder(**values)
 
     return factory
+
+
+@pytest.fixture
+def seeded(session: Session) -> Session:
+    """A session whose database holds the 4 Hubs, the SF-1 model, 12 drones and 10 orders.
+
+    DRN-001..003 are docked at Osowa, 004..006 at Riviera, 007..009 at Forum Gdańsk and 010..012 at
+    Galeria Bałtycka (batteries 100, 90, 80 per Hub). ORD-001..003 start at Bałtycka, 004..006 at
+    Forum, 007..008 at Riviera and 009..010 at Osowa.
+    """
+    seed_hubs(session)
+    seed_drones(session)
+    seed_orders(session)
+    return session
