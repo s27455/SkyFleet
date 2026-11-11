@@ -41,8 +41,8 @@ Example malls (for the simulated network) include:
 
 - Galeria Bałtycka.
 - Forum Gdańsk.
-- Galeria Riviera.
-- Galeria Metropolia.
+- Centrum Riviera.
+- Centrum Handlowe Osowa.
 
 These locations serve as examples for the simulated business network, not as claims of real commercial partnerships.
 

@@ -87,19 +87,19 @@ A working, dark, Mapbox-powered map of the Tricity area that serves as the main 
 ## Phase 3 — Mall Pickup Hubs
 
 **Priority:** Critical  
-**Status:** Planned
+**Status:** In progress — frontend slice done with mock data (task 002, approved; automated checks pass, manual map check passed on the earlier Hub set). Backend model and REST endpoint remain.
 
 ### Objectives
 
 - [ ] Define the initial Hub data model (Mall Pickup Hub: name, mall/location description, coordinates, status, `drone_capacity` = 50).
-- [ ] Prepare a small set of realistic demo hubs located in malls across the Tricity area.
+- [x] Prepare a small set of realistic demo hubs located in malls across the Tricity area (task 002: Galeria Bałtycka, Forum Gdańsk, Centrum Riviera, Centrum Handlowe Osowa; local mock data in `frontend/src/features/hubs/mockHubs.ts`).
 - [ ] Implement the backend representation of Hubs.
 - [ ] Expose a REST endpoint for retrieving hubs.
-- [ ] Add visually distinct Hub markers to the Mapbox map.
-- [ ] Implement marker interaction.
-- [ ] Display a hub information panel when a marker is selected.
-- [ ] Show basic information such as hub name, mall/location, operational status, and drone capacity.
-- [ ] Keep map rendering and hub data retrieval separate.
+- [x] Add visually distinct Hub markers to the Mapbox map (task 002, frontend mock data).
+- [x] Implement marker interaction (mouse/touch/keyboard).
+- [x] Display a hub information panel when a marker is selected.
+- [x] Show basic information such as hub name, mall/location, illustrative operational status, and maximum drone capacity (50). Status is labelled as mock data.
+- [x] Keep map rendering and hub data retrieval separate (`MapView` receives `hubs` as a prop; `getHubs()` is the future API swap point).
 
 ### Expected Result
 
@@ -344,10 +344,11 @@ A publicly accessible application and a complete GitHub repository ready for the
 **Active milestone: Phase 3 — Mall Pickup Hubs** (Phase 1 complete; Phase 2 core map done — pan limits and overlay visual language remain)
 
 **Next milestones:**
-1. Implement Mall Pickup Hubs and their map markers.
-2. Connect hub data to the backend API.
+1. Implement the backend Hub model and REST endpoint (Phase 3 remainder).
+2. Connect hub data to the backend API (Phase 4); replace `getHubs()` mock source.
 
 **Current confirmed decisions:**
+- Initial demo Hubs (task 002): Galeria Bałtycka, Forum Gdańsk, Centrum Riviera (Gdynia), Centrum Handlowe Osowa, with owner-supplied coordinates; illustrative, not real partnerships.
 - Map provider: Mapbox GL JS.
 - Map appearance: Dark.
 - Backend framework: FastAPI.
@@ -366,5 +367,4 @@ A publicly accessible application and a complete GitHub repository ready for the
 - Frontend supporting libraries (e.g. server-state handling) — decide in Phase 4.
 - LLM provider — decide in Phase 8.
 - Hosting provider and deployment configuration.
-- Final initial set of demo Mall Pickup Hubs and their coordinates.
 - Open business questions (order lifecycle after `READY_FOR_PICKUP`, suitable return Hub, returned-parcel handling, fleet balancing, operator interventions, emergency outcomes, weather/airspace retry, Hub occupancy semantics): tracked in `business-rules.md` §8. Resolve each only when the relevant feature needs it.
