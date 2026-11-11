@@ -151,6 +151,7 @@ Develop the foundational operational entities and their relationships.
 
 - [ ] Define the Partner entity.
 - [x] Define the Drone entity (feature 005: `drone_models` with the single SF-1 Courier model, `drones` with Hub assignment, status, battery and position; read-only `GET /api/drones`, `GET /api/drones/{id}`).
+- [x] Show the drone fleet on the map (feature 006, `docs/features/006-drone-fleet-frontend-integration.md`): Hub drone-count badges, Hub-panel drone list, small markers for `IN_FLIGHT` drones only. Implemented and tested; manual browser acceptance not yet verified.
 - [ ] Define the Order entity (B2B request: partner, pickup hub, delivery address stored on the Order; initial states `CREATED`, `AWAITING_HANDOVER`, `READY_FOR_PICKUP`).
 - [ ] Define the Mission entity.
 - [ ] Define the Incident entity.
@@ -344,9 +345,10 @@ A publicly accessible application and a complete GitHub repository ready for the
 **Active milestone: Phase 5 — Core Operations Domain** (Phases 1, 3 and 4 complete; Phase 2 core map done — pan limits and overlay visual language remain)
 
 **Next milestones:**
-1. Continue the operational domain (Phase 5): partners, orders, missions. Drones are seeded `IDLE` snapshots with no movement or status changes yet; the spec names a drone fleet frontend integration as the next logical feature. Hubs have no `status`/`city` fields in the API; the UI shows `address` only. Verify the Hub map once in a real browser (see feature 004 spec).
+1. Continue the operational domain (Phase 5): partners, orders, missions. Drones are seeded `IDLE` snapshots with no movement or status changes yet; the fleet is shown on the map (feature 006: docked drones as Hub badges, `IN_FLIGHT` drones as small markers). Verify the Hub and drone map once in a real browser (see feature 006 spec, section 10). Hubs have no `status`/`city` fields in the API; the UI shows `address` only. Verify the Hub map once in a real browser (see feature 004 spec).
 
 **Current confirmed decisions:**
+- Drone map display (feature 006): a drone is "docked" when its status is not `IN_FLIGHT` and it is within 50 m of a Hub (MVP simplification, reversible; the occupancy rule Q8 is still open).
 - Drones (feature 005): one seeded model, SkyFleet SF-1 Courier (3.0 kg payload; specifications are simulation assumptions), 12 seeded drones (3 per Hub). Hub capacity counts drones *assigned* to a Hub regardless of flight status and is enforced only during seeding; runtime enforcement and the final occupancy rule stay open (`business-rules.md` §8, Q8).
 - Initial demo Hubs (task 002): Galeria Bałtycka, Forum Gdańsk, Centrum Riviera (Gdynia), Centrum Handlowe Osowa, with owner-supplied coordinates; illustrative, not real partnerships.
 - Map provider: Mapbox GL JS.

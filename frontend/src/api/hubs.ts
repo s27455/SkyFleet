@@ -1,12 +1,9 @@
 import type { Hub, HubResponse } from '../types/hub'
 import { ApiError, apiGet } from './client'
+import { isFiniteNumberInRange } from './validation'
 
 function invalid(reason: string): never {
   throw new ApiError(`Invalid hub data: ${reason}`)
-}
-
-function isFiniteNumberInRange(value: unknown, min: number, max: number): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
 }
 
 /** Validates one untrusted API item and maps it to the UI model. */

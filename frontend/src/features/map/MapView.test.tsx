@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { act } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
 import { MapView } from './MapView'
 
@@ -17,6 +18,7 @@ const fake = vi.hoisted(() => {
   const markers: {
     element: HTMLElement
     lngLat?: [number, number]
+    offset?: [number, number]
     remove: () => void
   }[] = []
   return { instances, markers }
@@ -26,13 +28,19 @@ vi.mock('mapbox-gl', () => {
   class FakeMarker {
     element: HTMLElement
     lngLat?: [number, number]
+    offset?: [number, number]
     remove = vi.fn(() => this.element.remove())
-    constructor(options: { element: HTMLElement }) {
+    constructor(options: { element: HTMLElement; offset?: [number, number] }) {
       this.element = options.element
+      this.offset = options.offset
       fake.markers.push(this)
     }
     setLngLat(lngLat: [number, number]) {
       this.lngLat = lngLat
+      return this
+    }
+    setOffset(offset: [number, number]) {
+      this.offset = offset
       return this
     }
     addTo() {
@@ -204,5 +212,319 @@ describe('MapView', () => {
 
       markers.forEach((marker) => expect(marker.remove).toHaveBeenCalled())
     })
+  })
+})
+
+const TEST_MODEL = {
+  id: 'SF-1',
+  name: 'SkyFleet SF-1 Courier',
+  maxPayloadKg: 3,
+  maxRangeKm: 20,
+  recommendedMissionRangeKm: 14,
+  cruiseSpeedKmh: 45,
+  nominalFlightTimeMin: 32,
+  minBatteryReservePct: 20,
+}
+
+const TEST_DRONES: Drone[] = [
+  {
+    id: 'DRN-001',
+    hubId: 'hub-a',
+    status: 'IN_FLIGHT',
+    batteryPct: 100,
+    coordinates: [18.6, 54.4],
+    model: TEST_MODEL,
+  },
+  {
+    id: 'DRN-002',
+    hubId: 'hub-a',
+    status: 'IN_FLIGHT',
+    batteryPct: 90,
+    coordinates: [18.6, 54.4],
+    model: TEST_MODEL,
+  },
+]
+
+describe('MapView drone markers', () => {
+  beforeEach(() => {
+    fake.instances.length = 0
+    fake.markers.length = 0
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test')
+  })
+
+  const loadMap = () => act(() => fake.instances[0].handlers.load())
+  const droneMarkers = () => fake.markers.filter((m) => m.element.dataset.markerKind === 'drone')
+
+  it('places no drone markers until the map has loaded', () => {
+    render(<MapView drones={TEST_DRONES} />)
+
+    expect(droneMarkers()).toHaveLength(0)
+  })
+
+  it('places each drone at its real coordinates, whatever the display offset', () => {
+    render(
+      <MapView
+        drones={TEST_DRONES}
+        droneOffsets={
+          new Map([
+            ['DRN-001', [0, -44]],
+            ['DRN-002', [38, 22]],
+          ])
+        }
+      />,
+    )
+    loadMap()
+
+    expect(droneMarkers().map((m) => m.lngLat)).toEqual([
+      [18.6, 54.4],
+      [18.6, 54.4],
+    ])
+    expect(droneMarkers().map((m) => m.offset)).toEqual([
+      [0, -44],
+      [38, 22],
+    ])
+  })
+
+  it('uses no pixel offset for a drone without a display offset', () => {
+    render(<MapView drones={TEST_DRONES} />)
+    loadMap()
+
+    expect(droneMarkers().map((m) => m.offset)).toEqual([
+      [0, 0],
+      [0, 0],
+    ])
+  })
+
+  it('gives drone and Hub markers different shapes of marker and accessible names', () => {
+    render(<MapView hubs={TEST_HUBS} drones={TEST_DRONES} />)
+    loadMap()
+
+    const hub = screen.getByRole('button', { name: /^Hub: Hub A/ })
+    const drone = screen.getByRole('button', { name: 'Drone DRN-001, In flight, battery 100%' })
+    expect(hub.dataset.markerKind).toBe('hub')
+    expect(drone.dataset.markerKind).toBe('drone')
+    expect(drone.className).toContain('rounded-full')
+    expect(drone.className).toContain('size-6') // small: 24px target, 12px glyph
+    expect(drone.querySelector('svg')).toHaveAttribute('width', '12')
+    expect(hub.className).not.toContain('rounded-full')
+    expect(drone.querySelector('svg')).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('reports the selected drone when a drone marker is clicked', () => {
+    const onSelectDrone = vi.fn()
+    render(<MapView drones={TEST_DRONES} onSelectDrone={onSelectDrone} />)
+    loadMap()
+
+    fireEvent.click(screen.getByRole('button', { name: /DRN-002/ }))
+
+    expect(onSelectDrone).toHaveBeenCalledWith('DRN-002')
+  })
+
+  it('does not report a Hub selection for a drone click and vice versa', () => {
+    const onSelectHub = vi.fn()
+    const onSelectDrone = vi.fn()
+    render(
+      <MapView
+        hubs={TEST_HUBS}
+        drones={TEST_DRONES}
+        onSelectHub={onSelectHub}
+        onSelectDrone={onSelectDrone}
+      />,
+    )
+    loadMap()
+
+    fireEvent.click(screen.getByRole('button', { name: /DRN-001/ }))
+    expect(onSelectHub).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /^Hub: Hub A/ }))
+    expect(onSelectHub).toHaveBeenCalledWith('hub-a')
+    expect(onSelectDrone).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks only the selected drone as pressed', () => {
+    render(<MapView drones={TEST_DRONES} selectedDroneId="DRN-001" />)
+    loadMap()
+
+    expect(screen.getByRole('button', { name: /DRN-001/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /DRN-002/ })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('keeps the same drone marker element and focus when the selection changes', () => {
+    const { rerender } = render(<MapView drones={TEST_DRONES} selectedDroneId={null} />)
+    loadMap()
+    const button = screen.getByRole('button', { name: /DRN-001/ })
+    button.focus()
+
+    rerender(<MapView drones={TEST_DRONES} selectedDroneId="DRN-001" />)
+
+    expect(screen.getByRole('button', { name: /DRN-001/ })).toBe(button)
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+    expect(button).toHaveFocus()
+    expect(droneMarkers()).toHaveLength(2)
+  })
+
+  it('applies new display offsets to the existing markers without rebuilding them', () => {
+    const { rerender } = render(
+      <MapView drones={TEST_DRONES} droneOffsets={new Map([['DRN-001', [0, -46]]])} />,
+    )
+    loadMap()
+    const button = screen.getByRole('button', { name: /DRN-001/ })
+    button.focus()
+    const marker = droneMarkers()[0]
+
+    rerender(<MapView drones={TEST_DRONES} droneOffsets={new Map([['DRN-001', [40, 23]]])} />)
+
+    expect(screen.getByRole('button', { name: /DRN-001/ })).toBe(button)
+    expect(button).toHaveFocus()
+    expect(droneMarkers()).toHaveLength(2)
+    expect(marker.offset).toEqual([40, 23])
+    expect(marker.lngLat).toEqual([18.6, 54.4]) // the real coordinates never change
+    expect(marker.remove).not.toHaveBeenCalled()
+  })
+
+  it('does not rebuild drone markers when only the Hubs change', () => {
+    const { rerender } = render(<MapView hubs={[]} drones={TEST_DRONES} />)
+    loadMap()
+    const button = screen.getByRole('button', { name: /DRN-001/ })
+    button.focus()
+
+    rerender(<MapView hubs={TEST_HUBS} drones={TEST_DRONES} />)
+
+    expect(screen.getByRole('button', { name: /DRN-001/ })).toBe(button)
+    expect(button).toHaveFocus()
+    expect(droneMarkers()).toHaveLength(2)
+  })
+
+  it('gives drone markers a higher stacking order than Hub markers', () => {
+    render(<MapView hubs={TEST_HUBS} drones={TEST_DRONES} />)
+    loadMap()
+
+    expect(screen.getByRole('button', { name: /^Hub: Hub A/ })).toHaveClass('z-10')
+    expect(screen.getByRole('button', { name: /DRN-001/ })).toHaveClass('z-20')
+  })
+
+  it('shows a non-colour cue on the selected drone marker', () => {
+    render(<MapView drones={TEST_DRONES} selectedDroneId="DRN-001" />)
+    loadMap()
+
+    expect(screen.getByRole('button', { name: /DRN-001/ })).toHaveClass('ring-4')
+    expect(screen.getByRole('button', { name: /DRN-002/ })).not.toHaveClass('ring-4')
+  })
+
+  it('keeps Hub markers when the drones change, and the other way around', () => {
+    const { rerender } = render(<MapView hubs={TEST_HUBS} drones={[]} />)
+    loadMap()
+    expect(fake.markers).toHaveLength(2)
+
+    rerender(<MapView hubs={TEST_HUBS} drones={TEST_DRONES} />)
+
+    expect(screen.getAllByRole('button', { name: /^Hub: / })).toHaveLength(2)
+    expect(droneMarkers()).toHaveLength(2)
+  })
+
+  it('removes drone markers on unmount', () => {
+    const { unmount } = render(<MapView drones={TEST_DRONES} />)
+    loadMap()
+    const markers = [...droneMarkers()]
+    unmount()
+
+    markers.forEach((marker) => expect(marker.remove).toHaveBeenCalled())
+  })
+})
+
+describe('MapView Hub drone badges and away markers', () => {
+  beforeEach(() => {
+    fake.instances.length = 0
+    fake.markers.length = 0
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test')
+  })
+
+  const loadMap = () => act(() => fake.instances[0].handlers.load())
+  const badge = (hubName: string) =>
+    screen
+      .getByRole('button', { name: new RegExp(`^Hub: ${hubName},`) })
+      .querySelector<HTMLElement>('[data-drone-badge]')!
+
+  it('shows the docked count as a badge and in the Hub accessible name', () => {
+    render(<MapView hubs={TEST_HUBS} dockedCounts={new Map([['hub-a', 3]])} />)
+    loadMap()
+
+    const hubA = screen.getByRole('button', {
+      name: 'Hub: Hub A, Ulica A 1, Gdańsk, 3 drones docked',
+    })
+    expect(badge('Hub A')).toHaveTextContent('3')
+    expect(badge('Hub A')).toBeVisible()
+    expect(badge('Hub A')).toHaveAttribute('aria-hidden', 'true')
+    expect(hubA.dataset.markerKind).toBe('hub')
+  })
+
+  it('uses the singular for one drone and hides the badge at zero', () => {
+    render(<MapView hubs={TEST_HUBS} dockedCounts={new Map([['hub-a', 1]])} />)
+    loadMap()
+
+    expect(screen.getByRole('button', { name: /Hub A.*, 1 drone docked$/ })).toBeInTheDocument()
+    expect(badge('Hub B')).not.toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Hub: Hub B, Ulica B 2, Gdynia' }),
+    ).toBeInTheDocument()
+  })
+
+  it('updates the badge in place without rebuilding the Hub marker or losing focus', () => {
+    const { rerender } = render(<MapView hubs={TEST_HUBS} dockedCounts={new Map()} />)
+    loadMap()
+    const button = screen.getByRole('button', { name: /^Hub: Hub A/ })
+    button.focus()
+
+    rerender(<MapView hubs={TEST_HUBS} dockedCounts={new Map([['hub-a', 2]])} />)
+
+    expect(screen.getByRole('button', { name: /^Hub: Hub A/ })).toBe(button)
+    expect(button).toHaveFocus()
+    expect(badge('Hub A')).toHaveTextContent('2')
+    expect(fake.markers).toHaveLength(2)
+  })
+
+  it('keeps the badge when the Hub is selected, and a Hub click still selects it', () => {
+    const onSelectHub = vi.fn()
+    render(
+      <MapView
+        hubs={TEST_HUBS}
+        dockedCounts={new Map([['hub-a', 3]])}
+        selectedHubId="hub-a"
+        onSelectHub={onSelectHub}
+      />,
+    )
+    loadMap()
+
+    fireEvent.click(badge('Hub A')) // a click on the badge bubbles to the Hub button
+    expect(onSelectHub).toHaveBeenCalledWith('hub-a')
+    expect(badge('Hub A')).toHaveTextContent('3')
+  })
+
+  it('marks a non-flying drone as away from a Hub with a distinct dashed marker', () => {
+    const away: Drone = { ...TEST_DRONES[0], status: 'MAINTENANCE', id: 'DRN-009' }
+    render(<MapView drones={[TEST_DRONES[0], away]} />)
+    loadMap()
+
+    const flying = screen.getByRole('button', { name: /DRN-001/ })
+    const parked = screen.getByRole('button', {
+      name: 'Drone DRN-009, Maintenance, battery 100%, not at a Hub',
+    })
+    expect(flying.dataset.placement).toBe('in-flight')
+    expect(flying).not.toHaveClass('border-dashed')
+    expect(parked.dataset.placement).toBe('away')
+    expect(parked).toHaveClass('border-dashed')
   })
 })

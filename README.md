@@ -118,6 +118,25 @@ be in the backend's `CORS_ORIGINS` (default `http://localhost:5173`; use `localh
 because on some Windows/WSL setups `localhost` can resolve to a different listener on IPv6 port 8000)
 is the only frontend setting for this; never put database credentials in a `VITE_` variable.
 
+**Drone fleet on the map (Feature 006):** the frontend also loads `GET /api/drones` once on page load.
+Seed the drones first (`uv run python -m app.drones.seed`, see above). Drones that are *docked* are
+not drawn individually: each Hub marker shows a small badge with its docked-drone count, and the Hub
+panel lists them under "Drones at this Hub"; pick one to open its drone panel (status, battery,
+assigned Hub, stored position and the SF-1 model capabilities, labelled as a *current backend
+snapshot, not a live flight feed*). Only `IN_FLIGHT` drones get small individual markers, at their
+real coordinates.
+
+MVP rule for "docked" (a simplification until the simulation defines it, see business rules Q8): a
+drone is docked at a Hub when its status is not `IN_FLIGHT` and its stored position is within 50 m of
+that Hub. `hub_id` is only the assigned/home Hub, so it is not used: a drone sitting at another Hub is
+counted there. A non-flying drone that is not at any Hub is a flagged exception: it still gets a small
+marker with a dashed border (never hidden). With the seeded data (12 `IDLE` drones at their Hubs) the
+map therefore shows four badges and no drone markers. Markers that share an exact point are spread on
+a small ring around it **on screen only**; the panel always shows the real stored position. Only one
+Hub or drone panel is open at a time. Hubs and drones load independently: if one request fails, the
+other still appears and each has its own **Retry**. There is no movement, polling or refresh yet;
+reload the page to re-read the snapshot.
+
 ## Quality checks
 
 ```bash
