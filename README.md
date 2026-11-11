@@ -37,8 +37,13 @@ cp .env.example .env         # optional: defaults work for local development
 # Frontend
 cd ../frontend
 npm install
-cp .env.example .env.local   # optional: defaults work for local development
+cp .env.example .env.local   # then set VITE_MAPBOX_TOKEN (see below)
 ```
+
+**Mapbox token (required for the map):** create a free account at mapbox.com, copy a **public**
+token (`pk.…`) from the account's tokens page, optionally restrict it to `http://localhost:5173`,
+and put it in `frontend/.env.local` as `VITE_MAPBOX_TOKEN=pk.…`. Restart `npm run dev` afterwards.
+Without it the app still runs and shows a "Map unavailable" message.
 
 ## Running locally
 

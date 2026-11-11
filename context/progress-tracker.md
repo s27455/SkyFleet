@@ -57,18 +57,20 @@ A clean, understandable repository with a working frontend and backend skeleton,
 ## Phase 2 — Mapbox Integration & Dark Operations Map
 
 **Priority:** Critical  
-**Status:** Planned — next implementation milestone
+**Status:** Core map working (task 001, verified in browser 2026-11-11) — remaining: pan limits, overlay/panel visual language
+
+Task spec: `docs/tasks/001-mapbox-initial-setup.md`
 
 ### Objectives
 
-- [ ] Integrate Mapbox GL JS into the frontend.
-- [ ] Configure the Mapbox access token through environment variables.
-- [ ] Display a map centered on the Tricity area.
-- [ ] Configure the initial zoom, camera position, and map bounds.
-- [ ] Select and configure a dark map style appropriate for an operations dashboard.
-- [ ] Create a reusable map component with a clear separation from surrounding UI.
+- [x] Integrate Mapbox GL JS into the frontend.
+- [x] Configure the Mapbox access token through environment variables (`VITE_MAPBOX_TOKEN`).
+- [x] Display a map centered on the Tricity area.
+- [ ] Configure the initial zoom, camera position, and map bounds. (Initial view fits the Tricity bounds; panning is not restricted yet — no `maxBounds`.)
+- [x] Select and configure a dark map style appropriate for an operations dashboard (`dark-v11`).
+- [x] Create a reusable map component with a clear separation from surrounding UI (`src/features/map/MapView.tsx`).
 - [ ] Establish a consistent visual language for map overlays, markers, and operational panels.
-- [ ] Ensure the map resizes correctly with the application layout.
+- [x] Ensure the map resizes correctly with the application layout.
 
 ### Expected Result
 

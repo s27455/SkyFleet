@@ -1,3 +1,4 @@
+import { MapView } from './features/map/MapView'
 import { BackendStatus } from './features/system-status/BackendStatus'
 
 function App() {
@@ -13,9 +14,8 @@ function App() {
         <BackendStatus />
       </header>
 
-      {/* Map workspace placeholder — the Mapbox map arrives in Phase 2. */}
-      <main className="flex flex-1 items-center justify-center p-4">
-        <p className="text-sm text-fg-muted">Operations map will appear here.</p>
+      <main className="relative min-h-0 flex-1">
+        <MapView />
       </main>
     </div>
   )
