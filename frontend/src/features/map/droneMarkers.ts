@@ -5,33 +5,38 @@ import { DRONE_STATUS_DISPLAY } from '../drones/droneStatus'
 export type PixelOffset = [x: number, y: number]
 
 const HUB_MARKER_SIZE_PX = 40
-// 24px is the WCAG 2.2 minimum pointer-target size; the glyph inside is only 12px.
 const DRONE_MARKER_SIZE_PX = 24
 const RING_GAP_PX = 8
-// Keeps ring markers clear of a Hub marker sitting at the true point in the middle.
-const MIN_RING_RADIUS_PX = HUB_MARKER_SIZE_PX / 2 + DRONE_MARKER_SIZE_PX / 2 + RING_GAP_PX
 
-// Limitation: drones are grouped only when their coordinates are exactly equal (true for the seeded
+// Limitation: markers are grouped only when their coordinates are exactly equal (true for the seeded
 // snapshot at a Hub). Nearby-but-different positions are not spread; moving drones would need
-// pixel-distance clustering, which is out of scope for this feature.
+// pixel-distance clustering, which is out of scope.
 const coordinateKey = ([lng, lat]: readonly [number, number]) => `${lng},${lat}`
 
+interface PlacedItem {
+  id: string
+  coordinates: readonly [number, number]
+}
+
 /**
- * Screen-space (pixel) offsets that keep drones sharing a location individually visible.
+ * Screen-space (pixel) offsets that keep markers sharing a location individually visible.
  *
- * Display only: the drone's real coordinates are never changed. Drones that share a point with
- * another drone or with a Hub are spread on a ring around that point, in drone-id order, so the
- * result is deterministic. A drone alone at its location gets no entry (no offset).
+ * Display only: real coordinates are never changed. Items that share a point with another item or
+ * with a Hub are spread on a ring around that point, in id order, so the result is deterministic.
+ * An item alone at its location gets no entry (no offset). `markerSizePx` is the item's marker size.
  */
-export function computeDroneOffsets(
-  drones: readonly Drone[],
+export function computeRingOffsets(
+  items: readonly PlacedItem[],
   hubs: readonly Hub[],
+  markerSizePx: number,
 ): ReadonlyMap<string, PixelOffset> {
+  // Keeps ring markers clear of a Hub marker sitting at the true point in the middle.
+  const minRingRadius = HUB_MARKER_SIZE_PX / 2 + markerSizePx / 2 + RING_GAP_PX
   const hubPoints = new Set(hubs.map((hub) => coordinateKey(hub.coordinates)))
-  const groups = new Map<string, Drone[]>()
-  for (const drone of drones) {
-    const key = coordinateKey(drone.coordinates)
-    groups.set(key, [...(groups.get(key) ?? []), drone])
+  const groups = new Map<string, PlacedItem[]>()
+  for (const item of items) {
+    const key = coordinateKey(item.coordinates)
+    groups.set(key, [...(groups.get(key) ?? []), item])
   }
 
   const offsets = new Map<string, PixelOffset>()
@@ -40,18 +45,26 @@ export function computeDroneOffsets(
 
     const sorted = [...group].sort((a, b) => a.id.localeCompare(b.id))
     const radius = Math.max(
-      MIN_RING_RADIUS_PX,
-      Math.ceil(((DRONE_MARKER_SIZE_PX + RING_GAP_PX) * sorted.length) / (2 * Math.PI)),
+      minRingRadius,
+      Math.ceil(((markerSizePx + RING_GAP_PX) * sorted.length) / (2 * Math.PI)),
     )
-    sorted.forEach((drone, index) => {
-      const angle = -Math.PI / 2 + (2 * Math.PI * index) / sorted.length // first drone at the top
-      offsets.set(drone.id, [
+    sorted.forEach((item, index) => {
+      const angle = -Math.PI / 2 + (2 * Math.PI * index) / sorted.length // first item at the top
+      offsets.set(item.id, [
         Math.round(radius * Math.cos(angle)),
         Math.round(radius * Math.sin(angle)),
       ])
     })
   }
   return offsets
+}
+
+/** Ring offsets for drone markers (see `computeRingOffsets`). */
+export function computeDroneOffsets(
+  drones: readonly Drone[],
+  hubs: readonly Hub[],
+): ReadonlyMap<string, PixelOffset> {
+  return computeRingOffsets(drones, hubs, DRONE_MARKER_SIZE_PX)
 }
 
 const DRONE_MARKER_CLASS =

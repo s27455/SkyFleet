@@ -3,36 +3,50 @@ import { useCallback, useMemo, useState } from 'react'
 import { ResourceStatusBanner } from './features/data/ResourceStatusBanner'
 import { DroneDetailPanel } from './features/drones/DroneDetailPanel'
 import { useDrones } from './features/drones/useDrones'
+import { OrderDetailPanel } from './features/orders/OrderDetailPanel'
+import { OrdersList } from './features/orders/OrdersList'
+import { useOrders } from './features/orders/useOrders'
 import { HubDetailPanel } from './features/hubs/HubDetailPanel'
 import { useHubs } from './features/hubs/useHubs'
 import { computeDroneOffsets } from './features/map/droneMarkers'
 import { partitionFleet } from './features/map/fleetPlacement'
+import { computeOrderOffsets } from './features/map/orderMarkers'
 import { MapView } from './features/map/MapView'
 import { BackendStatus } from './features/system-status/BackendStatus'
 import type { Drone } from './types/drone'
 import type { Hub } from './types/hub'
+import type { Order } from './types/order'
 
 const NO_HUBS: readonly Hub[] = []
 const NO_DRONES: readonly Drone[] = []
+const NO_ORDERS: readonly Order[] = []
 
-/** Only one Hub or drone is selected at a time, so only one detail panel can be open. */
-type Selection = { kind: 'hub'; id: string } | { kind: 'drone'; id: string }
+/** Only one Hub, drone or order is selected at a time, so only one detail panel can be open. */
+type Selection =
+  { kind: 'hub'; id: string } | { kind: 'drone'; id: string } | { kind: 'order'; id: string }
 
 function App() {
   const hubsResource = useHubs()
   const dronesResource = useDrones()
+  const ordersResource = useOrders()
   const hubs = hubsResource.state.status === 'ready' ? hubsResource.state.data : NO_HUBS
   const drones = dronesResource.state.status === 'ready' ? dronesResource.state.data : NO_DRONES
+  const orders = ordersResource.state.status === 'ready' ? ordersResource.state.data : NO_ORDERS
 
   const [selection, setSelection] = useState<Selection | null>(null)
   const selectHub = useCallback((id: string) => setSelection({ kind: 'hub', id }), [])
   const selectDrone = useCallback((id: string) => setSelection({ kind: 'drone', id }), [])
+  const selectOrder = useCallback((id: string) => setSelection({ kind: 'order', id }), [])
   const clearSelection = useCallback(() => setSelection(null), [])
 
   const selectedHub =
     selection?.kind === 'hub' ? hubs.find((hub) => hub.id === selection.id) : undefined
   const selectedDrone =
     selection?.kind === 'drone' ? drones.find((drone) => drone.id === selection.id) : undefined
+  const selectedOrder =
+    selection?.kind === 'order' ? orders.find((order) => order.id === selection.id) : undefined
+  const orderOffsets = useMemo(() => computeOrderOffsets(orders, hubs), [orders, hubs])
+
   // Docked drones are shown as a count on their Hub; only the rest get individual markers.
   // Docking can only be judged against known Hubs. Until they are loaded (or if they failed) only
   // drones that are in flight are drawn; claiming "not at a Hub" would be wrong, not just unknown.
@@ -75,6 +89,10 @@ function App() {
           selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
           onSelectDrone={selectDrone}
           droneOffsets={droneOffsets}
+          orders={orders}
+          selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+          onSelectOrder={selectOrder}
+          orderOffsets={orderOffsets}
         />
         <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80">
           <ResourceStatusBanner
@@ -87,12 +105,32 @@ function App() {
             state={dronesResource.state}
             onRetry={dronesResource.retry}
           />
+          <ResourceStatusBanner
+            resource="order"
+            state={ordersResource.state}
+            onRetry={ordersResource.retry}
+          />
+          <OrdersList
+            orders={orders}
+            hubs={hubs}
+            selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+            onSelectOrder={selectOrder}
+            hideOnNarrow={selection !== null}
+          />
         </div>
         {selectedHub && (
           <HubDetailPanel
             hub={selectedHub}
             dockedDrones={dockedByHub.get(selectedHub.id)}
             onSelectDrone={selectDrone}
+            onClose={clearSelection}
+          />
+        )}
+        {selectedOrder && (
+          <OrderDetailPanel
+            order={selectedOrder}
+            hub={hubs.find((hub) => hub.id === selectedOrder.originHubId)}
+            markerSpread={orderOffsets.has(selectedOrder.id)}
             onClose={clearSelection}
           />
         )}

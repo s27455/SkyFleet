@@ -157,6 +157,18 @@ Hub or drone panel is open at a time. Hubs and drones load independently: if one
 other still appears and each has its own **Retry**. There is no movement, polling or refresh yet;
 reload the page to re-read the snapshot.
 
+**Delivery orders on the map (Feature 008):** the frontend also loads `GET /api/orders` once on page
+load (seed them first with `uv run python -m app.orders.seed`, see above). Each order's destination
+is a small diamond marker at its stored coordinates; the **Orders (N)** list in the top-right corner
+is collapsed by default and lists every order, so any order stays reachable even where markers sit
+close together. Selecting a list row or a marker opens the same order panel (status, weight, origin
+Hub, destination, stored position, created/updated times in UTC) and highlights its marker; only one
+Hub, drone or order panel is open at a time. Markers that share an exact point are spread on a small
+ring **on screen only**. The orders are simulation data, read-only, with no drone assignment shown.
+Orders load independently of Hubs and drones and have their own **Retry**; there is no polling, so
+reload the page to re-read the snapshot. If the backend later adds an order status the frontend does
+not know, the order list is rejected as invalid data until the frontend is updated.
+
 ## Quality checks
 
 ```bash

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
+import type { Order } from '../../types/order'
 import { MapView } from './MapView'
 
 type Handler = () => void
@@ -526,5 +527,162 @@ describe('MapView Hub drone badges and away markers', () => {
     expect(flying).not.toHaveClass('border-dashed')
     expect(parked.dataset.placement).toBe('away')
     expect(parked).toHaveClass('border-dashed')
+  })
+})
+
+const TEST_ORDERS: Order[] = [
+  {
+    id: 'ORD-001',
+    originHubId: 'hub-a',
+    destinationAddress: 'ul. Test 1',
+    coordinates: [18.7, 54.5],
+    packageWeightKg: 1.5,
+    status: 'READY_FOR_PICKUP',
+    createdAt: '2026-11-11T21:53:08Z',
+    updatedAt: '2026-11-11T21:53:08Z',
+  },
+  {
+    id: 'ORD-002',
+    originHubId: 'hub-a',
+    destinationAddress: 'ul. Test 2',
+    coordinates: [18.7, 54.5],
+    packageWeightKg: 0.5,
+    status: 'READY_FOR_PICKUP',
+    createdAt: '2026-11-11T21:53:08Z',
+    updatedAt: '2026-11-11T21:53:08Z',
+  },
+]
+
+describe('MapView order destination markers', () => {
+  beforeEach(() => {
+    fake.instances.length = 0
+    fake.markers.length = 0
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test')
+  })
+
+  const loadMap = () => act(() => fake.instances[0].handlers.load())
+  const orderMarkers = () => fake.markers.filter((m) => m.element.dataset.markerKind === 'order')
+
+  it('places no order markers until the map has loaded', () => {
+    render(<MapView orders={TEST_ORDERS} />)
+
+    expect(orderMarkers()).toHaveLength(0)
+  })
+
+  it('places each destination at its real coordinates, whatever the display offset', () => {
+    render(
+      <MapView
+        orders={TEST_ORDERS}
+        orderOffsets={
+          new Map([
+            ['ORD-001', [0, -40]],
+            ['ORD-002', [35, 20]],
+          ])
+        }
+      />,
+    )
+    loadMap()
+
+    expect(orderMarkers().map((m) => m.lngLat)).toEqual([
+      [18.7, 54.5],
+      [18.7, 54.5],
+    ])
+    expect(orderMarkers().map((m) => m.offset)).toEqual([
+      [0, -40],
+      [35, 20],
+    ])
+  })
+
+  it('reports the selected order when a destination marker is clicked, and nothing else', () => {
+    const onSelectOrder = vi.fn()
+    const onSelectHub = vi.fn()
+    render(
+      <MapView
+        hubs={TEST_HUBS}
+        orders={TEST_ORDERS}
+        onSelectOrder={onSelectOrder}
+        onSelectHub={onSelectHub}
+      />,
+    )
+    loadMap()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Order ORD-002 destination/ }))
+
+    expect(onSelectOrder).toHaveBeenCalledWith('ORD-002')
+    expect(onSelectHub).not.toHaveBeenCalled()
+  })
+
+  it('marks only the selected destination and keeps the element and focus on change', () => {
+    const { rerender } = render(<MapView orders={TEST_ORDERS} selectedOrderId={null} />)
+    loadMap()
+    const button = screen.getByRole('button', { name: /^Order ORD-001 destination/ })
+    button.focus()
+
+    rerender(<MapView orders={TEST_ORDERS} selectedOrderId="ORD-001" />)
+
+    expect(screen.getByRole('button', { name: /^Order ORD-001 destination/ })).toBe(button)
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+    expect(button).toHaveFocus()
+    expect(screen.getByRole('button', { name: /^Order ORD-002 destination/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(orderMarkers()).toHaveLength(2)
+  })
+
+  it('applies new offsets without rebuilding, and does not rebuild when only Hubs change', () => {
+    const { rerender } = render(
+      <MapView hubs={[]} orders={TEST_ORDERS} orderOffsets={new Map([['ORD-001', [0, -40]]])} />,
+    )
+    loadMap()
+    const button = screen.getByRole('button', { name: /^Order ORD-001 destination/ })
+    button.focus()
+    const marker = orderMarkers()[0]
+
+    rerender(
+      <MapView
+        hubs={TEST_HUBS}
+        orders={TEST_ORDERS}
+        orderOffsets={new Map([['ORD-001', [30, 25]]])}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /^Order ORD-001 destination/ })).toBe(button)
+    expect(button).toHaveFocus()
+    expect(marker.offset).toEqual([30, 25])
+    expect(marker.lngLat).toEqual([18.7, 54.5])
+    expect(marker.remove).not.toHaveBeenCalled()
+  })
+
+  it('stacks destinations below Hub and drone markers and removes them on unmount', () => {
+    const { unmount } = render(
+      <MapView hubs={TEST_HUBS} drones={TEST_DRONES} orders={TEST_ORDERS} />,
+    )
+    loadMap()
+
+    expect(screen.getByRole('button', { name: /^Order ORD-001 destination/ })).toHaveClass('z-5')
+    expect(screen.getByRole('button', { name: /^Hub: Hub A/ })).toHaveClass('z-10')
+    expect(screen.getByRole('button', { name: /DRN-001/ })).toHaveClass('z-20')
+
+    const markers = [...orderMarkers()]
+    unmount()
+    markers.forEach((marker) => expect(marker.remove).toHaveBeenCalled())
+  })
+
+  it('drops the destination markers when the orders are no longer provided', () => {
+    const { rerender } = render(<MapView orders={TEST_ORDERS} />)
+    loadMap()
+    expect(orderMarkers()).toHaveLength(2)
+
+    rerender(<MapView orders={[]} />)
+
+    expect(screen.queryByRole('button', { name: /destination/ })).not.toBeInTheDocument()
   })
 })

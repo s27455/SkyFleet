@@ -4,7 +4,9 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
+import type { Order } from '../../types/order'
 import { type PixelOffset, createDroneMarkerElement, setDroneMarkerSelected } from './droneMarkers'
+import { createOrderMarkerElement, setOrderMarkerSelected } from './orderMarkers'
 import { MAP_STYLE, TRICITY_BOUNDS, TRICITY_FIT_PADDING_PX, getMapboxToken } from './mapConfig'
 
 type MapStatus = 'loading' | 'ready' | 'error'
@@ -22,6 +24,7 @@ function MapMessage({ role, children }: { role: 'status' | 'alert'; children: Re
 
 const NO_HUBS: readonly Hub[] = []
 const NO_DRONES: readonly Drone[] = []
+const NO_ORDERS: readonly Order[] = []
 const NO_COUNTS: ReadonlyMap<string, number> = new Map()
 const NO_OFFSETS: ReadonlyMap<string, PixelOffset> = new Map()
 const NO_PIXEL_OFFSET: PixelOffset = [0, 0]
@@ -77,6 +80,12 @@ interface MapViewProps {
   dockedCounts?: ReadonlyMap<string, number>
   selectedDroneId?: string | null
   onSelectDrone?: (droneId: string) => void
+  /** Delivery orders; each gets a small destination marker at its real coordinates. */
+  orders?: readonly Order[]
+  selectedOrderId?: string | null
+  onSelectOrder?: (orderId: string) => void
+  /** Screen-space offsets (px) by order id for destinations sharing a point. Display only. */
+  orderOffsets?: ReadonlyMap<string, PixelOffset>
   /** Screen-space offsets (px) by drone id for drones sharing a location. Display only. */
   droneOffsets?: ReadonlyMap<string, PixelOffset>
 }
@@ -96,6 +105,10 @@ export function MapView({
   selectedDroneId = null,
   onSelectDrone,
   droneOffsets = NO_OFFSETS,
+  orders = NO_ORDERS,
+  selectedOrderId = null,
+  onSelectOrder,
+  orderOffsets = NO_OFFSETS,
 }: MapViewProps) {
   const token = getMapboxToken()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -104,6 +117,10 @@ export function MapView({
   const droneElementsRef = useRef(new Map<string, HTMLElement>())
   const droneMarkersRef = useRef(new Map<string, mapboxgl.Marker>())
   const droneOffsetsRef = useRef(droneOffsets)
+  const orderElementsRef = useRef(new Map<string, HTMLElement>())
+  const orderMarkersRef = useRef(new Map<string, mapboxgl.Marker>())
+  const orderOffsetsRef = useRef(orderOffsets)
+  const onSelectOrderRef = useRef(onSelectOrder)
   const onSelectHubRef = useRef(onSelectHub)
   const onSelectDroneRef = useRef(onSelectDrone)
   const [status, setStatus] = useState<MapStatus>('loading')
@@ -115,6 +132,10 @@ export function MapView({
   useEffect(() => {
     onSelectDroneRef.current = onSelectDrone
   }, [onSelectDrone])
+
+  useEffect(() => {
+    onSelectOrderRef.current = onSelectOrder
+  }, [onSelectOrder])
 
   // Markers are DOM-based (native keyboard/touch support); fine for a handful of Hubs.
   // They are rebuilt only when `hubs` changes, never on selection (see the effect below).
@@ -196,6 +217,52 @@ export function MapView({
       setDroneMarkerSelected(element, droneId === selectedDroneId),
     )
   }, [drones, status, selectedDroneId])
+
+  useEffect(() => {
+    orderOffsetsRef.current = orderOffsets
+  }, [orderOffsets])
+
+  // Same pattern as the drone markers: rebuilt only when the orders change, never on selection or
+  // because display offsets changed. Orders that failed to load are never passed in, so no stale
+  // destination is shown as current.
+  useEffect(() => {
+    const map = mapRef.current
+    const elements = orderElementsRef.current
+    const markerByOrder = orderMarkersRef.current
+    if (status !== 'ready' || !map) return
+
+    const markers = orders.map((order) => {
+      const element = createOrderMarkerElement(order, () => onSelectOrderRef.current?.(order.id))
+      elements.set(order.id, element)
+      const marker = new mapboxgl.Marker({
+        element,
+        offset: orderOffsetsRef.current.get(order.id) ?? NO_PIXEL_OFFSET,
+      })
+        .setLngLat(order.coordinates)
+        .addTo(map)
+      markerByOrder.set(order.id, marker)
+      return marker
+    })
+
+    return () => {
+      markers.forEach((marker) => marker.remove())
+      elements.clear()
+      markerByOrder.clear()
+    }
+  }, [orders, status])
+
+  // Display only: shifts the marker on screen; the marker's coordinates stay the real ones.
+  useEffect(() => {
+    orderMarkersRef.current.forEach((marker, orderId) =>
+      marker.setOffset(orderOffsets.get(orderId) ?? NO_PIXEL_OFFSET),
+    )
+  }, [orders, orderOffsets, status])
+
+  useEffect(() => {
+    orderElementsRef.current.forEach((element, orderId) =>
+      setOrderMarkerSelected(element, orderId === selectedOrderId),
+    )
+  }, [orders, status, selectedOrderId])
 
   useEffect(() => {
     const container = containerRef.current
