@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, pool
 
 from app.config import get_settings
 from app.db.session import Base
+from app.drones import models as drone_models  # noqa: F401  (registers tables on Base.metadata)
 from app.hubs import models  # noqa: F401  (registers tables on Base.metadata)
 
 target_metadata = Base.metadata

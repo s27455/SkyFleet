@@ -78,6 +78,31 @@ deletes it.
 
 The seed only inserts missing Hubs; it never modifies existing rows.
 
+**Drone fleet (Feature 005):** after the Hubs exist, seed the drone model and the fleet (also
+repeatable), then read it from the API:
+
+```bash
+cd backend
+uv run alembic upgrade head              # includes migration 0002 (drone_models, drones)
+uv run python -m app.hubs.seed           # the drone seed fails clearly if the Hubs are missing
+uv run python -m app.drones.seed         # SF-1 model + 12 drones (3 per Hub)
+# GET http://127.0.0.1:8000/api/drones  and  /api/drones/{id}  (e.g. DRN-001)
+```
+
+The single drone model is **SkyFleet SF-1 Courier**: an electric hexacopter with 3.0 kg maximum
+payload, 20 km maximum total flight distance (a conservative mission budget of 14 km is stored; both
+cover the whole route including the return to a Hub, not a one-way delivery radius), 45 km/h cruise,
+60 km/h maximum speed, about 32 min nominal flight time, 20% minimum battery reserve, about 45 min to
+charge to 80%, 10 m/s maximum wind and 9 kg empty weight. The simulated 40–100 m operating altitude
+is an assumption and is not stored. These are simulation assumptions, not certified performance and
+not an authorization to fly in real airspace.
+
+Limitations: seeded drones are `IDLE` snapshots at their Hub's coordinates; nothing moves, charges or
+changes status yet. The drone seed only inserts missing rows and never resets existing drone state
+(so changing SF-1 values later needs a migration). Hub capacity means the number of drones
+*assigned* to a Hub regardless of flight status, and it is enforced **only while seeding**; no
+runtime check exists yet.
+
 Backend tests use SQLite (in-memory, plus temporary files for the migration test) and need neither
 Docker nor PostgreSQL. Known limitation: they do not exercise PostgreSQL itself.
 

@@ -143,14 +143,14 @@ This is the first complete vertical slice of the application: backend data, API 
 ## Phase 5 — Core Operations Domain
 
 **Priority:** High  
-**Status:** Not started
+**Status:** In progress — Drone entity and read-only drone API done (feature 005, `docs/features/005-drone-fleet-backend.md`, approved). Partner, Order, Mission, Incident and System Event are not started.
 
 ### Objectives
 
 Develop the foundational operational entities and their relationships.
 
 - [ ] Define the Partner entity.
-- [ ] Define the Drone entity.
+- [x] Define the Drone entity (feature 005: `drone_models` with the single SF-1 Courier model, `drones` with Hub assignment, status, battery and position; read-only `GET /api/drones`, `GET /api/drones/{id}`).
 - [ ] Define the Order entity (B2B request: partner, pickup hub, delivery address stored on the Order; initial states `CREATED`, `AWAITING_HANDOVER`, `READY_FOR_PICKUP`).
 - [ ] Define the Mission entity.
 - [ ] Define the Incident entity.
@@ -344,9 +344,10 @@ A publicly accessible application and a complete GitHub repository ready for the
 **Active milestone: Phase 5 — Core Operations Domain** (Phases 1, 3 and 4 complete; Phase 2 core map done — pan limits and overlay visual language remain)
 
 **Next milestones:**
-1. Expand the operational domain (Phase 5): partners, drones, orders, missions. Hubs have no `status`/`city` fields in the API; the UI shows `address` only. Verify the Hub map once in a real browser (see feature 004 spec).
+1. Continue the operational domain (Phase 5): partners, orders, missions. Drones are seeded `IDLE` snapshots with no movement or status changes yet; the spec names a drone fleet frontend integration as the next logical feature. Hubs have no `status`/`city` fields in the API; the UI shows `address` only. Verify the Hub map once in a real browser (see feature 004 spec).
 
 **Current confirmed decisions:**
+- Drones (feature 005): one seeded model, SkyFleet SF-1 Courier (3.0 kg payload; specifications are simulation assumptions), 12 seeded drones (3 per Hub). Hub capacity counts drones *assigned* to a Hub regardless of flight status and is enforced only during seeding; runtime enforcement and the final occupancy rule stay open (`business-rules.md` §8, Q8).
 - Initial demo Hubs (task 002): Galeria Bałtycka, Forum Gdańsk, Centrum Riviera (Gdynia), Centrum Handlowe Osowa, with owner-supplied coordinates; illustrative, not real partnerships.
 - Map provider: Mapbox GL JS.
 - Map appearance: Dark.
