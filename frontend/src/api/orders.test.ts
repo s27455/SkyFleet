@@ -56,7 +56,7 @@ describe('getOrders', () => {
   )
 
   it.each<[string, Record<string, unknown>]>([
-    ['unknown status', { status: 'DELIVERED' }],
+    ['unknown status', { status: 'RETURNED' }],
     ['missing id', { id: '' }],
     ['missing origin hub', { origin_hub_id: '' }],
     ['blank address', { destination_address: '   ' }],

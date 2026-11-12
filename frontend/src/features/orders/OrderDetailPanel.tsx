@@ -3,7 +3,9 @@ import { type ReactNode, useEffect } from 'react'
 import { DETAIL_PANEL_CLASS } from '../../components/ui/detailPanel'
 import { StatusIndicator } from '../../components/ui/StatusIndicator'
 import type { Hub } from '../../types/hub'
+import type { Mission } from '../../types/mission'
 import type { Order } from '../../types/order'
+import { StartMissionControl } from '../missions/StartMissionControl'
 import { ORDER_STATUS_DISPLAY, formatUtcTimestamp } from './orderStatus'
 
 interface OrderDetailPanelProps {
@@ -13,6 +15,11 @@ interface OrderDetailPanelProps {
   /** True when the destination marker is spread on screen because orders share this location. */
   markerSpread: boolean
   onClose: () => void
+  /** An `ASSIGNED` mission for this order, which can be started from here. */
+  assignedMission?: Mission
+  /** The Hubs, to name the mission's planned return Hub. */
+  hubs?: readonly Hub[]
+  onStartMission?: (missionId: string) => Promise<void>
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -24,7 +31,15 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-export function OrderDetailPanel({ order, hub, markerSpread, onClose }: OrderDetailPanelProps) {
+export function OrderDetailPanel({
+  order,
+  hub,
+  markerSpread,
+  onClose,
+  assignedMission,
+  hubs = [],
+  onStartMission,
+}: OrderDetailPanelProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -70,6 +85,16 @@ export function OrderDetailPanel({ order, hub, markerSpread, onClose }: OrderDet
         <Row label="Created">{formatUtcTimestamp(order.createdAt)}</Row>
         <Row label="Updated">{formatUtcTimestamp(order.updatedAt)}</Row>
       </dl>
+
+      {assignedMission && onStartMission && (
+        <StartMissionControl
+          mission={assignedMission}
+          returnHubName={
+            hubs.find((candidate) => candidate.id === assignedMission.returnHubId)?.name
+          }
+          onStart={onStartMission}
+        />
+      )}
 
       <p className="mt-3 border-t border-line pt-3 text-xs text-fg-muted">
         Simulation data: the destination is illustrative, not a verified customer address.

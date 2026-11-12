@@ -2,12 +2,18 @@ import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
 
 /**
- * MVP rule (approved): a drone is "docked" at a Hub when its status is not IN_FLIGHT and its stored
- * position is within this distance of the Hub. `Drone.hubId` is only the assigned/home Hub, so it
- * is deliberately not used: a drone that landed at another Hub counts there. This is a reversible
- * simplification until the simulation defines "docked" (business-rules Q8).
+ * Physical presence rule, kept identical to the backend (`app/missions/presence.py`): a drone is
+ * "docked" at a Hub when its status is neither IN_FLIGHT nor MAINTENANCE and its stored position is
+ * within this distance of the Hub (the nearest Hub wins, ties go to the lower id). A drone in
+ * MAINTENANCE is never docked, whatever its coordinates: the simulated emergency outcome parks the
+ * drone in MAINTENANCE where it stopped, and it must never count toward a Hub. `Drone.hubId` is
+ * only the assigned/home Hub and is deliberately not used: a drone that landed elsewhere counts
+ * there. Position and status approximate presence until docking hardware confirms it.
  */
 export const DOCK_RADIUS_M = 50
+
+/** Statuses in which a drone is never docked, whatever its position. */
+const NOT_DOCKED_STATUSES: readonly string[] = ['IN_FLIGHT', 'MAINTENANCE']
 
 const EARTH_RADIUS_M = 6_371_000
 const toRadians = (degrees: number) => (degrees * Math.PI) / 180
@@ -26,8 +32,8 @@ export interface FleetPlacement {
   /** Docked drones by Hub id, in drone-id order. Hubs with no docked drone have no entry. */
   dockedByHub: ReadonlyMap<string, readonly Drone[]>
   /**
-   * Drones that get an individual map marker: every IN_FLIGHT drone, plus any non-flying drone that
-   * is not at a Hub (flagged exception, so a drone is never silently hidden).
+   * Drones that get an individual map marker: every IN_FLIGHT drone, plus any other drone that is
+   * not docked at a Hub, such as one in MAINTENANCE (flagged, so a drone is never silently hidden).
    */
   markerDrones: readonly Drone[]
 }
@@ -54,7 +60,7 @@ export function partitionFleet(drones: readonly Drone[], hubs: readonly Hub[]): 
   const markerDrones: Drone[] = []
 
   for (const drone of drones) {
-    const hub = drone.status === 'IN_FLIGHT' ? undefined : hubAt(drone, hubs)
+    const hub = NOT_DOCKED_STATUSES.includes(drone.status) ? undefined : hubAt(drone, hubs)
     if (hub) docked.set(hub.id, [...(docked.get(hub.id) ?? []), drone])
     else markerDrones.push(drone)
   }

@@ -10,6 +10,8 @@ interface HubDetailPanelProps {
   /** Drones physically docked at this Hub (see fleetPlacement). */
   dockedDrones?: readonly Drone[]
   onSelectDrone?: (droneId: string) => void
+  /** Ids of drones that have an `ASSIGNED` mission (shown as a hint, so they can be found). */
+  assignedMissionDroneIds?: ReadonlySet<string>
   onClose: () => void
 }
 
@@ -19,6 +21,7 @@ export function HubDetailPanel({
   hub,
   dockedDrones = NO_DRONES,
   onSelectDrone = () => {},
+  assignedMissionDroneIds,
   onClose,
 }: HubDetailPanelProps) {
   useEffect(() => {
@@ -71,6 +74,7 @@ export function HubDetailPanel({
                   <span className="font-mono">{drone.id}</span>
                   <span className="text-fg-muted">
                     {DRONE_STATUS_DISPLAY[drone.status].label} · {drone.batteryPct}%
+                    {assignedMissionDroneIds?.has(drone.id) ? ' · mission assigned' : ''}
                   </span>
                 </button>
               </li>

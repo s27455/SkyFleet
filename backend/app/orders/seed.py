@@ -34,7 +34,8 @@ class OrderSeed:
     package_weight_kg: float
 
 
-# Ten orders spread over the four Hubs (3 + 3 + 2 + 2). Append-only: add new orders with new ids.
+# Orders spread over the four Hubs (ORD-001..010: 3 + 3 + 2 + 2), plus ORD-011, a cross-Hub demo
+# that ends at a different Hub than it starts from. Append-only: add new orders with new ids.
 SEED_ORDERS: tuple[OrderSeed, ...] = (
     OrderSeed(
         "ORD-001", "hub-galeria-baltycka", "ul. Grunwaldzka 82, Gdańsk", 18.5972, 54.3768, 0.8
@@ -60,6 +61,9 @@ SEED_ORDERS: tuple[OrderSeed, ...] = (
     OrderSeed(
         "ORD-010", "hub-centrum-handlowe-osowa", "ul. Kielnieńska 5, Gdańsk", 18.4720, 54.4180, 0.5
     ),
+    # Cross-Hub demo: picked up at Galeria Bałtycka, delivered at Forum Gdańsk (its Hub's own
+    # coordinates), so the planner picks Forum Gdańsk as the return Hub and the drone lands there.
+    OrderSeed("ORD-011", "hub-galeria-baltycka", "Forum Gdańsk, Gdańsk", 18.643527, 54.349346, 0.8),
 )
 
 

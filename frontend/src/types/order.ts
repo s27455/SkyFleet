@@ -1,5 +1,11 @@
-/** Order states the backend currently allows (business-rules: the confirmed initial states). */
-export const ORDER_STATUSES = ['CREATED', 'AWAITING_HANDOVER', 'READY_FOR_PICKUP'] as const
+/** Order states the backend currently allows: the initial states plus the two delivery states. */
+export const ORDER_STATUSES = [
+  'CREATED',
+  'AWAITING_HANDOVER',
+  'READY_FOR_PICKUP',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+] as const
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
 

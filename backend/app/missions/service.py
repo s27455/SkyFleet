@@ -64,20 +64,32 @@ class _IdCollisionError(Exception):
     """A generated mission id already exists (astronomically rare); retry with a new id."""
 
 
-def _plan(session: Session, order: DeliveryOrder, drone: Drone, settings: Settings) -> PlanResponse:
+def plan_for(
+    session: Session,
+    order: DeliveryOrder,
+    drone: Drone,
+    settings: Settings,
+    *,
+    exclude_mission_id: str | None = None,
+) -> PlanResponse:
+    """The plan for an order and drone; `exclude_mission_id` ignores that mission's own claim."""
     return evaluate_plan(
         order=order,
         drone=drone,
         hubs=repository.list_hubs(session),
         drones=repository.list_drones(session),
-        order_has_active_mission=repository.order_has_active_mission(session, order.id),
-        drone_has_active_mission=repository.drone_has_active_mission(session, drone.id),
+        order_has_active_mission=repository.order_has_active_mission(
+            session, order.id, exclude_mission_id=exclude_mission_id
+        ),
+        drone_has_active_mission=repository.drone_has_active_mission(
+            session, drone.id, exclude_mission_id=exclude_mission_id
+        ),
         payload_energy_factor=settings.mission_payload_energy_factor,
         dock_proximity_m=settings.hub_dock_proximity_m,
     )
 
 
-def _load(
+def load_order_and_drone(
     session: Session, order_id: str, drone_id: str, *, lock: bool
 ) -> tuple[DeliveryOrder, Drone]:
     order = repository.get_order(session, order_id, lock=lock)
@@ -93,8 +105,8 @@ def preview_plan(
     session: Session, order_id: str, drone_id: str, settings: Settings
 ) -> PlanResponse:
     """Read-only: evaluates the plan and changes nothing."""
-    order, drone = _load(session, order_id, drone_id, lock=False)
-    return _plan(session, order, drone, settings)
+    order, drone = load_order_and_drone(session, order_id, drone_id, lock=False)
+    return plan_for(session, order, drone, settings)
 
 
 def _insert_mission(session: Session, mission: Mission) -> None:
@@ -105,8 +117,8 @@ def _insert_mission(session: Session, mission: Mission) -> None:
 def _confirm_once(session: Session, order_id: str, drone_id: str, settings: Settings) -> Mission:
     mission_id: str | None = None
     try:
-        order, drone = _load(session, order_id, drone_id, lock=True)
-        plan = _plan(session, order, drone, settings)
+        order, drone = load_order_and_drone(session, order_id, drone_id, lock=True)
+        plan = plan_for(session, order, drone, settings)
         if not plan.eligible or plan.route.return_hub_id is None:
             raise PlanRejectedError(plan)
         mission_id = new_mission_id()

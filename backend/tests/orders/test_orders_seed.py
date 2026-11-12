@@ -14,14 +14,14 @@ def count(session: Session) -> int:
     return session.scalar(select(func.count()).select_from(DeliveryOrder)) or 0
 
 
-def test_seed_inserts_ten_orders_on_first_run(session: Session) -> None:
+def test_seed_inserts_eleven_orders_on_first_run(session: Session) -> None:
     seed_hubs(session)
 
-    assert seed_orders(session) == 10
+    assert seed_orders(session) == 11
 
-    assert count(session) == 10
+    assert count(session) == 11
     assert [o.id for o in session.scalars(select(DeliveryOrder).order_by(DeliveryOrder.id))] == [
-        f"ORD-{n:03d}" for n in range(1, 11)
+        f"ORD-{n:03d}" for n in range(1, 12)
     ]
 
 
@@ -32,7 +32,7 @@ def test_second_run_inserts_nothing_and_changes_nothing(session: Session) -> Non
 
     assert seed_orders(session) == 0
 
-    assert count(session) == 10
+    assert count(session) == 11
     assert {o.id: o.created_at for o in session.scalars(select(DeliveryOrder))} == before
 
 
@@ -61,7 +61,7 @@ def test_seed_only_adds_the_missing_orders(session: Session) -> None:
     session.commit()
 
     assert seed_orders(session) == 1
-    assert count(session) == 10
+    assert count(session) == 11
 
 
 def test_seed_spreads_orders_over_all_four_hubs(session: Session) -> None:
@@ -70,7 +70,7 @@ def test_seed_spreads_orders_over_all_four_hubs(session: Session) -> None:
 
     per_hub = Counter(session.scalars(select(DeliveryOrder.origin_hub_id)))
     assert set(per_hub) == set(session.scalars(select(Hub.id)))
-    assert sum(per_hub.values()) == 10
+    assert sum(per_hub.values()) == 11
 
 
 def test_seeded_orders_are_ready_for_pickup_with_valid_weights_and_no_assignment(
@@ -98,3 +98,33 @@ def test_seed_fails_clearly_without_hubs_and_writes_nothing(session: Session) ->
         seed_orders(session)
 
     assert count(session) == 0
+
+
+def test_seed_can_add_the_cross_hub_order_to_a_database_that_already_has_the_first_ten(
+    session: Session,
+) -> None:
+    """The development database already holds ORD-001..010; the seed must only add ORD-011."""
+    seed_hubs(session)
+    seed_orders(session)
+    session.delete(session.get(DeliveryOrder, "ORD-011"))
+    session.commit()
+    before = {
+        o.id: (o.destination_address, o.package_weight_kg, o.status, o.created_at)
+        for o in session.scalars(select(DeliveryOrder))
+    }
+
+    assert seed_orders(session) == 1
+
+    after = {
+        o.id: (o.destination_address, o.package_weight_kg, o.status, o.created_at)
+        for o in session.scalars(select(DeliveryOrder))
+    }
+    assert set(after) - set(before) == {"ORD-011"}
+    assert all(after[order_id] == values for order_id, values in before.items())  # untouched
+    order = session.get(DeliveryOrder, "ORD-011")
+    assert order is not None
+    assert order.origin_hub_id == "hub-galeria-baltycka"
+    assert order.destination_address == "Forum Gdańsk, Gdańsk"
+    assert (order.destination_longitude, order.destination_latitude) == (18.643527, 54.349346)
+    assert order.package_weight_kg == 0.8
+    assert order.status == OrderStatus.READY_FOR_PICKUP

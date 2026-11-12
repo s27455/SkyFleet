@@ -1,7 +1,8 @@
 import { getDrones } from '../../api/drones'
-import { useApiResource } from '../data/useApiResource'
+import { POLL_INTERVALS_MS } from '../data/polling'
+import { usePolledResource } from '../data/usePolledResource'
 
-/** Loads the drone fleet snapshot once, with a retry. No polling and no mock fallback. */
+/** Loads the drone fleet and keeps it fresh (a flying drone's snapshot changes every tick). */
 export function useDrones() {
-  return useApiResource(getDrones)
+  return usePolledResource(getDrones, POLL_INTERVALS_MS.fleet)
 }

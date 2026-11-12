@@ -1,10 +1,18 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from './App'
 import { DRONE_RESPONSES } from './test/droneFixtures'
 import { HUB_RESPONSES, jsonResponse } from './test/hubFixtures'
+import {
+  ASSIGNED_MISSION,
+  EMERGENCY_FLIGHT,
+  OUTBOUND_FLIGHT,
+  flightsResponse,
+} from './test/flightFixtures'
 import { ORDER_RESPONSES } from './test/orderFixtures'
+import { POLL_INTERVALS_MS } from './features/data/polling'
+import type { FlightVisual } from './features/flights/interpolation'
 import type { Drone, DroneResponse } from './types/drone'
 import type { Order } from './types/order'
 import type { Hub } from './types/hub'
@@ -24,6 +32,7 @@ vi.mock('./features/map/MapView', () => ({
     orders = [],
     selectedOrderId = null,
     onSelectOrder,
+    flights = [],
   }: {
     hubs?: readonly Hub[]
     selectedHubId?: string | null
@@ -35,8 +44,13 @@ vi.mock('./features/map/MapView', () => ({
     orders?: readonly Order[]
     selectedOrderId?: string | null
     onSelectOrder?: (id: string) => void
+    flights?: readonly FlightVisual[]
   }) => (
-    <div data-testid="map">
+    <div
+      data-testid="map"
+      data-flight-drones={flights.map((flight) => flight.droneId).join(',')}
+      data-flight-animate={flights.map((flight) => String(flight.animate)).join(',')}
+    >
       {hubs.map((hub) => (
         <button
           key={hub.id}
@@ -77,24 +91,44 @@ type Handler = () => Promise<Response>
 const okHubs: Handler = () => Promise.resolve(jsonResponse(HUB_RESPONSES))
 const okDrones: Handler = () => Promise.resolve(jsonResponse(DRONE_RESPONSES))
 const okOrders: Handler = () => Promise.resolve(jsonResponse(ORDER_RESPONSES))
+const okFlights: Handler = () => Promise.resolve(jsonResponse(flightsResponse()))
+const okMissions: Handler = () => Promise.resolve(jsonResponse([]))
+const okStart: Handler = () =>
+  Promise.resolve(jsonResponse({ ...ASSIGNED_MISSION, status: 'IN_FLIGHT' }))
+
+interface Handlers {
+  hubs?: Handler
+  drones?: Handler
+  orders?: Handler
+  flights?: Handler
+  missions?: Handler
+  start?: Handler
+}
 
 function stubBackend(
   hubsHandler: Handler = okHubs,
   dronesHandler: Handler = okDrones,
   ordersHandler: Handler = okOrders,
+  more: Pick<Handlers, 'flights' | 'missions' | 'start'> = {},
 ) {
   const hubsCalls = vi.fn(hubsHandler)
   const dronesCalls = vi.fn(dronesHandler)
   const ordersCalls = vi.fn(ordersHandler)
+  const flightsCalls = vi.fn(more.flights ?? okFlights)
+  const missionsCalls = vi.fn(more.missions ?? okMissions)
+  const startCalls = vi.fn(more.start ?? okStart)
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
       if (url.endsWith('/api/health')) return Promise.resolve(jsonResponse({ status: 'ok' }))
+      if (url.endsWith('/start')) return startCalls()
       if (url.endsWith('/api/orders')) return ordersCalls()
+      if (url.endsWith('/api/flights')) return flightsCalls()
+      if (url.endsWith('/api/missions')) return missionsCalls()
       return url.endsWith('/api/drones') ? dronesCalls() : hubsCalls()
     }),
   )
-  return { hubsCalls, dronesCalls, ordersCalls }
+  return { hubsCalls, dronesCalls, ordersCalls, flightsCalls, missionsCalls, startCalls }
 }
 
 const hubMarkers = () => screen.queryAllByRole('button', { name: /^Marker / })
@@ -646,5 +680,417 @@ describe('App orders', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Order data is unavailable')
     expect(orderMarkers()).toHaveLength(0)
+  })
+})
+
+// --- live flights, emergencies and the temporary Start Mission control --------------------------
+
+const IN_FLIGHT_DRONES = DRONE_RESPONSES.map((drone) =>
+  drone.id === 'DRN-010'
+    ? { ...drone, status: 'IN_FLIGHT' as const, longitude: 18.599, latitude: 54.38 }
+    : drone,
+)
+const okFlyingDrones: Handler = () => Promise.resolve(jsonResponse(IN_FLIGHT_DRONES))
+
+describe('App live flights', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows a flying drone as its own marker with the flight in its panel', async () => {
+    stubBackend(okHubs, okFlyingDrones, okOrders, {
+      flights: () => Promise.resolve(jsonResponse(flightsResponse([OUTBOUND_FLIGHT]))),
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Drone marker DRN-010' }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map')).toHaveAttribute('data-flight-drones', 'DRN-010'),
+    )
+    expect(screen.getByTestId('map')).toHaveAttribute('data-flight-animate', 'true')
+    const panel = screen.getByRole('complementary', { name: 'Drone details: DRN-010' })
+    const flight = within(within(panel).getByRole('region', { name: 'Flight' }))
+    expect(flight.getByText('Outbound with the parcel')).toBeInTheDocument()
+    expect(flight.getByRole('progressbar', { name: 'Flight progress' })).toHaveAttribute(
+      'aria-valuenow',
+      '25',
+    )
+    expect(flight.getByRole('progressbar', { name: 'Flight battery' })).toHaveAttribute(
+      'aria-valuenow',
+      '98',
+    )
+    expect(flight.getByText('MIS-AAAA0001')).toBeInTheDocument()
+    expect(flight.getByText('Galeria Bałtycka')).toBeInTheDocument()
+    expect(flight.getByText(/about \d+ s/)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows no notice while all is well, even with the worker idle and no flights', async () => {
+    stubBackend(okHubs, okDrones, okOrders, {
+      flights: () =>
+        Promise.resolve(
+          jsonResponse(flightsResponse([], { worker_stale: true, worker_heartbeat_at: null })),
+        ),
+    })
+
+    render(<App />)
+    await screen.findAllByRole('button', { name: /^Marker / })
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/worker has stopped/)).not.toBeInTheDocument()
+  })
+
+  it('says so, and stops animating, when the worker stopped updating a flight', async () => {
+    stubBackend(okHubs, okFlyingDrones, okOrders, {
+      flights: () =>
+        Promise.resolve(jsonResponse(flightsResponse([OUTBOUND_FLIGHT], { worker_stale: true }))),
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText(/worker has stopped updating flights/)).toBeInTheDocument()
+    expect(screen.getByTestId('map')).toHaveAttribute('data-flight-animate', 'false')
+  })
+
+  it('does not animate when the user prefers reduced motion', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        matches: true,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    )
+    stubBackend(okHubs, okFlyingDrones, okOrders, {
+      flights: () => Promise.resolve(jsonResponse(flightsResponse([OUTBOUND_FLIGHT]))),
+    })
+
+    render(<App />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('map')).toHaveAttribute('data-flight-drones', 'DRN-010'),
+    )
+    expect(screen.getByTestId('map')).toHaveAttribute('data-flight-animate', 'false')
+  })
+
+  it('shows a simulated emergency as a persistent alert and keeps the drone visible', async () => {
+    const parked = DRONE_RESPONSES.map((drone) =>
+      drone.id === 'DRN-010'
+        ? { ...drone, status: 'MAINTENANCE' as const, longitude: 18.6012, latitude: 54.3821 }
+        : drone,
+    )
+    stubBackend(okHubs, () => Promise.resolve(jsonResponse(parked)), okOrders, {
+      flights: () => Promise.resolve(jsonResponse(flightsResponse([EMERGENCY_FLIGHT]))),
+    })
+
+    render(<App />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Simulated emergency: DRN-010 (MIS-AAAA0001)')
+    expect(alert).toHaveTextContent('every Hub it could reach was full')
+    expect(alert).toHaveTextContent('out of service')
+    expect(alert).toHaveTextContent('already delivered')
+    // The drone in MAINTENANCE is a marker of its own and is not counted at the Hub.
+    expect(await screen.findByRole('button', { name: 'Drone marker DRN-010' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Marker Galeria Bałtycka' })).toHaveAttribute(
+      'data-docked-count',
+      '2',
+    )
+    expect(screen.getByTestId('map')).toHaveAttribute('data-flight-drones', '') // not animated
+    fireEvent.click(screen.getByRole('button', { name: 'Drone marker DRN-010' }))
+    const panel = screen.getByRole('complementary', { name: 'Drone details: DRN-010' })
+    expect(within(panel).getByText('Emergency')).toBeInTheDocument()
+    expect(within(panel).getByText(/not a computed safe landing site/)).toBeInTheDocument()
+  })
+
+  it('keeps the map usable and offers a retry when the flights cannot be read', async () => {
+    const { flightsCalls } = stubBackend(okHubs, okDrones, okOrders, {
+      flights: () => Promise.reject(new TypeError('offline')),
+    })
+
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Live flight data is unavailable')
+    expect(await screen.findAllByRole('button', { name: /^Marker / })).toHaveLength(4)
+    flightsCalls.mockImplementation(() => Promise.resolve(jsonResponse(flightsResponse([]))))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading flights' }))
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('treats malformed flight data as an error instead of drawing bogus flights', async () => {
+    stubBackend(okHubs, okFlyingDrones, okOrders, {
+      flights: () =>
+        Promise.resolve(
+          jsonResponse(flightsResponse([{ ...OUTBOUND_FLIGHT, phase: 'WARP' as never }])),
+        ),
+    })
+
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Live flight data is unavailable')
+    expect(screen.getByTestId('map')).toHaveAttribute('data-flight-drones', '')
+  })
+
+  it('shows the new order statuses', async () => {
+    const orders = ORDER_RESPONSES.map((order) =>
+      order.id === 'ORD-001'
+        ? { ...order, status: 'OUT_FOR_DELIVERY' as const }
+        : order.id === 'ORD-002'
+          ? { ...order, status: 'DELIVERED' as const }
+          : order,
+    )
+    stubBackend(okHubs, okDrones, () => Promise.resolve(jsonResponse(orders)))
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /^Orders \(/ }))
+
+    expect(screen.getByRole('button', { name: /^ORD-001/ })).toHaveTextContent('Out for delivery')
+    expect(screen.getByRole('button', { name: /^ORD-002/ })).toHaveTextContent('Delivered')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('counts a drone in MAINTENANCE at no Hub, as the backend does', async () => {
+    const serviced = DRONE_RESPONSES.map((drone) =>
+      drone.id === 'DRN-010' ? { ...drone, status: 'MAINTENANCE' as const } : drone,
+    )
+    stubBackend(okHubs, () => Promise.resolve(jsonResponse(serviced)))
+
+    render(<App />)
+
+    await waitFor(() => expect(dockedCount('Galeria Bałtycka')).toBe('2'))
+    expect(await screen.findByRole('button', { name: 'Drone marker DRN-010' })).toBeInTheDocument()
+  })
+})
+
+describe('App Start Mission control', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const assigned = () => Promise.resolve(jsonResponse([ASSIGNED_MISSION]))
+
+  it('is offered in the order panel for an assigned mission, with its planned return Hub', async () => {
+    stubBackend(okHubs, okDrones, okOrders, { missions: assigned })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-001' }))
+
+    const control = await screen.findByRole('region', { name: 'Mission MIS-AAAA0001' })
+    expect(control).toHaveTextContent('returns to Galeria Bałtycka')
+    expect(control).toHaveTextContent('planned, not reserved')
+    expect(
+      within(control).getByRole('button', { name: 'Start mission MIS-AAAA0001' }),
+    ).toBeEnabled()
+  })
+
+  it('is not offered for orders and drones without an assigned mission', async () => {
+    stubBackend(okHubs, okDrones, okOrders, { missions: assigned })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-002' }))
+
+    expect(screen.queryByRole('region', { name: /^Mission / })).not.toBeInTheDocument()
+  })
+
+  it('is offered in the drone panel, and the Hub list hints which drone has a mission', async () => {
+    stubBackend(okHubs, okDrones, okOrders, { missions: assigned })
+
+    render(<App />)
+    await waitFor(() => expect(dockedCount('Galeria Bałtycka')).toBe('3'))
+    fireEvent.click(screen.getByRole('button', { name: 'Marker Galeria Bałtycka' }))
+    const hubPanel = screen.getByRole('complementary', { name: 'Hub details: Galeria Bałtycka' })
+    const rows = within(hubPanel).getAllByRole('button', { name: /DRN-/ })
+    expect(rows[0]).toHaveTextContent('mission assigned') // DRN-010
+    expect(rows[1]).not.toHaveTextContent('mission assigned')
+
+    fireEvent.click(within(hubPanel).getByRole('button', { name: /DRN-010/ }))
+
+    expect(
+      await screen.findByRole('button', { name: 'Start mission MIS-AAAA0001' }),
+    ).toBeInTheDocument()
+  })
+
+  it('starts the mission through the backend and refreshes at once', async () => {
+    const { startCalls, dronesCalls, ordersCalls, flightsCalls, missionsCalls } = stubBackend(
+      okHubs,
+      okDrones,
+      okOrders,
+      { missions: assigned },
+    )
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-001' }))
+    const before = [dronesCalls, ordersCalls, flightsCalls, missionsCalls].map(
+      (calls) => calls.mock.calls.length,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Start mission MIS-AAAA0001' }))
+
+    await waitFor(() => expect(startCalls).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(
+        [dronesCalls, ordersCalls, flightsCalls, missionsCalls].map(
+          (calls) => calls.mock.calls.length,
+        ),
+      ).toEqual(before.map((count) => count + 1)),
+    )
+  })
+
+  it('disables the button while the start is in progress', async () => {
+    let finish!: (response: Response) => void
+    stubBackend(okHubs, okDrones, okOrders, {
+      missions: assigned,
+      start: () => new Promise<Response>((resolve) => (finish = resolve)),
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-001' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start mission MIS-AAAA0001' }))
+
+    const pending = await screen.findByRole('button', { name: 'Start mission MIS-AAAA0001' })
+    await waitFor(() => expect(pending).toBeDisabled())
+    expect(pending).toHaveTextContent('Starting…')
+    finish(jsonResponse({ ...ASSIGNED_MISSION, status: 'IN_FLIGHT' }))
+    // After a success it stays off (no second, refused click) until the mission leaves ASSIGNED.
+    await waitFor(() => expect(pending).toHaveTextContent('Mission started'))
+    expect(pending).toBeDisabled()
+  })
+
+  it('explains clearly when the simulation worker is not running', async () => {
+    stubBackend(okHubs, okDrones, okOrders, {
+      missions: assigned,
+      start: () =>
+        Promise.resolve(
+          jsonResponse(
+            { detail: { code: 'SIMULATION_WORKER_UNAVAILABLE', message: 'no heartbeat' } },
+            503,
+          ),
+        ),
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-001' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start mission MIS-AAAA0001' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('simulation worker is not running')
+    expect(alert).toHaveTextContent('app.worker')
+  })
+
+  it('lists the backend reasons when the mission is no longer eligible', async () => {
+    stubBackend(okHubs, okDrones, okOrders, {
+      missions: assigned,
+      start: () =>
+        Promise.resolve(
+          jsonResponse(
+            {
+              detail: {
+                code: 'MISSION_NOT_ELIGIBLE',
+                message: 'x',
+                plan: {
+                  reasons: [
+                    { code: 'INSUFFICIENT_BATTERY', message: 'Drone battery is 10%.' },
+                    { code: 'ORDER_NOT_READY', message: 'Order is AWAITING_HANDOVER.' },
+                  ],
+                },
+              },
+            },
+            409,
+          ),
+        ),
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-001' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Start mission MIS-AAAA0001' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('no longer eligible')
+    expect(alert).toHaveTextContent('Drone battery is 10%.')
+    expect(alert).toHaveTextContent('Order is AWAITING_HANDOVER.')
+  })
+
+  it('hides the control and says why when the missions cannot be read', async () => {
+    const { missionsCalls } = stubBackend(okHubs, okDrones, okOrders, {
+      missions: () => Promise.reject(new TypeError('offline')),
+    })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-001' }))
+
+    expect(await screen.findByText(/Mission data is unavailable/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /^Mission / })).not.toBeInTheDocument()
+    missionsCalls.mockImplementation(assigned)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading missions' }))
+    expect(
+      await screen.findByRole('button', { name: 'Start mission MIS-AAAA0001' }),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('App notices that need polling', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+    POLL_INTERVALS_MS.flights = 30
+    POLL_INTERVALS_MS.fleet = 30
+  })
+  afterEach(() => {
+    POLL_INTERVALS_MS.flights = null
+    POLL_INTERVALS_MS.fleet = null
+  })
+
+  it('says so when drone or order data could not be refreshed, and keeps showing the old data', async () => {
+    let drones = 0
+    stubBackend(
+      okHubs,
+      () => (++drones === 1 ? okDrones() : Promise.reject(new TypeError('offline'))),
+      okOrders,
+    )
+
+    render(<App />)
+
+    expect(
+      await screen.findByText(/Drone or order data could not be refreshed/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh fleet data' })).toBeInTheDocument()
+    expect(dockedCount('Forum Gdańsk')).toBe('3') // the last known data is still there
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps the last flight, stops it gliding and offers a refresh when the flights cannot be read', async () => {
+    let flights = 0
+    stubBackend(okHubs, okFlyingDrones, okOrders, {
+      flights: () =>
+        ++flights === 1
+          ? Promise.resolve(jsonResponse(flightsResponse([OUTBOUND_FLIGHT])))
+          : Promise.reject(new TypeError('offline')),
+    })
+
+    render(<App />)
+
+    expect(await screen.findByText(/Live flight data could not be refreshed/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh flights' })).toBeInTheDocument()
+    expect(screen.getByTestId('map')).toHaveAttribute('data-flight-drones', 'DRN-010')
+    expect(screen.getByTestId('map')).toHaveAttribute('data-flight-animate', 'false') // matches the notice
+  })
+
+  it('reads drones, orders and missions at once when the set of flying missions changes', async () => {
+    const { dronesCalls, ordersCalls, missionsCalls } = stubBackend(
+      okHubs,
+      okFlyingDrones,
+      okOrders,
+      {
+        flights: () => Promise.resolve(jsonResponse(flightsResponse([OUTBOUND_FLIGHT]))),
+      },
+    )
+    POLL_INTERVALS_MS.flights = null // no polling: only the change of flights can trigger a read
+    POLL_INTERVALS_MS.fleet = null
+
+    render(<App />)
+
+    await waitFor(() => expect(dronesCalls.mock.calls.length).toBeGreaterThanOrEqual(2))
+    expect(ordersCalls.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(missionsCalls.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 })

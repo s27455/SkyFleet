@@ -3,7 +3,11 @@ import { type ReactNode, useEffect } from 'react'
 import { DETAIL_PANEL_CLASS } from '../../components/ui/detailPanel'
 import { StatusIndicator } from '../../components/ui/StatusIndicator'
 import type { Drone } from '../../types/drone'
+import type { Flight } from '../../types/flight'
 import type { Hub } from '../../types/hub'
+import type { Mission } from '../../types/mission'
+import { FlightSection } from '../flights/FlightSection'
+import { StartMissionControl } from '../missions/StartMissionControl'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
 
 interface DroneDetailPanelProps {
@@ -13,6 +17,15 @@ interface DroneDetailPanelProps {
   /** True when the map marker is spread on screen because drones share this location. */
   markerSpread: boolean
   onClose: () => void
+  /** All Hubs, to name the Hubs of a flight. */
+  hubs?: readonly Hub[]
+  /** The drone's backend-reported flight (active, or ended in an emergency), if any. */
+  flight?: Flight
+  /** True when the simulation worker has stopped updating flights. */
+  workerStale?: boolean
+  /** An `ASSIGNED` mission of this drone, which can be started from here. */
+  assignedMission?: Mission
+  onStartMission?: (missionId: string) => Promise<void>
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -24,7 +37,19 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-export function DroneDetailPanel({ drone, hub, markerSpread, onClose }: DroneDetailPanelProps) {
+const NO_HUBS: readonly Hub[] = []
+
+export function DroneDetailPanel({
+  drone,
+  hub,
+  markerSpread,
+  onClose,
+  hubs = NO_HUBS,
+  flight,
+  workerStale = false,
+  assignedMission,
+  onStartMission,
+}: DroneDetailPanelProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -69,6 +94,17 @@ export function DroneDetailPanel({ drone, hub, markerSpread, onClose }: DroneDet
         </Row>
       </dl>
 
+      {flight && <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />}
+      {assignedMission && onStartMission && (
+        <StartMissionControl
+          mission={assignedMission}
+          returnHubName={
+            hubs.find((candidate) => candidate.id === assignedMission.returnHubId)?.name
+          }
+          onStart={onStartMission}
+        />
+      )}
+
       <h3 className="mt-4 text-xs font-semibold tracking-wide text-fg-muted uppercase">
         Model capabilities
       </h3>
@@ -82,8 +118,9 @@ export function DroneDetailPanel({ drone, hub, markerSpread, onClose }: DroneDet
       </dl>
 
       <p className="mt-3 border-t border-line pt-3 text-xs text-fg-muted">
-        Current backend snapshot, not a live flight feed. Distances are totals for the whole route
-        including the return to a Hub. Capabilities are simulation assumptions.
+        Backend snapshot, refreshed about every 2 seconds; flights are simulated. Distances are
+        totals for the whole route including the return to a Hub. Capabilities are simulation
+        assumptions.
         {markerSpread &&
           ' Markers at the same location are spread slightly on screen; the position above is the real stored one.'}
       </p>

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
 import type { Order } from '../../types/order'
+import type { FlightVisual } from '../flights/interpolation'
 import { MapView } from './MapView'
 
 type Handler = () => void
@@ -684,5 +685,159 @@ describe('MapView order destination markers', () => {
     rerender(<MapView orders={[]} />)
 
     expect(screen.queryByRole('button', { name: /destination/ })).not.toBeInTheDocument()
+  })
+})
+
+// --- flying drones: in-place updates and smooth motion between snapshots -----------------------
+
+describe('MapView flying drone markers', () => {
+  const FLYING: Drone = {
+    id: 'DRN-010',
+    hubId: 'hub-a',
+    status: 'IN_FLIGHT',
+    batteryPct: 98,
+    coordinates: [18.6, 54.4],
+    model: TEST_MODEL,
+  }
+
+  const visual = (overrides: Partial<FlightVisual> = {}): FlightVisual => ({
+    droneId: 'DRN-010',
+    motion: {
+      position: [18.6, 54.4],
+      target: { position: [18.7, 54.5], etaS: 10 },
+      snapshotAgeS: 0,
+    },
+    receivedAt: 1000,
+    animate: true,
+    ...overrides,
+  })
+
+  let frames: ((time: number) => void)[]
+  let now: number
+
+  beforeEach(() => {
+    fake.instances.length = 0
+    fake.markers.length = 0
+    frames = []
+    now = 1000
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test')
+    vi.stubGlobal('requestAnimationFrame', (callback: (time: number) => void) => {
+      frames.push(callback)
+      return frames.length
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+      frames[id - 1] = () => {}
+    })
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+  })
+
+  const loadMap = () => act(() => fake.instances[0].handlers.load())
+  const droneMarkers = () => fake.markers.filter((m) => m.element.dataset.markerKind === 'drone')
+  const runFrame = () => {
+    const pending = frames.splice(0)
+    act(() => pending.forEach((callback) => callback(now)))
+  }
+
+  it('draws a flying drone at its flight snapshot', () => {
+    render(
+      <MapView
+        drones={[{ ...FLYING, coordinates: [18.0, 54.0] }]}
+        flights={[visual({ animate: false })]}
+      />,
+    )
+    loadMap()
+
+    expect(droneMarkers()[0].lngLat).toEqual([18.6, 54.4]) // the flight, not the drone row
+  })
+
+  it('moves the marker toward the backend target and never past it', () => {
+    render(<MapView drones={[FLYING]} flights={[visual()]} />)
+    loadMap()
+    const marker = droneMarkers()[0]
+
+    now = 1000 + 5000 // 5 s after the snapshot arrived: halfway of the 10 s eta
+    runFrame()
+    expect(marker.lngLat?.[0]).toBeCloseTo(18.65)
+    expect(marker.lngLat?.[1]).toBeCloseTo(54.45)
+
+    now = 1000 + 60_000
+    runFrame()
+    expect(marker.lngLat).toEqual([18.7, 54.5]) // clamped at the target
+  })
+
+  it('does not animate when told not to (reduced motion, stopped worker)', () => {
+    render(<MapView drones={[FLYING]} flights={[visual({ animate: false })]} />)
+    loadMap()
+
+    expect(frames).toHaveLength(0)
+    now = 1000 + 5000
+    expect(droneMarkers()[0].lngLat).toEqual([18.6, 54.4]) // stays at the snapshot
+  })
+
+  it('stops animating on unmount', () => {
+    const { unmount } = render(<MapView drones={[FLYING]} flights={[visual()]} />)
+    loadMap()
+    runFrame() // schedules the next frame
+
+    unmount()
+    const marker = droneMarkers()[0]
+    const before = marker.lngLat
+    now = 1000 + 9000
+    runFrame()
+
+    expect(marker.lngLat).toEqual(before) // the cancelled frame did nothing
+  })
+
+  it('updates the existing marker in place for each new snapshot, keeping focus', () => {
+    const { rerender } = render(<MapView drones={[FLYING]} flights={[visual()]} />)
+    loadMap()
+    const button = screen.getByRole('button', { name: /DRN-010, In flight, battery 98%/ })
+    button.focus()
+    const marker = droneMarkers()[0]
+
+    rerender(
+      <MapView
+        drones={[{ ...FLYING, batteryPct: 96, coordinates: [18.62, 54.42] }]}
+        flights={[visual({ motion: { ...visual().motion, position: [18.62, 54.42] } })]}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /DRN-010, In flight, battery 96%/ })).toBe(button)
+    expect(button).toHaveFocus()
+    expect(droneMarkers()).toHaveLength(1)
+    expect(marker.remove).not.toHaveBeenCalled()
+    expect(marker.lngLat).toEqual([18.62, 54.42])
+  })
+
+  it('rebuilds a marker only when the drone changes kind, such as flying to parked', () => {
+    const { rerender } = render(<MapView drones={[FLYING]} flights={[visual()]} />)
+    loadMap()
+    const first = droneMarkers()[0]
+
+    rerender(<MapView drones={[{ ...FLYING, status: 'MAINTENANCE' }]} flights={[]} />)
+
+    expect(first.remove).toHaveBeenCalled()
+    const parked = screen.getByRole('button', {
+      name: 'Drone DRN-010, Maintenance, battery 98%, not at a Hub',
+    })
+    expect(parked.dataset.placement).toBe('away')
+  })
+
+  it('removes the marker when the drone is no longer flying or away', () => {
+    const { rerender } = render(<MapView drones={[FLYING]} flights={[visual()]} />)
+    loadMap()
+    const marker = droneMarkers()[0]
+
+    rerender(<MapView drones={[]} flights={[]} />)
+
+    expect(marker.remove).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: /DRN-010/ })).not.toBeInTheDocument()
   })
 })

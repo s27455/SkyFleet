@@ -8,26 +8,18 @@ volume and port 5432 are never used. If the server is unreachable the tests are 
 """
 
 import threading
-import uuid
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from sqlalchemy import Engine, create_engine, func, select, text
-from sqlalchemy.engine import URL, make_url
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import Engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
-from app.drones.seed import seed_drones
-from app.hubs.seed import seed_hubs
 from app.missions import service
 from app.missions.models import ACTIVE_MISSION_STATUSES, Mission, MissionStatus
-from app.orders.seed import seed_orders
 
 pytestmark = pytest.mark.postgres
 
@@ -43,47 +35,6 @@ SETTINGS = Settings(mission_payload_energy_factor=0.5, hub_dock_proximity_m=50)
 class Outcome:
     kind: str  # "created", "cancelled", "rejected" or "not-cancellable"
     detail: str = ""
-
-
-@pytest.fixture(scope="module")
-def temp_engine() -> Iterator[Engine]:
-    dev_url = make_url(Settings().database_url)
-    if not dev_url.drivername.startswith("postgresql"):
-        pytest.skip("The configured database is not PostgreSQL")
-    if dev_url.host not in ALLOWED_HOSTS or dev_url.port != DOCKER_POSTGRES_PORT:
-        pytest.skip(
-            f"Refusing to create databases on {dev_url.host}:{dev_url.port}; "
-            f"only the local Docker PostgreSQL (port {DOCKER_POSTGRES_PORT}) is allowed"
-        )
-    name = f"{TEMP_PREFIX}{uuid.uuid4().hex[:8]}"
-    assert name != dev_url.database
-
-    admin = create_engine(dev_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
-    try:
-        with admin.connect() as connection:
-            connection.execute(text(f'CREATE DATABASE "{name}"'))
-    except OperationalError:
-        admin.dispose()
-        pytest.skip("PostgreSQL is not reachable")
-
-    test_url: URL = dev_url.set(database=name)
-    engine = create_engine(test_url, pool_size=20)
-    try:
-        config = Config(str(BACKEND_DIR / "alembic.ini"))
-        config.set_main_option("script_location", str(BACKEND_DIR / "migrations"))
-        config.set_main_option("sqlalchemy.url", test_url.render_as_string(hide_password=False))
-        command.upgrade(config, "head")
-        with sessionmaker(bind=engine)() as session:
-            seed_hubs(session)
-            seed_drones(session)
-            seed_orders(session)
-        yield engine
-    finally:
-        engine.dispose()
-        with admin.connect() as connection:
-            assert name.startswith(TEMP_PREFIX) and name != dev_url.database  # last line of defence
-            connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
-        admin.dispose()
 
 
 @pytest.fixture

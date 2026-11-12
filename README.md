@@ -104,14 +104,14 @@ its capacity; every seeded drone starts docked at its assigned Hub, so this boun
 physical occupancy. At runtime a Hub's occupancy is the number of drones physically docked there (see
 Mission planning below).
 
-**Delivery orders (Feature 007):** after the Hubs exist, seed ten illustrative orders (repeatable) and
+**Delivery orders (Feature 007):** after the Hubs exist, seed the illustrative orders (repeatable) and
 read them from the API:
 
 ```bash
 cd backend
 uv run alembic upgrade head              # includes migration 0003 (orders)
 uv run python -m app.hubs.seed
-uv run python -m app.orders.seed         # ORD-001..010 across the four Hubs, insert-only
+uv run python -m app.orders.seed         # ORD-001..011, insert-only (ORD-011: Bałtycka -> Forum)
 # GET http://127.0.0.1:8000/api/orders  and  /api/orders/{id}  (e.g. ORD-001)
 ```
 
@@ -179,6 +179,109 @@ capacity recheck are Feature 010; automatic dispatch is Feature 011; fleet rebal
 Out of scope here: automatic dispatch (Feature 011), flight simulation (Feature 010), fleet
 rebalancing (Feature 012; target about 40 of 50 places occupied per Hub), airspace and weather checks.
 The PostgreSQL concurrency tests are opt-in and use a temporary database: `uv run pytest -m postgres`.
+
+**Flight simulation (Feature 010):** an `ASSIGNED` mission can be started and is then flown by the
+Simulation Worker in accelerated time. The map shows the flight live (see "Frontend" below); assigning
+a drone to an order is still done through the API (Swagger at `/docs`), because only a temporary
+"Start mission" control exists in the UI.
+
+```bash
+cd backend
+uv run alembic upgrade head              # includes migration 0005 (flights, worker heartbeat)
+uv run python -m app.worker              # the simulation: required, or missions cannot start
+# POST http://127.0.0.1:8000/api/missions/{id}/start   (takeoff; needs a running worker)
+# GET  http://127.0.0.1:8000/api/flights               (active and emergency flights, for polling)
+```
+
+- **Starting** revalidates the full mission plan against the actual current state (order
+  `READY_FOR_PICKUP`, drone `IDLE` and docked at the origin Hub, enough *actual* battery, a return Hub
+  with a free place). It is refused with 503 `SIMULATION_WORKER_UNAVAILABLE` if the worker has no
+  recent heartbeat (the worker records one every tick; the limit is `SIM_HEARTBEAT_STALE_SECONDS`),
+  and with 409 if the mission is not `ASSIGNED` or no longer eligible. It happens exactly once. A
+  started mission can no longer be cancelled.
+- **Takeoff:** mission and drone become `IN_FLIGHT`, the order `OUT_FOR_DELIVERY`; the drone stops
+  counting at its Hub immediately. **Delivery** (always successful in this feature) makes the order
+  `DELIVERED` before the drone returns; **landing** makes the mission `COMPLETED` and the drone `IDLE`
+  at the Hub with its remaining battery. There is no charging yet, so batteries only fall across missions.
+- **Timing (simulation time, not flight physics; the SF-1 speeds are unchanged):** a complete mission
+  takes `30 + 60 × min(route km / 14, 1)` seconds (about 36 s for the seeded routes), with a 3 s
+  delivery stop, the rest split between the loaded outbound and the empty return leg by distance.
+  Position and battery are a pure function of the stored schedule and the clock, so a restart or a late
+  tick never resets or invents progress. The loaded and empty energy rates are those of Feature 009.
+- **Landing without reservations:** about 60 m before the Hub the worker locks that one Hub, counts the
+  drones physically docked there and, only if there is a free place, docks the drone in the same
+  transaction. A full Hub makes it divert to the nearest other Hub that the battery can reach (it may
+  use the 20% reserve but must arrive with at least `SIM_CRITICAL_BATTERY_PCT`) and that has a place.
+  Concurrent landings cannot exceed a Hub's capacity.
+- **Emergency (simulated, not a real landing site):** if no safe Hub landing is possible, the flight
+  ends as mission `EMERGENCY`, the drone stays where it stopped in `MAINTENANCE`, and the order stays
+  `DELIVERED`. `GET /api/flights` keeps listing the flight with its reason (`NO_HUB_WITH_CAPACITY`,
+  `BATTERY_INSUFFICIENT` or `BATTERY_CRITICAL`). There is no recovery path yet (a later incident or
+  maintenance feature), and no indefinite holding.
+- **Occupancy rule:** a drone that is `IN_FLIGHT` or in `MAINTENANCE` is never counted as docked,
+  whatever its coordinates.
+- **Known limitations of this stage:**
+  - Hub capacity is guaranteed because every path that docks a drone takes that Hub's row lock first; a
+    landing does. A later charging, maintenance-release or repositioning feature must do the same.
+  - A drone in `MAINTENANCE` is never counted as docked, even if it is parked at a Hub; a future
+    maintenance feature will need its own handling of drones serviced at a Hub.
+  - Emergency flights stay listed by `GET /api/flights` (there is no acknowledge step yet), and the
+    drone stays in `MAINTENANCE` until a later incident or maintenance feature.
+  - The heartbeat is written at the start of each tick; a tick that takes longer than
+    `SIM_HEARTBEAT_STALE_SECONDS` would make the worker look stale.
+  - If advancing one flight fails, the error is logged and the other flights continue; the failing
+    flight is retried on the next tick.
+  - `Drone.hub_id` is only the administrative home Hub: it is not used for occupancy and does not
+    change when a drone lands at a different Hub.
+- `GET /api/flights` returns `{server_time, worker_heartbeat_at, worker_stale, flights}`; each flight has
+  its phase, progress, position, battery, next target with seconds to reach it, and `updated_at`. If the
+  worker stops after a start, `worker_stale` turns true and `updated_at` stops advancing.
+
+**Frontend (Feature 010, stage 2):** the dashboard polls the backend: flights every 1 s, drones,
+orders and missions every 2 s (paused while the tab is hidden, never overlapping, and a failed refresh
+keeps the last data and says so). It never runs the mission: positions, battery, phases and landings
+all come from the backend.
+
+- **Flights on the map:** a flying drone is a small marker that glides between the backend's snapshots,
+  toward the backend's own next point and never past it. Prefers-reduced-motion and a stopped worker
+  make it jump between snapshots instead. The drone panel gains a **Flight** section: phase, progress,
+  battery, seconds to the next point, the planned return Hub and, after a diversion, where it is heading.
+- **Hub counts** follow takeoffs and landings through the polled drones. The docking rule in
+  `fleetPlacement.ts` now matches the backend: `IN_FLIGHT` and `MAINTENANCE` drones are never counted
+  at a Hub, whatever their coordinates; a drone in maintenance shows as its own marker.
+- **Order statuses** `OUT_FOR_DELIVERY` and `DELIVERED` are shown; delivered orders keep their entry.
+- **Start mission (temporary demonstration control):** the order panel and the drone panel show a
+  **Start mission** button for an already `ASSIGNED` mission (docked drones with a mission are marked in
+  the Hub's drone list). It calls the backend start, which validates and performs it; it does not pick a
+  drone or assign an order. If the worker is not running, or the mission is no longer eligible, the
+  panel says why. Feature 011 will start missions automatically through the same backend action.
+- **Notices:** a simulated emergency is a persistent alert (drone, mission, reason, stop position; the
+  parcel was already delivered; the drone is out of service). A worker that stopped updating flights,
+  flight data that cannot be read (with Retry) and drone or order data that could not be refreshed each
+  get a notice; nothing is shown while all is well.
+- **Known limitations of the frontend:**
+  - A takeoff or landing is shown from two polls (flights every second, drones every two), so a
+    marker can step a short way at the very start or end of a flight; the flying set changing triggers
+    an immediate re-read to keep this brief. It is cosmetic, not a data error.
+  - When a drone changes between flying and not flying, all drone markers are rebuilt once, so
+    keyboard focus on a drone marker is lost at that moment (position and status updates keep it).
+  - A read that takes more than 10 s counts as failed and is flagged as stale instead of freezing
+    silently. Emergency alerts persist (no acknowledge step yet); only the first three are listed in
+    full, with a summary line for the rest.
+  - The temporary Start mission control stays disabled after a successful start until the mission
+    leaves `ASSIGNED`; automatic dispatch (Feature 011) will start missions without it.
+- **Demo:** run the database, the API (`uvicorn`) and the worker (`uv run python -m app.worker`), open
+  the dashboard, assign a mission in Swagger (`POST /api/missions`, for example order `ORD-001` with
+  drone `DRN-010`), open that order or drone in the dashboard and press **Start mission**.
+
+| Environment variable | Default | Purpose |
+|---|---|---|
+| `SIM_TICK_SECONDS` | `1.0` | Worker tick interval (also the snapshot update interval) |
+| `SIM_FLIGHT_MIN_SECONDS` / `SIM_FLIGHT_MAX_SECONDS` | `30` / `90` | Duration of a complete mission at 0 km / at the distance budget |
+| `SIM_DELIVERY_DWELL_SECONDS` | `3` | Delivery stop (part of the total) |
+| `SIM_LANDING_APPROACH_M` | `60` | Distance before the Hub where the landing is decided (must exceed `HUB_DOCK_PROXIMITY_M`) |
+| `SIM_CRITICAL_BATTERY_PCT` | `5` | Lowest battery a diversion may arrive with |
+| `SIM_HEARTBEAT_STALE_SECONDS` | `10` | Maximum age of the worker heartbeat for a start |
 
 Backend tests use SQLite (in-memory, plus temporary files for the migration test) and need neither
 Docker nor PostgreSQL. Known limitation: they do not exercise PostgreSQL itself.

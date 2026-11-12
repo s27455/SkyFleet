@@ -1,13 +1,19 @@
 """Simulation Worker entrypoint: `uv run python -m app.worker`.
 
-Runs as its own process, independent of the API and of any browser session.
-Phase 1 only proves the process model with a heartbeat; simulation logic arrives in Phase 7.
+Runs as its own process, independent of the API and of any browser session. Each tick records a
+heartbeat (a mission can only start while it is fresh) and advances every active flight
+(`app.simulation.engine`). Flight state is derived from stored schedules and the clock, so a
+restart neither resets nor invents progress.
 """
 
 import logging
 import time
 
-from app.config import get_settings
+from sqlalchemy.orm import sessionmaker
+
+from app.config import Settings, get_settings
+from app.db.session import get_engine
+from app.simulation import clock, engine
 
 logger = logging.getLogger("skyfleet.worker")
 
@@ -17,12 +23,17 @@ def run_tick(tick_number: int) -> None:
     logger.info("Simulation tick %d", tick_number)
 
 
-def run_forever(tick_seconds: float) -> None:
+def run_forever(settings: Settings) -> None:
+    factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
     tick_number = 0
     while True:
         tick_number += 1
         run_tick(tick_number)
-        time.sleep(tick_seconds)
+        try:
+            engine.run_step(factory, settings, clock.utcnow())
+        except Exception:  # a failed tick must not stop the worker; the next one retries
+            logger.exception("Simulation step failed")
+        time.sleep(settings.sim_tick_seconds)
 
 
 def main() -> None:
@@ -33,7 +44,7 @@ def main() -> None:
     )
     logger.info("Simulation Worker started (tick interval: %.2fs)", settings.sim_tick_seconds)
     try:
-        run_forever(settings.sim_tick_seconds)
+        run_forever(settings)
     except KeyboardInterrupt:
         logger.info("Simulation Worker stopped")
 

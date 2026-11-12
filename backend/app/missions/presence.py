@@ -6,6 +6,11 @@ of that Hub (the nearest Hub wins; equal distances go to the lower Hub id). `Dro
 administrative assignment and is deliberately not used. Docking and charging hardware will be the
 authoritative source later.
 
+A drone that is `IN_FLIGHT` or in `MAINTENANCE` is never docked, whatever its coordinates. The
+flight simulation ends an emergency by setting the drone to `MAINTENANCE` at its stop point, so
+this predicate (not geometry) guarantees such a drone cannot count toward a Hub's occupancy, even
+if the stop point happens to lie inside a Hub's docking radius.
+
 Occupancy is the number of drones docked at a Hub right now. Missions never count: assigning or
 cancelling a mission does not change it, and an in-flight drone counts at no Hub.
 """
@@ -17,10 +22,15 @@ from app.drones.models import Drone, DroneStatus
 from app.hubs.models import Hub
 from app.missions.routing import distance_km, hub_point
 
+# Statuses in which a drone is never counted as docked, regardless of its position.
+NOT_DOCKED_STATUSES: frozenset[str] = frozenset(
+    {DroneStatus.IN_FLIGHT.value, DroneStatus.MAINTENANCE.value}
+)
+
 
 def docked_hub(drone: Drone, hubs: Sequence[Hub], radius_m: float) -> Hub | None:
-    """The Hub the drone is docked at, or None (in flight, or not within range of any Hub)."""
-    if drone.status == DroneStatus.IN_FLIGHT:
+    """The Hub the drone is docked at, or None (in flight, in maintenance, or out of range)."""
+    if drone.status in NOT_DOCKED_STATUSES:
         return None
     position = (drone.longitude, drone.latitude)
     nearest: Hub | None = None

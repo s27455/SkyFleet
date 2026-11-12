@@ -5,7 +5,13 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
 import type { Order } from '../../types/order'
-import { type PixelOffset, createDroneMarkerElement, setDroneMarkerSelected } from './droneMarkers'
+import { type FlightVisual, interpolatePosition } from '../flights/interpolation'
+import {
+  type PixelOffset,
+  createDroneMarkerElement,
+  droneMarkerLabel,
+  setDroneMarkerSelected,
+} from './droneMarkers'
 import { createOrderMarkerElement, setOrderMarkerSelected } from './orderMarkers'
 import { MAP_STYLE, TRICITY_BOUNDS, TRICITY_FIT_PADDING_PX, getMapboxToken } from './mapConfig'
 
@@ -25,6 +31,7 @@ function MapMessage({ role, children }: { role: 'status' | 'alert'; children: Re
 const NO_HUBS: readonly Hub[] = []
 const NO_DRONES: readonly Drone[] = []
 const NO_ORDERS: readonly Order[] = []
+const NO_FLIGHTS: readonly FlightVisual[] = []
 const NO_COUNTS: ReadonlyMap<string, number> = new Map()
 const NO_OFFSETS: ReadonlyMap<string, PixelOffset> = new Map()
 const NO_PIXEL_OFFSET: PixelOffset = [0, 0]
@@ -88,6 +95,11 @@ interface MapViewProps {
   orderOffsets?: ReadonlyMap<string, PixelOffset>
   /** Screen-space offsets (px) by drone id for drones sharing a location. Display only. */
   droneOffsets?: ReadonlyMap<string, PixelOffset>
+  /**
+   * Backend flight snapshots of flying drones. Their markers are drawn at the snapshot and, where
+   * `animate` is set, glide toward the backend's target between snapshots.
+   */
+  flights?: readonly FlightVisual[]
 }
 
 /**
@@ -109,6 +121,7 @@ export function MapView({
   selectedOrderId = null,
   onSelectOrder,
   orderOffsets = NO_OFFSETS,
+  flights = NO_FLIGHTS,
 }: MapViewProps) {
   const token = getMapboxToken()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -175,24 +188,37 @@ export function MapView({
     droneOffsetsRef.current = droneOffsets
   }, [droneOffsets])
 
-  // Drone markers are rebuilt only when the drones themselves change, never on selection and
-  // never because display offsets changed (that would drop keyboard focus, e.g. when the Hubs load
-  // after the drones). Offsets are applied to the existing markers in the effect below. Stacking
-  // is explicit (`z-*` classes on the elements), not left to DOM order.
+  // The latest data, read by effects that must not be re-run on every update.
+  const dronesRef = useRef(drones)
+  const flightsRef = useRef(flights)
+  useEffect(() => {
+    dronesRef.current = drones
+    flightsRef.current = flights
+  }, [drones, flights])
+
+  // Drone markers are keyed on *which* drones have a marker and of what kind, not on their data:
+  // a flying drone's snapshot changes every second. A new snapshot only updates the existing
+  // markers in place (below), so they keep their elements and keyboard focus. They are never
+  // rebuilt on selection or because display offsets changed. Stacking is explicit (`z-*` classes).
+  const droneKey = drones
+    .map((drone) => `${drone.id}:${drone.status === 'IN_FLIGHT' ? 'flying' : 'away'}`)
+    .join('|')
+
   useEffect(() => {
     const map = mapRef.current
     const elements = droneElementsRef.current
     const markerByDrone = droneMarkersRef.current
     if (status !== 'ready' || !map) return
 
-    const markers = drones.map((drone) => {
+    const markers = dronesRef.current.map((drone) => {
       const element = createDroneMarkerElement(drone, () => onSelectDroneRef.current?.(drone.id))
       elements.set(drone.id, element)
+      const visual = flightsRef.current.find((flight) => flight.droneId === drone.id)
       const marker = new mapboxgl.Marker({
         element,
         offset: droneOffsetsRef.current.get(drone.id) ?? NO_PIXEL_OFFSET,
       })
-        .setLngLat(drone.coordinates)
+        .setLngLat(visual ? [...visual.motion.position] : drone.coordinates)
         .addTo(map)
       markerByDrone.set(drone.id, marker)
       return marker
@@ -203,20 +229,56 @@ export function MapView({
       elements.clear()
       markerByDrone.clear()
     }
-  }, [drones, status])
+  }, [droneKey, status])
+
+  // In place: the accessible name and the position follow the latest backend snapshot. A flying
+  // drone is drawn at its flight snapshot; the real stored coordinates are never changed.
+  useEffect(() => {
+    const visuals = new Map(flights.map((flight) => [flight.droneId, flight]))
+    for (const drone of drones) {
+      const element = droneElementsRef.current.get(drone.id)
+      const marker = droneMarkersRef.current.get(drone.id)
+      if (!element || !marker) continue
+      element.setAttribute('aria-label', droneMarkerLabel(drone))
+      const visual = visuals.get(drone.id)
+      marker.setLngLat(visual ? [...visual.motion.position] : drone.coordinates)
+    }
+  }, [drones, flights, status, droneKey])
+
+  // Smooth motion between two snapshots: only the picture, never the mission. Each frame moves
+  // the marker from the snapshot toward the backend's target, never past it; the next snapshot
+  // replaces it. Off for reduced motion and for a worker that stopped updating.
+  useEffect(() => {
+    if (status !== 'ready' || typeof requestAnimationFrame !== 'function') return
+    const animated = flights.filter((flight) => flight.animate)
+    if (animated.length === 0) return
+
+    let frame = 0
+    const step = () => {
+      const now = performance.now()
+      for (const visual of animated) {
+        droneMarkersRef.current
+          .get(visual.droneId)
+          ?.setLngLat(interpolatePosition(visual.motion, (now - visual.receivedAt) / 1000))
+      }
+      frame = requestAnimationFrame(step)
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [flights, status, droneKey])
 
   // Display only: shifts the marker on screen; the marker's coordinates stay the real ones.
   useEffect(() => {
     droneMarkersRef.current.forEach((marker, droneId) =>
       marker.setOffset(droneOffsets.get(droneId) ?? NO_PIXEL_OFFSET),
     )
-  }, [drones, droneOffsets, status])
+  }, [drones, droneOffsets, status, droneKey])
 
   useEffect(() => {
     droneElementsRef.current.forEach((element, droneId) =>
       setDroneMarkerSelected(element, droneId === selectedDroneId),
     )
-  }, [drones, status, selectedDroneId])
+  }, [drones, status, selectedDroneId, droneKey])
 
   useEffect(() => {
     orderOffsetsRef.current = orderOffsets

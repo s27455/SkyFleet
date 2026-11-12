@@ -56,11 +56,19 @@ def list_drones(session: Session) -> Sequence[Drone]:
     return session.scalars(select(Drone).order_by(Drone.id)).all()
 
 
-def order_has_active_mission(session: Session, order_id: str) -> bool:
+def order_has_active_mission(
+    session: Session, order_id: str, *, exclude_mission_id: str | None = None
+) -> bool:
     statement = select(Mission.id).where(Mission.order_id == order_id, Mission.status.in_(_ACTIVE))
+    if exclude_mission_id is not None:
+        statement = statement.where(Mission.id != exclude_mission_id)
     return session.scalars(statement.limit(1)).first() is not None
 
 
-def drone_has_active_mission(session: Session, drone_id: str) -> bool:
+def drone_has_active_mission(
+    session: Session, drone_id: str, *, exclude_mission_id: str | None = None
+) -> bool:
     statement = select(Mission.id).where(Mission.drone_id == drone_id, Mission.status.in_(_ACTIVE))
+    if exclude_mission_id is not None:
+        statement = statement.where(Mission.id != exclude_mission_id)
     return session.scalars(statement.limit(1)).first() is not None

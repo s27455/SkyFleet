@@ -29,6 +29,15 @@ class EnergyEstimate:
     required_battery_pct: float
 
 
+def consumption_rates(
+    *, weight_kg: float, model: DroneModel, payload_energy_factor: float
+) -> tuple[float, float]:
+    """(empty rate, loaded rate) in percent of battery per km."""
+    empty_rate = 100.0 / model.max_range_km
+    loaded_rate = empty_rate * (1 + payload_energy_factor * weight_kg / model.max_payload_kg)
+    return empty_rate, loaded_rate
+
+
 def estimate_energy(
     *,
     outbound_km: float,
@@ -37,8 +46,9 @@ def estimate_energy(
     model: DroneModel,
     payload_energy_factor: float,
 ) -> EnergyEstimate:
-    empty_rate = 100.0 / model.max_range_km
-    loaded_rate = empty_rate * (1 + payload_energy_factor * weight_kg / model.max_payload_kg)
+    empty_rate, loaded_rate = consumption_rates(
+        weight_kg=weight_kg, model=model, payload_energy_factor=payload_energy_factor
+    )
     expected = outbound_km * loaded_rate + return_km * empty_rate
     worst_case = (outbound_km + return_km) * loaded_rate
     reserve = float(model.min_battery_reserve_pct)

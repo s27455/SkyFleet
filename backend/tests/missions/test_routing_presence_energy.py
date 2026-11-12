@@ -89,13 +89,21 @@ def test_an_in_flight_drone_is_never_docked_even_exactly_over_a_hub() -> None:
     assert docked_hub(drone("D1", 0, 0, DroneStatus.IN_FLIGHT), hubs, 50) is None
 
 
-@pytest.mark.parametrize(
-    "status", [DroneStatus.IDLE, DroneStatus.CHARGING, DroneStatus.MAINTENANCE]
-)
-def test_non_flying_drones_are_docked(status: DroneStatus) -> None:
+@pytest.mark.parametrize("status", [DroneStatus.IDLE, DroneStatus.CHARGING])
+def test_idle_and_charging_drones_are_docked(status: DroneStatus) -> None:
     hubs = [hub("hub-a")]
 
     assert docked_hub(drone("D1", 0, 0, status), hubs, 50) is hubs[0]
+
+
+def test_a_drone_in_maintenance_is_never_docked_whatever_its_coordinates() -> None:
+    # The emergency outcome of the flight simulation uses MAINTENANCE, so it must never count at
+    # a Hub even when the stop point lies exactly on the Hub. The predicate guarantees it.
+    hubs = [hub("hub-a")]
+
+    assert docked_hub(drone("D1", 0, 0, DroneStatus.MAINTENANCE), hubs, 50) is None
+    assert docked_hub(drone("D1", metres_east(10), 0, DroneStatus.MAINTENANCE), hubs, 50) is None
+    assert hub_occupancy([drone("D1", 0, 0, DroneStatus.MAINTENANCE)], hubs, 50)["hub-a"] == 0
 
 
 def test_the_nearest_hub_wins_and_ties_go_to_the_lower_id() -> None:

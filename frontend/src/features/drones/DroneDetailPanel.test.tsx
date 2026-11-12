@@ -65,7 +65,9 @@ describe('DroneDetailPanel', () => {
     render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
 
     expect(valueOf('Stored position')).toHaveTextContent('54.504662, 18.531786')
-    expect(screen.getByText(/not a live flight feed/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/refreshed about every 2 seconds; flights are simulated/),
+    ).toBeInTheDocument()
     expect(screen.queryByText(/spread slightly/)).not.toBeInTheDocument()
   })
 

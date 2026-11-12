@@ -177,11 +177,16 @@ def test_a_drone_with_an_active_mission_is_not_assignable() -> None:
     assert codes(result) == {ReasonCode.DRONE_ALREADY_ASSIGNED}
 
 
-@pytest.mark.parametrize("status", [DroneStatus.CHARGING, DroneStatus.MAINTENANCE])
-def test_only_an_idle_drone_is_available(status: DroneStatus) -> None:
-    result = plan(order(DESTINATION), drone("D1", 0.0, status=status), HUBS)
+def test_only_an_idle_drone_is_available() -> None:
+    result = plan(order(DESTINATION), drone("D1", 0.0, status=DroneStatus.CHARGING), HUBS)
 
     assert codes(result) == {ReasonCode.DRONE_NOT_AVAILABLE}
+
+
+def test_a_drone_in_maintenance_is_unavailable_and_never_docked_at_the_origin_hub() -> None:
+    result = plan(order(DESTINATION), drone("D1", 0.0, status=DroneStatus.MAINTENANCE), HUBS)
+
+    assert codes(result) == {ReasonCode.DRONE_NOT_AVAILABLE, ReasonCode.DRONE_NOT_AT_ORIGIN_HUB}
 
 
 def test_an_in_flight_drone_is_neither_available_nor_at_the_hub() -> None:

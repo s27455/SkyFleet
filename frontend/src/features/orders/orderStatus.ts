@@ -6,6 +6,8 @@ export const ORDER_STATUS_DISPLAY: Record<OrderStatus, { tone: StatusTone; label
   CREATED: { tone: 'neutral', label: 'Created' },
   AWAITING_HANDOVER: { tone: 'warning', label: 'Awaiting handover' },
   READY_FOR_PICKUP: { tone: 'ok', label: 'Ready for pickup' },
+  OUT_FOR_DELIVERY: { tone: 'warning', label: 'Out for delivery' },
+  DELIVERED: { tone: 'neutral', label: 'Delivered' },
 }
 
 const UTC_FORMAT = new Intl.DateTimeFormat('en-GB', {

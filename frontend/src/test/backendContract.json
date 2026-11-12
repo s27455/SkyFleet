@@ -1,0 +1,500 @@
+{
+  "_note": "Captured from the real backend (Feature 010) by a script; PostgreSQL 17, controlled clock.",
+  "flights_active": {
+    "server_time": "2026-11-12T10:00:08.500000Z",
+    "worker_heartbeat_at": "2026-11-12T10:00:00Z",
+    "worker_stale": false,
+    "flights": [
+      {
+        "mission_id": "MIS-889DAB20",
+        "order_id": "ORD-001",
+        "drone_id": "DRN-010",
+        "mission_status": "IN_FLIGHT",
+        "phase": "OUTBOUND",
+        "progress": 0.22296316240645345,
+        "position": [18.598993981001584, 54.37979017369094],
+        "battery_pct": 98,
+        "battery_exact_pct": 98.10825676941259,
+        "target": {
+          "position": [18.5972, 54.3768],
+          "eta_s": 8.440183287803169
+        },
+        "origin_hub_id": "hub-galeria-baltycka",
+        "planned_return_hub_id": "hub-galeria-baltycka",
+        "landing_target_hub_id": "hub-galeria-baltycka",
+        "started_at": "2026-11-12T10:00:00Z",
+        "delivered_at": null,
+        "updated_at": "2026-11-12T10:00:08Z",
+        "emergency": null
+      }
+    ]
+  },
+  "flights_emergency": {
+    "server_time": "2026-11-12T10:04:20.500000Z",
+    "worker_heartbeat_at": "2026-11-12T10:04:20.500000Z",
+    "worker_stale": false,
+    "flights": [
+      {
+        "mission_id": "MIS-24FE6469",
+        "order_id": "ORD-002",
+        "drone_id": "DRN-011",
+        "mission_status": "EMERGENCY",
+        "phase": "EMERGENCY",
+        "progress": 1.0,
+        "position": [18.59996516250416, 54.38295730642568],
+        "battery_pct": 79,
+        "battery_exact_pct": 79.19769101811801,
+        "target": null,
+        "origin_hub_id": "hub-galeria-baltycka",
+        "planned_return_hub_id": "hub-galeria-baltycka",
+        "landing_target_hub_id": "hub-galeria-baltycka",
+        "started_at": "2026-11-12T10:01:00Z",
+        "delivered_at": "2026-11-12T10:01:20.729451Z",
+        "updated_at": "2026-11-12T00:15:24.759064Z",
+        "emergency": {
+          "reason": "NO_HUB_WITH_CAPACITY",
+          "at": "2026-11-12T10:01:37.380984Z",
+          "position": [18.59996516250416, 54.38295730642568]
+        }
+      }
+    ]
+  },
+  "missions": [
+    {
+      "id": "MIS-889DAB20",
+      "order_id": "ORD-001",
+      "drone_id": "DRN-010",
+      "origin_hub_id": "hub-galeria-baltycka",
+      "return_hub_id": "hub-galeria-baltycka",
+      "status": "COMPLETED",
+      "origin_to_destination_km": 0.6860427671540729,
+      "destination_to_return_km": 0.6860427671540729,
+      "total_km": 1.3720855343081457,
+      "expected_energy_pct": 7.3177895163101105,
+      "worst_case_energy_pct": 7.775151361079492,
+      "created_at": "2026-11-12T00:15:24.552813Z",
+      "updated_at": "2026-11-12T00:15:24.665470Z"
+    },
+    {
+      "id": "MIS-D01F5EDF",
+      "order_id": "ORD-003",
+      "drone_id": "DRN-012",
+      "origin_hub_id": "hub-galeria-baltycka",
+      "return_hub_id": "hub-galeria-baltycka",
+      "status": "ASSIGNED",
+      "origin_to_destination_km": 1.4136051915071342,
+      "destination_to_return_km": 1.4136051915071342,
+      "total_km": 2.8272103830142683,
+      "expected_energy_pct": 16.727661432834424,
+      "worst_case_energy_pct": 19.319270950597502,
+      "created_at": "2026-11-12T00:15:24.605577Z",
+      "updated_at": "2026-11-12T00:15:24.605580Z"
+    },
+    {
+      "id": "MIS-24FE6469",
+      "order_id": "ORD-002",
+      "drone_id": "DRN-011",
+      "origin_hub_id": "hub-galeria-baltycka",
+      "return_hub_id": "hub-galeria-baltycka",
+      "status": "EMERGENCY",
+      "origin_to_destination_km": 0.9868719095006215,
+      "destination_to_return_km": 0.9868719095006215,
+      "total_km": 1.973743819001243,
+      "expected_energy_pct": 11.102308981881993,
+      "worst_case_energy_pct": 12.33589886875777,
+      "created_at": "2026-11-12T00:15:24.682900Z",
+      "updated_at": "2026-11-12T00:15:24.756406Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": "ORD-001",
+      "origin_hub_id": "hub-galeria-baltycka",
+      "destination_address": "ul. Grunwaldzka 82, Gdańsk",
+      "destination_longitude": 18.5972,
+      "destination_latitude": 54.3768,
+      "package_weight_kg": 0.8,
+      "status": "DELIVERED",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.649635Z"
+    },
+    {
+      "id": "ORD-002",
+      "origin_hub_id": "hub-galeria-baltycka",
+      "destination_address": "ul. Do Studzienki 25, Gdańsk",
+      "destination_longitude": 18.5887,
+      "destination_latitude": 54.3881,
+      "package_weight_kg": 1.5,
+      "status": "DELIVERED",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.737928Z"
+    },
+    {
+      "id": "ORD-003",
+      "origin_hub_id": "hub-galeria-baltycka",
+      "destination_address": "ul. Słowackiego 200, Gdańsk",
+      "destination_longitude": 18.612,
+      "destination_latitude": 54.3935,
+      "package_weight_kg": 2.2,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    },
+    {
+      "id": "ORD-004",
+      "origin_hub_id": "hub-forum-gdansk",
+      "destination_address": "ul. Długa 45, Gdańsk",
+      "destination_longitude": 18.6531,
+      "destination_latitude": 54.3487,
+      "package_weight_kg": 0.3,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    },
+    {
+      "id": "ORD-005",
+      "origin_hub_id": "hub-forum-gdansk",
+      "destination_address": "ul. Chmielna 10, Gdańsk",
+      "destination_longitude": 18.641,
+      "destination_latitude": 54.3512,
+      "package_weight_kg": 1.1,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    },
+    {
+      "id": "ORD-006",
+      "origin_hub_id": "hub-forum-gdansk",
+      "destination_address": "ul. Podwale Staromiejskie 60, Gdańsk",
+      "destination_longitude": 18.6459,
+      "destination_latitude": 54.3558,
+      "package_weight_kg": 3.0,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    },
+    {
+      "id": "ORD-007",
+      "origin_hub_id": "hub-centrum-riviera",
+      "destination_address": "ul. Świętojańska 30, Gdynia",
+      "destination_longitude": 18.544,
+      "destination_latitude": 54.5189,
+      "package_weight_kg": 0.6,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    },
+    {
+      "id": "ORD-008",
+      "origin_hub_id": "hub-centrum-riviera",
+      "destination_address": "ul. Morska 59, Gdynia",
+      "destination_longitude": 18.512,
+      "destination_latitude": 54.505,
+      "package_weight_kg": 2.4,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    },
+    {
+      "id": "ORD-009",
+      "origin_hub_id": "hub-centrum-handlowe-osowa",
+      "destination_address": "ul. Spacerowa 12, Gdańsk",
+      "destination_longitude": 18.4952,
+      "destination_latitude": 54.4311,
+      "package_weight_kg": 1.9,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    },
+    {
+      "id": "ORD-010",
+      "origin_hub_id": "hub-centrum-handlowe-osowa",
+      "destination_address": "ul. Kielnieńska 5, Gdańsk",
+      "destination_longitude": 18.472,
+      "destination_latitude": 54.418,
+      "package_weight_kg": 0.5,
+      "status": "READY_FOR_PICKUP",
+      "created_at": "2026-11-12T00:15:24.445516Z",
+      "updated_at": "2026-11-12T00:15:24.445516Z"
+    }
+  ],
+  "drones": [
+    {
+      "id": "DRN-001",
+      "hub_id": "hub-centrum-handlowe-osowa",
+      "status": "IDLE",
+      "battery_pct": 100,
+      "longitude": 18.49097,
+      "latitude": 54.42569,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-002",
+      "hub_id": "hub-centrum-handlowe-osowa",
+      "status": "IDLE",
+      "battery_pct": 90,
+      "longitude": 18.49097,
+      "latitude": 54.42569,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-003",
+      "hub_id": "hub-centrum-handlowe-osowa",
+      "status": "IDLE",
+      "battery_pct": 80,
+      "longitude": 18.49097,
+      "latitude": 54.42569,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-004",
+      "hub_id": "hub-centrum-riviera",
+      "status": "IDLE",
+      "battery_pct": 100,
+      "longitude": 18.5317863,
+      "latitude": 54.5046621,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-005",
+      "hub_id": "hub-centrum-riviera",
+      "status": "IDLE",
+      "battery_pct": 90,
+      "longitude": 18.5317863,
+      "latitude": 54.5046621,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-006",
+      "hub_id": "hub-centrum-riviera",
+      "status": "IDLE",
+      "battery_pct": 80,
+      "longitude": 18.5317863,
+      "latitude": 54.5046621,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-007",
+      "hub_id": "hub-forum-gdansk",
+      "status": "IDLE",
+      "battery_pct": 100,
+      "longitude": 18.643527,
+      "latitude": 54.349346,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-008",
+      "hub_id": "hub-forum-gdansk",
+      "status": "IDLE",
+      "battery_pct": 90,
+      "longitude": 18.643527,
+      "latitude": 54.349346,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-009",
+      "hub_id": "hub-forum-gdansk",
+      "status": "IDLE",
+      "battery_pct": 80,
+      "longitude": 18.643527,
+      "latitude": 54.349346,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-010",
+      "hub_id": "hub-galeria-baltycka",
+      "status": "IDLE",
+      "battery_pct": 93,
+      "longitude": 18.6006944,
+      "latitude": 54.3826244,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-011",
+      "hub_id": "hub-galeria-baltycka",
+      "status": "MAINTENANCE",
+      "battery_pct": 79,
+      "longitude": 18.59996516250416,
+      "latitude": 54.38295730642568,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    },
+    {
+      "id": "DRN-012",
+      "hub_id": "hub-galeria-baltycka",
+      "status": "IDLE",
+      "battery_pct": 80,
+      "longitude": 18.6006944,
+      "latitude": 54.3826244,
+      "model": {
+        "id": "SF-1",
+        "name": "SkyFleet SF-1 Courier",
+        "airframe_type": "hexacopter",
+        "max_payload_kg": 3.0,
+        "max_range_km": 20.0,
+        "recommended_mission_range_km": 14.0,
+        "cruise_speed_kmh": 45.0,
+        "max_speed_kmh": 60.0,
+        "nominal_flight_time_min": 32,
+        "min_battery_reserve_pct": 20,
+        "charge_to_80_minutes": 45,
+        "max_wind_mps": 10.0,
+        "empty_weight_kg": 9.0
+      }
+    }
+  ],
+  "assigned_mission_id": "MIS-D01F5EDF"
+}

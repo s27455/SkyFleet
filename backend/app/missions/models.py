@@ -20,6 +20,11 @@ class MissionStatus(StrEnum):
     # Reserved for the flight simulation feature; Feature 009 never sets it.
     IN_FLIGHT = "IN_FLIGHT"
     CANCELLED = "CANCELLED"
+    # Terminal, set by the flight simulation: the drone landed at a Hub after the delivery.
+    COMPLETED = "COMPLETED"
+    # Terminal, set by the flight simulation: a simulated emergency ended the flight (no safe Hub
+    # landing was possible). The drone is in MAINTENANCE at its stop point.
+    EMERGENCY = "EMERGENCY"
 
 
 # A mission is active (it claims its order and its drone) while assigned or in flight.

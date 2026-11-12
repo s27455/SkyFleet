@@ -73,9 +73,9 @@ def test_losing_a_race_to_the_unique_index_is_reported_as_already_assigned(
     real_check = repository.order_has_active_mission
     seen: list[int] = []
 
-    def stale_then_real(session: Session, order_id: str) -> bool:
+    def stale_then_real(session: Session, order_id: str, **kwargs: str | None) -> bool:
         seen.append(1)
-        return False if len(seen) == 1 else real_check(session, order_id)
+        return False if len(seen) == 1 else real_check(session, order_id, **kwargs)
 
     monkeypatch.setattr(repository, "order_has_active_mission", stale_then_real)
 

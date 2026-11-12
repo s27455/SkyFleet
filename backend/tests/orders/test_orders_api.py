@@ -34,7 +34,7 @@ def test_list_orders_returns_seeded_orders_in_stable_order(
 
     assert response.status_code == 200
     orders = response.json()
-    assert [o["id"] for o in orders] == [f"ORD-{n:03d}" for n in range(1, 11)]
+    assert [o["id"] for o in orders] == [f"ORD-{n:03d}" for n in range(1, 12)]
     assert all(set(o) == ORDER_FIELDS for o in orders)
     assert client.get("/api/orders").json() == orders
 

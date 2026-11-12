@@ -317,7 +317,7 @@ def test_cancelling_an_unknown_mission_is_404(client: TestClient, seeded: Sessio
 def test_existing_apis_are_unchanged(client: TestClient, seeded: Session) -> None:
     assert len(client.get("/api/hubs").json()) == 4
     assert len(client.get("/api/drones").json()) == 12
-    assert len(client.get("/api/orders").json()) == 10
+    assert len(client.get("/api/orders").json()) == 11
     assert set(client.get("/api/orders").json()[0]) == {
         "id",
         "origin_hub_id",
@@ -402,3 +402,19 @@ def test_an_active_mission_reserves_no_landing_capacity_at_its_return_hub(
     assert second_plan["skipped_return_hubs"] == []
     assert occupancy(second_plan) == occupancy(first_plan)  # physical occupancy is unchanged
     assert occupancy(second_plan)["hub-forum-gdansk"] == 3
+
+
+def test_the_cross_hub_demo_order_is_planned_from_baltycka_to_forum_gdansk(
+    client: TestClient, seeded: Session
+) -> None:
+    """ORD-011 is picked up at Bałtycka and delivered at Forum Gdańsk; DRN-011 waits at Bałtycka."""
+    plan = preview(client, "ORD-011", "DRN-011").json()
+
+    assert plan["eligible"] is True
+    assert plan["reasons"] == []
+    assert plan["route"]["origin_hub_id"] == "hub-galeria-baltycka"
+    assert plan["route"]["return_hub_id"] == "hub-forum-gdansk"  # chosen by the normal rules
+    assert plan["route"]["destination_to_return_km"] == 0  # the destination is Forum's own spot
+    assert 4.0 < plan["route"]["total_km"] < 5.5
+    assert plan["energy"]["required_battery_pct"] < plan["energy"]["drone_battery_pct"]
+    assert plan["skipped_return_hubs"] == []

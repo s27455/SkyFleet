@@ -20,15 +20,19 @@ MAX_PACKAGE_WEIGHT_KG = 3.0
 
 
 class OrderStatus(StrEnum):
-    """Only the initial states confirmed in business-rules.md section 3.
+    """Initial states (business-rules.md section 3) plus the two delivery states of Feature 010.
 
-    The lifecycle after `READY_FOR_PICKUP` is not decided yet (section 8, Q1); later states are
+    Failed delivery and parcel-return states are not decided yet (section 8); further states are
     added by a migration when a feature needs them.
     """
 
     CREATED = "CREATED"
     AWAITING_HANDOVER = "AWAITING_HANDOVER"
     READY_FOR_PICKUP = "READY_FOR_PICKUP"
+    # Set by the flight simulation: at takeoff, and when the parcel reaches the destination. The
+    # order is DELIVERED before the drone returns and the mission completes.
+    OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
+    DELIVERED = "DELIVERED"
 
 
 _STATUS_VALUES = ", ".join(f"'{status.value}'" for status in OrderStatus)

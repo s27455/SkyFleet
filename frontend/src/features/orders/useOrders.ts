@@ -1,7 +1,8 @@
 import { getOrders } from '../../api/orders'
-import { useApiResource } from '../data/useApiResource'
+import { POLL_INTERVALS_MS } from '../data/polling'
+import { usePolledResource } from '../data/usePolledResource'
 
-/** Loads the order snapshot once, with a retry. No polling and no mock fallback. */
+/** Loads the orders and keeps them fresh (statuses change at takeoff and at delivery). */
 export function useOrders() {
-  return useApiResource(getOrders)
+  return usePolledResource(getOrders, POLL_INTERVALS_MS.fleet)
 }

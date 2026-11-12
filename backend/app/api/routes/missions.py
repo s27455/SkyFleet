@@ -11,6 +11,8 @@ from app.db.session import get_session
 from app.missions import repository, service
 from app.missions.models import Mission
 from app.missions.schemas import MissionCreateRequest, MissionResponse, PlanResponse
+from app.simulation import clock
+from app.simulation import service as simulation_service
 
 router = APIRouter(prefix="/missions", tags=["missions"])
 
@@ -74,6 +76,44 @@ def get_mission(mission_id: str, session: SessionDep) -> Mission:
     if mission is None:
         raise HTTPException(status_code=404, detail=f"Mission '{mission_id}' not found")
     return mission
+
+
+@router.post("/{mission_id}/start", response_model=MissionResponse)
+def start_mission(mission_id: str, session: SessionDep, settings: SettingsDep) -> Mission:
+    """Takeoff: starts an ASSIGNED mission exactly once. Needs a running simulation worker."""
+    try:
+        return simulation_service.start_mission(session, mission_id, clock.utcnow(), settings)
+    except service.MissionNotFoundError as error:
+        raise _not_found(error) from error
+    except simulation_service.WorkerUnavailableError as error:
+        last = error.last_heartbeat_at
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "SIMULATION_WORKER_UNAVAILABLE",
+                "message": str(error),
+                "last_heartbeat_at": last.isoformat() if last else None,
+                "max_age_seconds": error.max_age_seconds,
+            },
+        ) from error
+    except simulation_service.MissionNotStartableError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MISSION_NOT_STARTABLE",
+                "message": str(error),
+                "status": error.status,
+            },
+        ) from error
+    except service.PlanRejectedError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "MISSION_NOT_ELIGIBLE",
+                "message": str(error),
+                "plan": error.plan.model_dump(mode="json"),
+            },
+        ) from error
 
 
 @router.post("/{mission_id}/cancel", response_model=MissionResponse)

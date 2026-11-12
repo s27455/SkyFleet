@@ -1,25 +1,36 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { startMission } from './api/missions'
 import { ResourceStatusBanner } from './features/data/ResourceStatusBanner'
 import { DroneDetailPanel } from './features/drones/DroneDetailPanel'
 import { useDrones } from './features/drones/useDrones'
-import { OrderDetailPanel } from './features/orders/OrderDetailPanel'
-import { OrdersList } from './features/orders/OrdersList'
-import { useOrders } from './features/orders/useOrders'
+import { canAnimateFlights, flightsByDrone, isActiveFlight } from './features/flights/flightStatus'
+import type { FlightVisual } from './features/flights/interpolation'
+import { LiveDataNotices } from './features/flights/LiveDataNotices'
+import { useFlights } from './features/flights/useFlights'
+import { usePrefersReducedMotion } from './features/flights/usePrefersReducedMotion'
 import { HubDetailPanel } from './features/hubs/HubDetailPanel'
 import { useHubs } from './features/hubs/useHubs'
 import { computeDroneOffsets } from './features/map/droneMarkers'
 import { partitionFleet } from './features/map/fleetPlacement'
-import { computeOrderOffsets } from './features/map/orderMarkers'
 import { MapView } from './features/map/MapView'
+import { computeOrderOffsets } from './features/map/orderMarkers'
+import { useMissions } from './features/missions/useMissions'
+import { OrderDetailPanel } from './features/orders/OrderDetailPanel'
+import { OrdersList } from './features/orders/OrdersList'
+import { useOrders } from './features/orders/useOrders'
 import { BackendStatus } from './features/system-status/BackendStatus'
 import type { Drone } from './types/drone'
+import type { Flight } from './types/flight'
 import type { Hub } from './types/hub'
+import type { Mission } from './types/mission'
 import type { Order } from './types/order'
 
 const NO_HUBS: readonly Hub[] = []
 const NO_DRONES: readonly Drone[] = []
 const NO_ORDERS: readonly Order[] = []
+const NO_FLIGHTS: readonly Flight[] = []
+const NO_MISSIONS: readonly Mission[] = []
 
 /** Only one Hub, drone or order is selected at a time, so only one detail panel can be open. */
 type Selection =
@@ -29,9 +40,18 @@ function App() {
   const hubsResource = useHubs()
   const dronesResource = useDrones()
   const ordersResource = useOrders()
+  const flightsResource = useFlights()
+  const missionsResource = useMissions()
+  const reducedMotion = usePrefersReducedMotion()
   const hubs = hubsResource.state.status === 'ready' ? hubsResource.state.data : NO_HUBS
   const drones = dronesResource.state.status === 'ready' ? dronesResource.state.data : NO_DRONES
   const orders = ordersResource.state.status === 'ready' ? ordersResource.state.data : NO_ORDERS
+  const flightsSnapshot =
+    flightsResource.state.status === 'ready' ? flightsResource.state.data : null
+  const flights = flightsSnapshot?.flights ?? NO_FLIGHTS
+  const workerStale = flightsSnapshot?.workerStale ?? true
+  const missions =
+    missionsResource.state.status === 'ready' ? missionsResource.state.data : NO_MISSIONS
 
   const [selection, setSelection] = useState<Selection | null>(null)
   const selectHub = useCallback((id: string) => setSelection({ kind: 'hub', id }), [])
@@ -67,6 +87,87 @@ function App() {
   )
   const droneOffsets = useMemo(() => computeDroneOffsets(markerDrones, hubs), [markerDrones, hubs])
 
+  // Flights: the backend's snapshots. The map only glides between them (and not at all for reduced
+  // motion or a worker that stopped updating); phase, battery and landing come from the backend.
+  const flightByDrone = useMemo(() => flightsByDrone(flights), [flights])
+  const receivedAt = flightsResource.receivedAt
+  const flightsStale = flightsResource.stale
+  const flightVisuals = useMemo<FlightVisual[]>(
+    () =>
+      receivedAt === null
+        ? []
+        : flights.filter(isActiveFlight).map((flight) => ({
+            droneId: flight.droneId,
+            motion: {
+              position: flight.position,
+              target: flight.target,
+              snapshotAgeS: flight.snapshotAgeS,
+            },
+            receivedAt,
+            animate: canAnimateFlights({
+              reducedMotion,
+              workerStale,
+              refreshFailed: flightsStale,
+            }),
+          })),
+    [flights, receivedAt, reducedMotion, workerStale, flightsStale],
+  )
+
+  // The temporary Start Mission control: only missions that are already assigned.
+  const assignedMissions = useMemo(
+    () => missions.filter((mission) => mission.status === 'ASSIGNED'),
+    [missions],
+  )
+  const assignedByOrder = useMemo(
+    () => new Map(assignedMissions.map((mission) => [mission.orderId, mission])),
+    [assignedMissions],
+  )
+  const assignedByDrone = useMemo(
+    () => new Map(assignedMissions.map((mission) => [mission.droneId, mission])),
+    [assignedMissions],
+  )
+  const assignedMissionDroneIds = useMemo(
+    () => new Set(assignedMissions.map((mission) => mission.droneId)),
+    [assignedMissions],
+  )
+
+  const refreshDrones = dronesResource.refresh
+  const refreshOrders = ordersResource.refresh
+  const refreshFlights = flightsResource.refresh
+  const refreshMissions = missionsResource.refresh
+  const startAssignedMission = useCallback(
+    async (missionId: string) => {
+      try {
+        await startMission(missionId)
+      } finally {
+        // Show the outcome now instead of waiting for the next poll, whatever it was: a refused
+        // or unreadable answer may still mean the state changed.
+        refreshMissions()
+        refreshDrones()
+        refreshOrders()
+        refreshFlights()
+      }
+    },
+    [refreshMissions, refreshDrones, refreshOrders, refreshFlights],
+  )
+
+  // A takeoff or a landing changes drones, orders and missions together. When the set of flying
+  // missions changes, read them at once so markers, Hub counts and statuses agree with the flights.
+  const flyingKey = flights
+    .filter(isActiveFlight)
+    .map((flight) => flight.missionId)
+    .sort()
+    .join('|')
+  const previousFlyingKey = useRef<string | null>(null)
+  useEffect(() => {
+    if (previousFlyingKey.current !== null && previousFlyingKey.current !== flyingKey) {
+      refreshDrones()
+      refreshOrders()
+      refreshMissions()
+    }
+    previousFlyingKey.current = flyingKey
+  }, [flyingKey, refreshDrones, refreshOrders, refreshMissions])
+
   return (
     <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6">
@@ -89,6 +190,7 @@ function App() {
           selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
           onSelectDrone={selectDrone}
           droneOffsets={droneOffsets}
+          flights={flightVisuals}
           orders={orders}
           selectedOrderId={selection?.kind === 'order' ? selection.id : null}
           onSelectOrder={selectOrder}
@@ -110,6 +212,15 @@ function App() {
             state={ordersResource.state}
             onRetry={ordersResource.retry}
           />
+          <LiveDataNotices
+            flights={flightsResource}
+            missions={missionsResource}
+            fleetStale={dronesResource.stale || ordersResource.stale}
+            onRefreshFleet={() => {
+              refreshDrones()
+              refreshOrders()
+            }}
+          />
           <OrdersList
             orders={orders}
             hubs={hubs}
@@ -123,6 +234,7 @@ function App() {
             hub={selectedHub}
             dockedDrones={dockedByHub.get(selectedHub.id)}
             onSelectDrone={selectDrone}
+            assignedMissionDroneIds={assignedMissionDroneIds}
             onClose={clearSelection}
           />
         )}
@@ -132,6 +244,9 @@ function App() {
             hub={hubs.find((hub) => hub.id === selectedOrder.originHubId)}
             markerSpread={orderOffsets.has(selectedOrder.id)}
             onClose={clearSelection}
+            hubs={hubs}
+            assignedMission={assignedByOrder.get(selectedOrder.id)}
+            onStartMission={startAssignedMission}
           />
         )}
         {selectedDrone && (
@@ -140,6 +255,11 @@ function App() {
             hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
             markerSpread={droneOffsets.has(selectedDrone.id)}
             onClose={clearSelection}
+            hubs={hubs}
+            flight={flightByDrone.get(selectedDrone.id)}
+            workerStale={workerStale}
+            assignedMission={assignedByDrone.get(selectedDrone.id)}
+            onStartMission={startAssignedMission}
           />
         )}
       </main>

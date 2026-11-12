@@ -58,14 +58,23 @@ describe('partitionFleet', () => {
     expect(markerDrones).toEqual([])
   })
 
-  it.each<DroneStatus>(['IDLE', 'CHARGING', 'MAINTENANCE'])(
-    'docks a %s drone at a Hub',
-    (status) => {
-      const { dockedByHub } = partitionFleet([drone('DRN-001', HUB_A.coordinates, status)], [HUB_A])
+  it.each<DroneStatus>(['IDLE', 'CHARGING'])('docks a %s drone at a Hub', (status) => {
+    const { dockedByHub } = partitionFleet([drone('DRN-001', HUB_A.coordinates, status)], [HUB_A])
 
-      expect(dockedByHub.get('hub-a')).toHaveLength(1)
-    },
-  )
+    expect(dockedByHub.get('hub-a')).toHaveLength(1)
+  })
+
+  it('never docks a drone in MAINTENANCE, whatever its coordinates (the backend rule)', () => {
+    // The simulated emergency parks the drone in MAINTENANCE where it stopped, possibly inside a
+    // Hub's docking radius. It must not count toward that Hub; it stays visible as its own marker.
+    const onTheHub = drone('DRN-001', HUB_A.coordinates, 'MAINTENANCE')
+    const insideRadius = drone('DRN-002', northOf(HUB_A.coordinates, 20), 'MAINTENANCE')
+
+    const { dockedByHub, markerDrones } = partitionFleet([onTheHub, insideRadius], [HUB_A])
+
+    expect(dockedByHub.size).toBe(0)
+    expect(markerDrones).toEqual([onTheHub, insideRadius])
+  })
 
   it('never docks an IN_FLIGHT drone, even exactly over a Hub', () => {
     const flying = drone('DRN-001', HUB_A.coordinates, 'IN_FLIGHT')
