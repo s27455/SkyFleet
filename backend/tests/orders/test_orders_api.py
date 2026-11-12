@@ -69,12 +69,6 @@ def test_unknown_order_returns_404(client: TestClient, session: Session) -> None
     assert "ORD-999" in response.json()["detail"]
 
 
-def test_orders_api_is_read_only(client: TestClient) -> None:
-    assert client.post("/api/orders", json={}).status_code == 405
-    assert client.patch("/api/orders/ORD-001", json={}).status_code == 405
-    assert client.delete("/api/orders/ORD-001").status_code == 405
-
-
 def test_hubs_and_drones_apis_still_work(client: TestClient, session: Session) -> None:
     seed_hubs(session)
     seed_orders(session)

@@ -1,5 +1,19 @@
 # Feature 012 — Order Management API
 
+**Status:** Implemented (backend only) and verified on SQLite; independent QA and code review not run; PostgreSQL locking not verified. Not committed.
+
+## Implementation notes (verified)
+- Endpoints: `POST /api/orders` (201), `PATCH /api/orders/{id}`, `DELETE /api/orders/{id}` (204); the existing GET endpoints are unchanged. Code: `backend/app/orders/{schemas,service,repository}.py`, `backend/app/api/routes/orders.py`; tests: `backend/tests/orders/test_orders_management.py`. No migration, seed or data change.
+- Create accepts `origin_hub_id`, `destination_address` (trimmed, non-empty), destination coordinates and `package_weight_kg` (greater than 0, at most 3.0, the existing limit). The backend generates the id (`ORD-` plus 8 hex characters) and sets `READY_FOR_PICKUP`; any other field (status, id) is a 422. Creating an order never creates a mission.
+- Update accepts only the five fields above, requires at least one, rejects nulls. Update and delete are allowed only for a `READY_FOR_PICKUP` order that no mission (any status) references; otherwise 409 `ORDER_HAS_MISSIONS` or `ORDER_NOT_EDITABLE`. Delete never cascades.
+- Errors use `{code, message}` (`ORDER_NOT_FOUND`, `HUB_NOT_FOUND`, `ORDER_HAS_MISSIONS`, `ORDER_NOT_EDITABLE`); the older GET 404 keeps its plain string `detail`.
+- Decision: delete is restricted to `READY_FOR_PICKUP` orders (approved assumption). The obsolete test `test_orders_api_is_read_only` was removed because this feature intentionally adds those methods.
+
+## Verification
+- Passed: full backend suite 325 passed (13 PostgreSQL-marked tests deselected by default), `ruff` and `mypy` clean.
+- Not run: independent QA and code-review agents; PostgreSQL tests (port 55432 was not reachable), so the row locking (`FOR UPDATE`) is untested; manual Swagger run.
+- Known limitation: one new test compares a fresh read without `updated_at` because SQLite returns naive timestamps; not checked on PostgreSQL.
+
 ## Goal
 Provide a minimal, safe backend CRUD API for administrative management of SkyFleet orders. Enable creating realistic delivery scenarios directly through Swagger and later through the Management UI, without manually editing PostgreSQL. This feature is backend-only.
 
