@@ -1,6 +1,8 @@
 """API response contracts for drones."""
 
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.drones.models import DroneStatus
 
@@ -33,3 +35,23 @@ class DroneResponse(BaseModel):
     longitude: float
     latitude: float
     model: DroneModelResponse
+
+
+class DroneCreateRequest(BaseModel):
+    """Administrator-controlled fields only; status, position and model are set by the backend."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^DRN-\d{3,}$", max_length=32)
+    hub_id: str = Field(min_length=1, max_length=64)
+    battery_pct: int = Field(default=100, ge=0, le=100)
+
+
+class DroneUpdateRequest(BaseModel):
+    """Whitelisted administrative changes; every other field is rejected (422)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal[DroneStatus.IDLE, DroneStatus.MAINTENANCE] | None = None
+    hub_id: str | None = Field(default=None, min_length=1, max_length=64)
+    battery_pct: int | None = Field(default=None, ge=0, le=100)
