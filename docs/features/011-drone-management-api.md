@@ -1,5 +1,19 @@
 # Feature 011 — Drone Management API
 
+**Status:** Implemented (backend only) and verified on SQLite; PostgreSQL row-lock behavior not verified. Not committed.
+
+## Implementation notes (verified)
+- Endpoints: `POST /api/drones` (201), `PATCH /api/drones/{id}`, `DELETE /api/drones/{id}` (204); the existing GET endpoints are unchanged. Code: `backend/app/drones/{schemas,service,repository}.py`, `backend/app/api/routes/drones.py`; tests: `backend/tests/drones/test_drones_management.py`. No migration, seed or data change.
+- Create accepts `id` (`DRN-` + digits), `hub_id`, optional `battery_pct` (default 100). The drone is created `IDLE` at the Hub position with the SF-1 model.
+- Update accepts only `status` (`IDLE` or `MAINTENANCE`), `hub_id`, `battery_pct`; any other field is a 422. Reassignment needs an `IDLE` docked drone and moves its position to the new Hub. Setting a drone to `IDLE` re-checks Hub capacity and requires the drone to be at a Hub.
+- Delete is refused (409) for drones that are in flight, charging, or have any mission (active or history).
+- Errors use `{code, message}` (`DRONE_NOT_FOUND`, `HUB_NOT_FOUND`, `DRONE_ALREADY_EXISTS`, `HUB_FULL`, `DRONE_BUSY`, `INVALID_CHANGE`, `DRONE_HAS_HISTORY`); the older GET 404 keeps its plain string `detail`.
+
+## Verification
+- Passed: full backend suite 307 passed (13 PostgreSQL-marked tests deselected by default), `ruff` and `mypy` clean; QA review: all 8 acceptance criteria supported, no critical or high findings; code review: two medium findings fixed (Hub lock on the maintenance→`IDLE` path; battery-only edit on an off-Hub drone).
+- Not verified: `pytest -m postgres` ran but all 13 tests were skipped (PostgreSQL on port 55432 not reachable), so the `FOR UPDATE` locking and race handling are untested. No manual Swagger run recorded.
+- Known limitations: explicit `null` or empty PATCH bodies are treated as no change; no concurrency test.
+
 ## Goal
 Provide a minimal, safe backend CRUD API for administrative management of SkyFleet drones. This feature is backend-only. Existing mission planning, flight simulation, and data must remain intact.
 
