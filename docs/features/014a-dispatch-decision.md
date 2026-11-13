@@ -1,6 +1,6 @@
 # Feature 014A — Dispatch Decision (read-only)
 
-**Status:** Implemented (backend only) and verified by automated tests; QA and code-review agents not run. Not committed.
+**Status:** Implemented (backend only) and verified by automated tests; QA and code-review agents not run. Committed in `7bc8ad7` (together with Feature 013).
 
 ## Implementation notes (verified)
 - Endpoint `GET /api/dispatch/recommendations`; response `recommendations` (`order_id`, `drone_id`, `origin_hub_id`, `return_hub_id`) and `pending` (`order_id`, `origin_hub_id`, `reason`, `planner_reasons`). Code: `backend/app/dispatch/{schemas,service}.py`, `backend/app/api/routes/dispatch.py` (router registered in `app/main.py`); tests: `backend/tests/dispatch/test_dispatch_recommendations.py`. No migration, no writes.

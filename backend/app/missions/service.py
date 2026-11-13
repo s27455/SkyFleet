@@ -23,6 +23,8 @@ from app.missions.schemas import PlanResponse
 from app.orders.models import DeliveryOrder
 
 MAX_ID_ATTEMPTS = 5
+# Dispatch only sends fully charged drones (on top of the planner's own energy check).
+FULL_CHARGE_PCT = 100
 
 
 class MissionError(Exception):
@@ -50,6 +52,17 @@ class PlanRejectedError(MissionError):
     def __init__(self, plan: PlanResponse) -> None:
         super().__init__("The order and drone cannot be assigned")
         self.plan = plan
+
+
+class DroneNotFullyChargedError(MissionError):
+    """Only raised when a full charge is required (dispatch); manual missions never require it."""
+
+    def __init__(self, drone_id: str, battery_pct: int) -> None:
+        super().__init__(
+            f"Drone '{drone_id}' has {battery_pct}% battery; dispatch requires {FULL_CHARGE_PCT}%"
+        )
+        self.battery_pct = battery_pct
+        self.required_pct = FULL_CHARGE_PCT
 
 
 class MissionNotCancellableError(MissionError):
@@ -114,10 +127,18 @@ def _insert_mission(session: Session, mission: Mission) -> None:
     session.flush()
 
 
-def _confirm_once(session: Session, order_id: str, drone_id: str, settings: Settings) -> Mission:
+def _confirm_once(
+    session: Session,
+    order_id: str,
+    drone_id: str,
+    settings: Settings,
+    require_full_charge: bool,
+) -> Mission:
     mission_id: str | None = None
     try:
         order, drone = load_order_and_drone(session, order_id, drone_id, lock=True)
+        if require_full_charge and drone.battery_pct != FULL_CHARGE_PCT:
+            raise DroneNotFullyChargedError(drone.id, drone.battery_pct)  # checked under the lock
         plan = plan_for(session, order, drone, settings)
         if not plan.eligible or plan.route.return_hub_id is None:
             raise PlanRejectedError(plan)
@@ -157,11 +178,22 @@ def _confirm_once(session: Session, order_id: str, drone_id: str, settings: Sett
         raise
 
 
-def confirm_mission(session: Session, order_id: str, drone_id: str, settings: Settings) -> Mission:
-    """Revalidate the plan and create an ASSIGNED mission atomically."""
+def confirm_mission(
+    session: Session,
+    order_id: str,
+    drone_id: str,
+    settings: Settings,
+    *,
+    require_full_charge: bool = False,
+) -> Mission:
+    """Revalidate the plan and create an ASSIGNED mission atomically.
+
+    `require_full_charge` (off for manual missions) additionally rejects a drone below 100%
+    battery, checked under the same row lock as the plan.
+    """
     for _ in range(MAX_ID_ATTEMPTS):
         try:
-            return _confirm_once(session, order_id, drone_id, settings)
+            return _confirm_once(session, order_id, drone_id, settings, require_full_charge)
         except _IdCollisionError:
             continue
     raise MissionError("Could not allocate a unique mission id")

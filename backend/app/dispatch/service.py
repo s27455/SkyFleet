@@ -1,4 +1,4 @@
-"""Read-only dispatch decision: which drone should serve which waiting order.
+"""Dispatch: recommend which drone should serve which waiting order, and execute a chosen pair.
 
 Each origin Hub has its own FIFO queue (order `created_at`, then id). An order is recommended the
 first drone (by id) that is physically docked at its origin Hub, `IDLE`, at exactly 100% battery,
@@ -6,13 +6,17 @@ has no active mission, is not already recommended in this pass, and that the exi
 planner (`evaluate_plan`, used unchanged) accepts. An order that gets no drone stays pending and the
 pass moves on, so one blocked order or Hub never holds up another.
 
-Nothing is written, reserved or started. Return-Hub capacity is whatever the planner checks against
-the current physical occupancy; recommendations within one pass do not reserve landing places (an
-accepted MVP simplification; assignment, a later feature, re-plans under locks).
+`recommend` and `recommend_for_session` write nothing, reserve nothing and start nothing.
+`execute_dispatch` is the separate, explicit operation that acts on a chosen pair.
+
+Return-Hub capacity is whatever the planner checks against the current physical occupancy;
+recommendations within one pass do not reserve landing places (an accepted MVP simplification;
+execution re-plans under locks).
 """
 
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,15 +32,24 @@ from app.drones import repository as drone_repository
 from app.drones.models import Drone, DroneStatus
 from app.hubs.models import Hub
 from app.missions import repository as mission_repository
-from app.missions.models import ACTIVE_MISSION_STATUSES, Mission
+from app.missions.models import ACTIVE_MISSION_STATUSES, Mission, MissionStatus
 from app.missions.planning import evaluate_plan
 from app.missions.presence import docked_hub
 from app.missions.schemas import ReasonCode
+from app.missions.service import (
+    FULL_CHARGE_PCT,
+    DroneNotFoundError,
+    MissionError,
+    OrderNotFoundError,
+    confirm_mission,
+)
 from app.orders import repository as order_repository
 from app.orders.models import DeliveryOrder, OrderStatus
+from app.simulation import heartbeat
+from app.simulation.service import WorkerUnavailableError, start_mission
 
 # Dispatch only sends fully charged drones. This is in addition to the planner's own energy check.
-DISPATCH_BATTERY_PCT = 100
+DISPATCH_BATTERY_PCT = FULL_CHARGE_PCT
 
 
 def recommend(
@@ -137,3 +150,82 @@ def recommend_for_session(session: Session, settings: Settings) -> Recommendatio
         payload_energy_factor=settings.mission_payload_energy_factor,
         dock_proximity_m=settings.hub_dock_proximity_m,
     )
+
+
+class MissionAlreadyAssignedError(MissionError):
+    """The order already has an active mission (also what a repeated request runs into)."""
+
+    def __init__(self, mission: Mission) -> None:
+        if mission.status == MissionStatus.ASSIGNED:
+            hint = (
+                "it was created but not started; start it with POST /api/missions/{id}/start "
+                "or cancel it with POST /api/missions/{id}/cancel"
+            ).replace("{id}", mission.id)
+        else:
+            hint = "nothing more to do"
+        super().__init__(
+            f"Order '{mission.order_id}' already has mission '{mission.id}' "
+            f"({mission.status}, drone '{mission.drone_id}'); {hint}"
+        )
+        self.mission = mission
+
+
+class DispatchStartFailedError(MissionError):
+    """The mission was created but could not be started; it stays ASSIGNED (no flight began)."""
+
+    def __init__(self, mission_id: str, status: str, cause: str) -> None:
+        super().__init__(
+            f"Mission '{mission_id}' was created but did not start ({cause}). It remains "
+            f"{status}: start it with POST /api/missions/{mission_id}/start or cancel it with "
+            f"POST /api/missions/{mission_id}/cancel"
+        )
+        self.mission_id = mission_id
+        self.status = status
+        self.cause = cause
+
+
+def execute_dispatch(
+    session: Session, order_id: str, drone_id: str, now: datetime, settings: Settings
+) -> Mission:
+    """Create and start a mission for one order and drone, revalidated at execution time.
+
+    Reuses the existing services: `confirm_mission` (row locks, planner revalidation, unique
+    active-mission indexes; here also requiring a 100% battery under the lock) and `start_mission`
+    (worker heartbeat, recheck, takeoff in one transaction). Nothing is retried or compensated.
+
+    If starting fails the mission stays ASSIGNED and is reported. `start_mission` writes only in
+    its final transaction and rolls back on any error, so a failure means no flight began. The one
+    ambiguous case, a commit that errors after the database applied it, is resolved by re-reading
+    the mission's real status.
+    """
+    if mission_repository.get_order(session, order_id) is None:
+        raise OrderNotFoundError(order_id)
+    if mission_repository.get_drone(session, drone_id) is None:
+        raise DroneNotFoundError(drone_id)
+
+    active = [status.value for status in ACTIVE_MISSION_STATUSES]
+    existing = session.scalars(
+        select(Mission).where(Mission.order_id == order_id, Mission.status.in_(active))
+    ).first()
+    if existing is not None:
+        session.rollback()
+        raise MissionAlreadyAssignedError(existing)
+
+    # Refuse before creating anything when nothing would fly the mission.
+    beat = heartbeat.last_heartbeat(session)
+    if not heartbeat.is_fresh(beat, now, settings.sim_heartbeat_stale_seconds):
+        session.rollback()
+        raise WorkerUnavailableError(beat, settings.sim_heartbeat_stale_seconds)
+
+    mission = confirm_mission(session, order_id, drone_id, settings, require_full_charge=True)
+    try:
+        return start_mission(session, mission.id, now, settings)
+    except Exception as error:
+        session.rollback()
+        current = mission_repository.get_mission(session, mission.id)
+        if current is not None and current.status == MissionStatus.IN_FLIGHT:
+            return current  # the start did commit; report the truth
+        status = current.status if current is not None else MissionStatus.ASSIGNED.value
+        # Only expected failures are described; anything else is not echoed to the client.
+        cause = str(error) if isinstance(error, MissionError) else "unexpected error"
+        raise DispatchStartFailedError(mission.id, status, cause) from error

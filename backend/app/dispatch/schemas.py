@@ -2,7 +2,7 @@
 
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.missions.schemas import ReasonCode
 
@@ -37,3 +37,10 @@ class PendingOrder(BaseModel):
 class RecommendationsResponse(BaseModel):
     recommendations: list[Recommendation]
     pending: list[PendingOrder]
+
+
+class DispatchExecuteRequest(BaseModel):
+    """The pair to dispatch, normally taken from `GET /api/dispatch/recommendations`."""
+
+    order_id: str = Field(min_length=1)
+    drone_id: str = Field(min_length=1)

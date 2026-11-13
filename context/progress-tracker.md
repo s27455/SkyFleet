@@ -180,11 +180,12 @@ The backend provides a coherent operational domain that can support dispatching,
 ## Phase 6 — Deterministic Dispatch & Mission Management
 
 **Priority:** High  
-**Status:** In progress — Feature 014A (read-only recommender) done; assignment, scheduling, charging and rebalancing not started
+**Status:** In progress — Features 014A (read-only recommender) and 014B (explicit dispatch execution) done; automatic scheduling, charging and rebalancing not started
 
 ### Objectives
 
 - [x] Dispatch decision, read-only (feature 014A, `docs/features/014a-dispatch-decision.md`): `GET /api/dispatch/recommendations` proposes order–drone pairs per Hub FIFO queue using the existing planner unchanged; creates, reserves and writes nothing. Verified by backend tests, ruff and mypy; no QA or code-review agent run. Only drones at exactly 100% battery are eligible and nothing recharges drones yet, so recommendations dry up after flights until charging exists. Planned follow-ups: 014B assignment and execution, 014C automatic scheduling (default off), 014D charging, 014E rebalancing.
+- [x] Dispatch execution (feature 014B, `docs/features/014b-dispatch-execution.md`): `POST /api/dispatch/execute` creates and starts a mission for one chosen order–drone pair through the existing mission services, revalidated under locks with an extra 100% battery rule; a failed start leaves the mission `ASSIGNED` and reported. Verified by backend tests including concurrency tests on PostgreSQL, ruff and mypy; no QA or code-review agent run; not exercised on the development database. Still open: 014C automatic scheduling (default off), 014D charging, 014E rebalancing.
 - [ ] Implement a deterministic Dispatch Engine.
 - [ ] Identify eligible drones for an order.
 - [ ] Filter candidates using basic operational constraints.
