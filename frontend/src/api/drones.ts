@@ -1,6 +1,6 @@
 import { DRONE_STATUSES, type Drone, type DroneModel, type DroneResponse } from '../types/drone'
 import type { DroneModelResponse } from '../types/drone'
-import { ApiError, apiGet } from './client'
+import { ApiError, apiDelete, apiGet, apiSend } from './client'
 import { isFiniteNumberInRange, isNonEmptyString, isPositiveFiniteNumber } from './validation'
 
 function invalid(reason: string): never {
@@ -43,7 +43,7 @@ function toDroneModel(item: unknown, droneId: string): DroneModel {
 }
 
 /** Validates one untrusted API item and maps it to the UI model. */
-function toDrone(item: unknown): Drone {
+export function toDrone(item: unknown): Drone {
   if (!isRecord(item)) invalid('drone is not an object')
   const raw = item as Partial<Record<keyof DroneResponse, unknown>>
 
@@ -79,4 +79,44 @@ export async function getDrones(signal?: AbortSignal): Promise<Drone[]> {
   if (new Set(drones.map((drone) => drone.id)).size !== drones.length)
     invalid('duplicate drone ids')
   return drones
+}
+
+/** Fields the administrator provides for a new drone (Feature 011 `POST /api/drones`). */
+export interface DroneInput {
+  id: string
+  hubId: string
+  batteryPct: number
+}
+
+/** Creates an IDLE drone docked at the given Hub; the backend rejects a duplicate id or full Hub. */
+export async function createDrone(input: DroneInput): Promise<Drone> {
+  return toDrone(
+    await apiSend<unknown>('POST', '/api/drones', {
+      id: input.id,
+      hub_id: input.hubId,
+      battery_pct: input.batteryPct,
+    }),
+  )
+}
+
+/** The administrative changes the backend allows (`PATCH`); status is only IDLE or MAINTENANCE. */
+export interface DroneChanges {
+  status?: 'IDLE' | 'MAINTENANCE'
+  hubId?: string
+  batteryPct?: number
+}
+
+export async function updateDrone(droneId: string, changes: DroneChanges): Promise<Drone> {
+  const body: Record<string, unknown> = {}
+  if (changes.status !== undefined) body.status = changes.status
+  if (changes.hubId !== undefined) body.hub_id = changes.hubId
+  if (changes.batteryPct !== undefined) body.battery_pct = changes.batteryPct
+  return toDrone(
+    await apiSend<unknown>('PATCH', `/api/drones/${encodeURIComponent(droneId)}`, body),
+  )
+}
+
+/** Physically deletes a drone; the backend refuses one with mission history or in operation. */
+export function deleteDrone(droneId: string): Promise<void> {
+  return apiDelete(`/api/drones/${encodeURIComponent(droneId)}`)
 }

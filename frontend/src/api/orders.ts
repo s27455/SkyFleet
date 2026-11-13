@@ -1,5 +1,5 @@
 import { ORDER_STATUSES, type Order, type OrderResponse } from '../types/order'
-import { ApiError, apiGet } from './client'
+import { ApiError, apiDelete, apiGet, apiSend } from './client'
 import { isFiniteNumberInRange, isNonEmptyString, isPositiveFiniteNumber } from './validation'
 
 function invalid(reason: string): never {
@@ -17,7 +17,7 @@ const isTimestamp = (value: unknown): value is string =>
   typeof value === 'string' && HAS_ZONE.test(value) && !Number.isNaN(Date.parse(value))
 
 /** Validates one untrusted API item and maps it to the UI model. */
-function toOrder(item: unknown): Order {
+export function toOrder(item: unknown): Order {
   if (!isRecord(item)) invalid('order is not an object')
   const raw = item as Partial<Record<keyof OrderResponse, unknown>>
 
@@ -67,4 +67,41 @@ export async function getOrders(signal?: AbortSignal): Promise<Order[]> {
   if (new Set(orders.map((order) => order.id)).size !== orders.length)
     invalid('duplicate order ids')
   return orders
+}
+
+/** Fields the administrator provides for a new order (Feature 012 `POST /api/orders`). */
+export interface OrderInput {
+  originHubId: string
+  destinationAddress: string
+  longitude: number
+  latitude: number
+  packageWeightKg: number
+}
+
+const toOrderBody = (input: Partial<OrderInput>) => ({
+  origin_hub_id: input.originHubId,
+  destination_address: input.destinationAddress,
+  destination_longitude: input.longitude,
+  destination_latitude: input.latitude,
+  package_weight_kg: input.packageWeightKg,
+})
+
+/** Creates an order; the backend assigns the id and the READY_FOR_PICKUP status. */
+export async function createOrder(input: OrderInput): Promise<Order> {
+  return toOrder(await apiSend<unknown>('POST', '/api/orders', toOrderBody(input)))
+}
+
+/** Updates only the given fields (`PATCH`); the backend rejects ineligible orders with 409. */
+export async function updateOrder(orderId: string, changes: Partial<OrderInput>): Promise<Order> {
+  const body = Object.fromEntries(
+    Object.entries(toOrderBody(changes)).filter(([, value]) => value !== undefined),
+  )
+  return toOrder(
+    await apiSend<unknown>('PATCH', `/api/orders/${encodeURIComponent(orderId)}`, body),
+  )
+}
+
+/** Physically deletes an order; the backend refuses it when any mission references the order. */
+export function deleteOrder(orderId: string): Promise<void> {
+  return apiDelete(`/api/orders/${encodeURIComponent(orderId)}`)
 }

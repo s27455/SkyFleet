@@ -15,6 +15,9 @@ import { computeDroneOffsets } from './features/map/droneMarkers'
 import { partitionFleet } from './features/map/fleetPlacement'
 import { MapView } from './features/map/MapView'
 import { computeOrderOffsets } from './features/map/orderMarkers'
+import { DronesManager } from './features/management/DronesManager'
+import { ManagementPanel } from './features/management/ManagementPanel'
+import { OrdersManager } from './features/management/OrdersManager'
 import { useMissions } from './features/missions/useMissions'
 import { OrderDetailPanel } from './features/orders/OrderDetailPanel'
 import { OrdersList } from './features/orders/OrdersList'
@@ -54,6 +57,7 @@ function App() {
     missionsResource.state.status === 'ready' ? missionsResource.state.data : NO_MISSIONS
 
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [managementOpen, setManagementOpen] = useState(false)
   const selectHub = useCallback((id: string) => setSelection({ kind: 'hub', id }), [])
   const selectDrone = useCallback((id: string) => setSelection({ kind: 'drone', id }), [])
   const selectOrder = useCallback((id: string) => setSelection({ kind: 'order', id }), [])
@@ -177,7 +181,17 @@ function App() {
           </h1>
           <span className="hidden text-sm text-fg-muted sm:inline">Operations Center</span>
         </div>
-        <BackendStatus />
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            aria-expanded={managementOpen}
+            className="rounded border border-line px-3 py-1.5 text-sm hover:bg-surface-raised"
+            onClick={() => setManagementOpen((open) => !open)}
+          >
+            Management
+          </button>
+          <BackendStatus />
+        </div>
       </header>
 
       <main className="relative min-h-0 flex-1">
@@ -247,6 +261,43 @@ function App() {
             hubs={hubs}
             assignedMission={assignedByOrder.get(selectedOrder.id)}
             onStartMission={startAssignedMission}
+          />
+        )}
+        {managementOpen && (
+          <ManagementPanel
+            onClose={() => setManagementOpen(false)}
+            tabs={[
+              {
+                id: 'orders',
+                label: 'Orders',
+                content: (
+                  <OrdersManager
+                    orders={orders}
+                    hubs={hubs}
+                    missions={missions}
+                    onChanged={() => {
+                      refreshOrders()
+                      refreshMissions()
+                    }}
+                  />
+                ),
+              },
+              {
+                id: 'drones',
+                label: 'Drones',
+                content: (
+                  <DronesManager
+                    drones={drones}
+                    hubs={hubs}
+                    missions={missions}
+                    onChanged={() => {
+                      refreshDrones()
+                      refreshMissions()
+                    }}
+                  />
+                ),
+              },
+            ]}
           />
         )}
         {selectedDrone && (

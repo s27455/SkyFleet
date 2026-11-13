@@ -1094,3 +1094,28 @@ describe('App notices that need polling', () => {
     expect(missionsCalls.mock.calls.length).toBeGreaterThanOrEqual(2)
   })
 })
+
+describe('App management area', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('opens an overlay with Orders and Drones tabs and keeps the map mounted', async () => {
+    stubBackend()
+    render(<App />)
+    await waitFor(() => expect(hubMarkers()).toHaveLength(4))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Management' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'Management' })
+    expect(within(dialog).getByRole('tab', { name: 'Orders' })).toBeInTheDocument()
+    expect(within(dialog).getByText(`Orders (${ORDER_RESPONSES.length})`)).toBeInTheDocument()
+    expect(hubMarkers()).toHaveLength(4)
+
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Drones' }))
+    expect(within(dialog).getByText(`Drones (${DRONE_RESPONSES.length})`)).toBeInTheDocument()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog', { name: 'Management' })).not.toBeInTheDocument()
+  })
+})
