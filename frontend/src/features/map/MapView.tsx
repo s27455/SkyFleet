@@ -12,7 +12,11 @@ import {
   droneMarkerLabel,
   setDroneMarkerSelected,
 } from './droneMarkers'
-import { createOrderMarkerElement, setOrderMarkerSelected } from './orderMarkers'
+import {
+  createOrderMarkerElement,
+  setOrderMarkerSelected,
+  updateOrderMarkerElement,
+} from './orderMarkers'
 import { MAP_STYLE, TRICITY_BOUNDS, TRICITY_FIT_PADDING_PX, getMapboxToken } from './mapConfig'
 
 type MapStatus = 'loading' | 'ready' | 'error'
@@ -133,6 +137,7 @@ export function MapView({
   const orderElementsRef = useRef(new Map<string, HTMLElement>())
   const orderMarkersRef = useRef(new Map<string, mapboxgl.Marker>())
   const orderOffsetsRef = useRef(orderOffsets)
+  const ordersRef = useRef(orders)
   const onSelectOrderRef = useRef(onSelectOrder)
   const onSelectHubRef = useRef(onSelectHub)
   const onSelectDroneRef = useRef(onSelectDrone)
@@ -149,6 +154,10 @@ export function MapView({
   useEffect(() => {
     onSelectOrderRef.current = onSelectOrder
   }, [onSelectOrder])
+
+  useEffect(() => {
+    ordersRef.current = orders
+  }, [orders])
 
   // Markers are DOM-based (native keyboard/touch support); fine for a handful of Hubs.
   // They are rebuilt only when `hubs` changes, never on selection (see the effect below).
@@ -284,47 +293,76 @@ export function MapView({
     orderOffsetsRef.current = orderOffsets
   }, [orderOffsets])
 
-  // Same pattern as the drone markers: rebuilt only when the orders change, never on selection or
-  // because display offsets changed. Orders that failed to load are never passed in, so no stale
-  // destination is shown as current.
+  // Order markers are reconciled by order id: a new order gets a marker, an order that leaves the
+  // active list (its delivered window ended) loses only its own, and every other marker keeps its
+  // element, its keyboard focus and its place. A status change is handled in place, below. Orders
+  // that failed to load are never passed in, so no stale destination is shown as current.
+  const orderKey = orders.map((order) => order.id).join('|')
+
+  // Declared first so it runs first when the map becomes (un)available: it clears every marker on
+  // unmount or when the map is not ready, and the reconcile below then starts from nothing.
+  useEffect(() => {
+    const elements = orderElementsRef.current
+    const markerByOrder = orderMarkersRef.current
+    return () => {
+      markerByOrder.forEach((marker) => marker.remove())
+      elements.clear()
+      markerByOrder.clear()
+    }
+  }, [status])
+
   useEffect(() => {
     const map = mapRef.current
     const elements = orderElementsRef.current
     const markerByOrder = orderMarkersRef.current
     if (status !== 'ready' || !map) return
 
-    const markers = orders.map((order) => {
+    const present = new Set(ordersRef.current.map((order) => order.id))
+    markerByOrder.forEach((marker, id) => {
+      if (present.has(id)) return
+      marker.remove()
+      markerByOrder.delete(id)
+      elements.delete(id)
+    })
+    for (const order of ordersRef.current) {
+      if (markerByOrder.has(order.id)) continue
       const element = createOrderMarkerElement(order, () => onSelectOrderRef.current?.(order.id))
       elements.set(order.id, element)
-      const marker = new mapboxgl.Marker({
-        element,
-        offset: orderOffsetsRef.current.get(order.id) ?? NO_PIXEL_OFFSET,
-      })
-        .setLngLat(order.coordinates)
-        .addTo(map)
-      markerByOrder.set(order.id, marker)
-      return marker
-    })
-
-    return () => {
-      markers.forEach((marker) => marker.remove())
-      elements.clear()
-      markerByOrder.clear()
+      markerByOrder.set(
+        order.id,
+        new mapboxgl.Marker({
+          element,
+          offset: orderOffsetsRef.current.get(order.id) ?? NO_PIXEL_OFFSET,
+        })
+          .setLngLat(order.coordinates)
+          .addTo(map),
+      )
     }
-  }, [orders, status])
+  }, [orderKey, status])
+
+  // In place: colour, state and accessible name follow the latest status; the position follows an
+  // edited destination.
+  useEffect(() => {
+    for (const order of orders) {
+      const element = orderElementsRef.current.get(order.id)
+      if (!element) continue
+      updateOrderMarkerElement(element, order)
+      orderMarkersRef.current.get(order.id)?.setLngLat(order.coordinates)
+    }
+  }, [orders, status, orderKey])
 
   // Display only: shifts the marker on screen; the marker's coordinates stay the real ones.
   useEffect(() => {
     orderMarkersRef.current.forEach((marker, orderId) =>
       marker.setOffset(orderOffsets.get(orderId) ?? NO_PIXEL_OFFSET),
     )
-  }, [orders, orderOffsets, status])
+  }, [orders, orderOffsets, status, orderKey])
 
   useEffect(() => {
     orderElementsRef.current.forEach((element, orderId) =>
       setOrderMarkerSelected(element, orderId === selectedOrderId),
     )
-  }, [orders, status, selectedOrderId])
+  }, [orders, status, selectedOrderId, orderKey])
 
   useEffect(() => {
     const container = containerRef.current

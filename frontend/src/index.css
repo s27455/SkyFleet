@@ -18,6 +18,8 @@
   --color-status-warning: #fbbf24;
   --color-status-critical: #f87171;
   --color-status-neutral: #6b7280;
+  /* Work in progress (a parcel on its way); distinct from the cyan accent used for selection. */
+  --color-status-active: #3b82f6;
 
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;

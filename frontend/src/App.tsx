@@ -16,6 +16,7 @@ import { HubDetailPanel } from './features/hubs/HubDetailPanel'
 import { useHubs } from './features/hubs/useHubs'
 import { computeDroneOffsets } from './features/map/droneMarkers'
 import { partitionFleet } from './features/map/fleetPlacement'
+import { OrderMarkerLegend } from './features/map/OrderMarkerLegend'
 import { MapView } from './features/map/MapView'
 import { computeOrderOffsets } from './features/map/orderMarkers'
 import { DronesManager } from './features/management/DronesManager'
@@ -255,6 +256,7 @@ function App() {
           onSelectOrder={selectOrder}
           orderOffsets={orderOffsets}
         />
+        <OrderMarkerLegend hideOnNarrow={selection !== null} />
         <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80">
           <ResourceStatusBanner
             resource="hub"

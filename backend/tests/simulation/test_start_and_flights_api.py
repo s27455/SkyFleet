@@ -268,6 +268,67 @@ def test_delivery_and_landing_show_through_the_existing_endpoints(
     assert drones[DRONE]["battery_pct"] == 93
 
 
+def test_a_delivered_order_is_active_for_exactly_the_window_over_http(
+    client: TestClient,
+    seeded: Session,
+    session_factory: sessionmaker[Session],
+    sim_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worker's delivery, then the active-orders endpoint (Feature 017A/017B regression)."""
+    mission_id = assign(client)
+    beat(seeded)
+    start(client, mission_id)
+    window = sim_settings.order_delivered_visibility_seconds
+
+    run(session_factory, sim_settings, mission_id, 21.0)  # delivered at NOW + 21 s
+    delivered_at = NOW + timedelta(seconds=21)
+
+    def active_at(moment: datetime) -> dict[str, Any] | None:
+        monkeypatch.setattr(clock, "utcnow", lambda: moment)
+        orders = client.get("/api/orders", params={"active": "true"}).json()
+        return next((o for o in orders if o["id"] == ORDER), None)
+
+    delivered = active_at(delivered_at)  # 0 s
+    assert delivered is not None and delivered["status"] == "DELIVERED"
+    # SQLite returns the stored time without a zone; PostgreSQL keeps it. Both mean UTC.
+    assert clock.as_utc(datetime.fromisoformat(delivered["delivered_at"])) == delivered_at
+    # Every later request, a page reload included, measures from the same stored time: asking
+    # again, or asking often, neither restarts nor extends the window.
+    for seconds in (1, 30, 60, window - 1):
+        again = active_at(delivered_at + timedelta(seconds=seconds))
+        assert again is not None and again["delivered_at"] == delivered["delivered_at"]
+    assert active_at(delivered_at + timedelta(seconds=window)) is None  # exactly 120 s
+    assert active_at(delivered_at + timedelta(seconds=window + 1)) is None
+
+    # The order is hidden from the active list only: it is still stored and listed in full.
+    full = {o["id"]: o for o in client.get("/api/orders").json()}
+    assert full[ORDER]["status"] == "DELIVERED"
+    assert full[ORDER]["delivered_at"] == delivered["delivered_at"]
+    assert client.get(f"/api/orders/{ORDER}").json()["delivered_at"] == delivered["delivered_at"]
+
+
+def test_the_order_goes_from_out_for_delivery_to_delivered_in_the_active_list(
+    client: TestClient,
+    seeded: Session,
+    session_factory: sessionmaker[Session],
+    sim_settings: Settings,
+) -> None:
+    mission_id = assign(client)
+    beat(seeded)
+    start(client, mission_id)
+
+    def status_in_active_list() -> str | None:
+        orders = client.get("/api/orders", params={"active": "true"}).json()
+        return next((o["status"] for o in orders if o["id"] == ORDER), None)
+
+    assert status_in_active_list() == "OUT_FOR_DELIVERY"  # blue
+    run(session_factory, sim_settings, mission_id, 10.0)  # still flying out
+    assert status_in_active_list() == "OUT_FOR_DELIVERY"
+    run(session_factory, sim_settings, mission_id, 21.0)  # parcel handed over
+    assert status_in_active_list() == "DELIVERED"  # green, present the moment it turns
+
+
 def test_an_emergency_flight_stays_listed_with_its_reason(
     client: TestClient,
     seeded: Session,

@@ -627,6 +627,93 @@ describe('MapView order destination markers', () => {
     expect(onSelectHub).not.toHaveBeenCalled()
   })
 
+  it('recolours a marker in place as its order is delivered and removes only its own', () => {
+    const at = (status: Order['status']): Order[] =>
+      TEST_ORDERS.map((order) => (order.id === 'ORD-001' ? { ...order, status } : order))
+    const { rerender } = render(<MapView orders={at('READY_FOR_PICKUP')} />)
+    loadMap()
+    const marker = screen.getByRole('button', { name: /^Order ORD-001 destination/ })
+    const other = screen.getByRole('button', { name: /^Order ORD-002 destination/ })
+    const diamond = marker.querySelector('[data-order-diamond]')!
+    marker.focus()
+    expect(marker).toHaveAttribute('data-order-state', 'pending')
+    expect(diamond).toHaveClass('bg-status-neutral')
+    expect(orderMarkers()).toHaveLength(2)
+
+    rerender(<MapView orders={at('OUT_FOR_DELIVERY')} />)
+    expect(marker).toHaveAttribute('data-order-state', 'in_progress')
+    expect(diamond).toHaveClass('bg-status-active')
+    expect(marker).toHaveAccessibleName(/Out for delivery \(In delivery\)/)
+
+    rerender(<MapView orders={at('DELIVERED')} />)
+    expect(marker).toHaveAttribute('data-order-state', 'delivered')
+    expect(diamond).toHaveClass('bg-status-ok')
+    expect(marker).toHaveAccessibleName(/Delivered \(Delivered\)/)
+    // The same elements and markers: nothing was rebuilt, so no duplicates, flashes or lost focus.
+    expect(screen.getByRole('button', { name: /^Order ORD-001 destination/ })).toBe(marker)
+    expect(marker).toHaveFocus()
+    expect(orderMarkers()).toHaveLength(2)
+
+    // The grace period ends: the active list drops the order and only its marker goes.
+    rerender(<MapView orders={TEST_ORDERS.filter((order) => order.id !== 'ORD-001')} />)
+    expect(screen.queryByRole('button', { name: /^Order ORD-001 destination/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Order ORD-002 destination/ })).toBe(other)
+    expect(document.querySelectorAll('[data-marker-kind="order"]')).toHaveLength(1)
+  })
+
+  it('draws an already delivered order green at once after a reload, with no client timer', () => {
+    // A reload starts with the server's answer: the delivered order is in it (the server still
+    // counts it active), so it is green straight away. Expiry is the server's job; the map only
+    // follows what the active list returns, so a reload can neither restart nor extend the window.
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+    const delivered: Order = {
+      ...TEST_ORDERS[0],
+      status: 'DELIVERED',
+      deliveredAt: '2026-11-13T12:00:00Z',
+    }
+
+    render(<MapView orders={[delivered, TEST_ORDERS[1]]} />)
+    loadMap()
+
+    const marker = screen.getByRole('button', { name: /^Order ORD-001 destination/ })
+    expect(marker).toHaveAttribute('data-order-state', 'delivered')
+    expect(marker.querySelector('[data-order-diamond]')).toHaveClass('bg-status-ok')
+    expect(orderMarkers()).toHaveLength(2)
+    const mapTimers = timers.mock.calls.filter(([, delay]) => delay === 120_000)
+    expect(mapTimers).toHaveLength(0)
+    timers.mockRestore()
+  })
+
+  it('adds a marker for a new order and leaves the existing markers untouched', () => {
+    const { rerender } = render(<MapView orders={[TEST_ORDERS[0]]} />)
+    loadMap()
+    const first = screen.getByRole('button', { name: /^Order ORD-001 destination/ })
+    const created = orderMarkers().length
+
+    rerender(<MapView orders={TEST_ORDERS} />)
+
+    expect(screen.getByRole('button', { name: /^Order ORD-001 destination/ })).toBe(first)
+    expect(screen.getByRole('button', { name: /^Order ORD-002 destination/ })).toBeInTheDocument()
+    expect(orderMarkers()).toHaveLength(created + 1) // only one marker was created
+  })
+
+  it('moves a marker when an order destination is edited, without rebuilding it', () => {
+    const { rerender } = render(<MapView orders={TEST_ORDERS} />)
+    loadMap()
+    const marker = screen.getByRole('button', { name: /^Order ORD-001 destination/ })
+
+    rerender(
+      <MapView
+        orders={TEST_ORDERS.map((order) =>
+          order.id === 'ORD-001' ? { ...order, coordinates: [18.8, 54.6] } : order,
+        )}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /^Order ORD-001 destination/ })).toBe(marker)
+    expect(orderMarkers().find((m) => m.element === marker)?.lngLat).toEqual([18.8, 54.6])
+  })
+
   it('marks only the selected destination and keeps the element and focus on change', () => {
     const { rerender } = render(<MapView orders={TEST_ORDERS} selectedOrderId={null} />)
     loadMap()

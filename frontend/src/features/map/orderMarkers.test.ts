@@ -7,6 +7,7 @@ import {
   createOrderMarkerElement,
   orderMarkerLabel,
   setOrderMarkerSelected,
+  updateOrderMarkerElement,
 } from './orderMarkers'
 
 function order(id: string, coordinates: [number, number]): Order {
@@ -70,7 +71,7 @@ describe('order marker element', () => {
     const element = createOrderMarkerElement(order('ORD-007', [18.7, 54.5]), () => {})
 
     expect(element.getAttribute('aria-label')).toBe(
-      'Order ORD-007 destination, Ready for pickup, 1.5 kg',
+      'Order ORD-007 destination, Ready for pickup (Waiting), 1.5 kg',
     )
     expect(orderMarkerLabel(order('ORD-007', [18.7, 54.5]))).toBe(
       element.getAttribute('aria-label'),
@@ -101,5 +102,63 @@ describe('order marker element', () => {
     element.click()
 
     expect(clicks).toBe(1)
+  })
+})
+
+describe('order marker state (Feature 017B)', () => {
+  const withStatus = (status: Order['status']): Order => ({
+    ...order('ORD-007', [18.7, 54.5]),
+    status,
+  })
+
+  it.each([
+    ['READY_FOR_PICKUP', 'pending', 'bg-status-neutral', 'Waiting'],
+    ['OUT_FOR_DELIVERY', 'in_progress', 'bg-status-active', 'In delivery'],
+    ['DELIVERED', 'delivered', 'bg-status-ok', 'Delivered'],
+  ] as const)('draws %s as %s with the state in words', (status, state, colour, word) => {
+    const element = createOrderMarkerElement(withStatus(status), () => {})
+
+    expect(element.dataset.orderState).toBe(state)
+    expect(element.querySelector('[data-order-diamond]')).toHaveClass(colour, 'border-fg')
+    expect(element.getAttribute('aria-label')).toContain(`(${word})`)
+  })
+
+  it('changes colour, state and name in place, keeping the element and its click handler', () => {
+    let clicks = 0
+    const element = createOrderMarkerElement(withStatus('READY_FOR_PICKUP'), () => (clicks += 1))
+    const diamond = element.querySelector('[data-order-diamond]')!
+
+    updateOrderMarkerElement(element, withStatus('OUT_FOR_DELIVERY'))
+    expect(diamond).toHaveClass('bg-status-active')
+    expect(diamond).not.toHaveClass('bg-status-neutral')
+
+    updateOrderMarkerElement(element, withStatus('DELIVERED'))
+    expect(diamond).toHaveClass('bg-status-ok')
+    expect(diamond).not.toHaveClass('bg-status-active')
+    expect(element.getAttribute('aria-label')).toContain('Delivered (Delivered)')
+    element.click()
+    expect(clicks).toBe(1)
+  })
+
+  it('keeps the state colour while selected and after a state change', () => {
+    const element = createOrderMarkerElement(withStatus('OUT_FOR_DELIVERY'), () => {})
+    const diamond = element.querySelector('[data-order-diamond]')!
+
+    setOrderMarkerSelected(element, true)
+    updateOrderMarkerElement(element, withStatus('DELIVERED'))
+
+    expect(diamond).toHaveClass('bg-status-ok', 'ring-4') // new colour, selection ring kept
+    setOrderMarkerSelected(element, false)
+    expect(diamond).toHaveClass('bg-status-ok')
+    expect(diamond).not.toHaveClass('ring-4')
+  })
+
+  it('shows an unknown status neutrally and does not throw', () => {
+    const element = createOrderMarkerElement(
+      { ...withStatus('DELIVERED'), status: 'FAILED' as Order['status'] },
+      () => {},
+    )
+
+    expect(element.dataset.orderState).toBe('other')
   })
 })

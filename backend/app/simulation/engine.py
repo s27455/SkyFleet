@@ -152,7 +152,11 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
         if flight.delivered_at is None and elapsed >= delivery_end:
             order.status = OrderStatus.DELIVERED.value
             flight.delivered_at = started + timedelta(seconds=delivery_end)
-            order.delivered_at = flight.delivered_at
+            # The order's delivery time is the moment this transition is committed, in real UTC
+            # (`now`), not the flight's scheduled instant: that stays the timeline event it was. A
+            # worker that was stopped or late would otherwise stamp a time that is already past
+            # the visibility window (Feature 017A) and the order would vanish at once.
+            order.delivered_at = now
             _write_snapshot(flight, drone, state_for(elapsed), now)
             session.commit()
             return True

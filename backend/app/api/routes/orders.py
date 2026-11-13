@@ -1,7 +1,6 @@
 """Delivery order endpoints: reads plus administrative create, update and delete."""
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -12,6 +11,7 @@ from app.db.session import get_session
 from app.orders import generator, repository, service
 from app.orders.models import DeliveryOrder
 from app.orders.schemas import OrderCreateRequest, OrderResponse, OrderUpdateRequest
+from app.simulation import clock
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -47,7 +47,7 @@ def list_orders(session: SessionDep, active: bool = False) -> Sequence[DeliveryO
     if not active:
         return repository.list_orders(session)
     return repository.list_active_orders(
-        session, datetime.now(UTC), get_settings().order_delivered_visibility_seconds
+        session, clock.utcnow(), get_settings().order_delivered_visibility_seconds
     )
 
 

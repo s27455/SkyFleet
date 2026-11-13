@@ -1,7 +1,7 @@
 # Feature 017A — Delivered Orders Lifecycle
 
 **Project:** SkyFleet  
-**Status:** Implemented and approved by the owner (2026-11-13); not yet committed. See section 11 for what was built and what was not verified.  
+**Status:** Implemented and approved by the owner (2026-11-13); committed in `59d4d74`. See section 11 for what was built and what was not verified.  
 **Priority:** High  
 **Scope:** Order visibility and lifecycle in operational views  
 **Dependencies:** Existing order API, persisted order status/timestamps, frontend polling  
@@ -123,7 +123,7 @@ Implementation is reviewed in the running application, acceptance criteria pass,
 **Backend**
 
 - `orders.delivered_at`: nullable, timezone-aware. Migration `0009` adds it and backfills `DELIVERED` orders from `mission_flights.delivered_at`; a delivered order with no flight row stays `NULL`. The downgrade drops the column.
-- The flight engine sets `order.delivered_at` to the same instant as `flight.delivered_at`.
+- The flight engine sets `order.delivered_at` to the real UTC time at which it commits the `DELIVERED` transition (the tick's `now`). `flight.delivered_at` keeps its meaning as the flight's scheduled timeline instant and is not the visibility reference. Rows backfilled by migration `0009` and the later one-off repairs use the flight's time, the best value available for them. A first version copied the flight's instant; it was changed after a worker running old code, and the case of a late worker, showed that a scheduled time can already be past the window when the transition is committed.
 - The rule is in `app/orders/visibility.py`: a `DELIVERED` order is visible while `now < delivered_at + window`; at `now >= delivered_at + window` it is hidden; a `DELIVERED` order with no delivery time is hidden. Other statuses are always visible.
 - The window is `ORDER_DELIVERED_VISIBILITY_SECONDS` (default 120).
 - `repository.list_active_orders` applies the rule in SQL.

@@ -6,12 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.api.routes import orders as orders_route
 from app.hubs.seed import seed_hubs
 from app.orders import repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.seed import seed_orders
 from app.orders.visibility import is_order_active
+from app.simulation import clock
 
 NOW = datetime(2026, 11, 13, 12, 0, 0, tzinfo=UTC)
 WINDOW = 120.0
@@ -84,13 +84,7 @@ def test_the_api_filters_only_when_asked(
     client: TestClient, session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _prepare(session)
-
-    class FixedDatetime(datetime):
-        @classmethod
-        def now(cls, tz: object = None) -> "FixedDatetime":
-            return cls.fromtimestamp(NOW.timestamp(), UTC)
-
-    monkeypatch.setattr(orders_route, "datetime", FixedDatetime)
+    monkeypatch.setattr(clock, "utcnow", lambda: NOW)
 
     full = client.get("/api/orders").json()
     active = client.get("/api/orders", params={"active": "true"}).json()

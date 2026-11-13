@@ -646,6 +646,12 @@ describe('App orders', () => {
     }
   })
 
+  it('shows the delivery marker legend over the map', async () => {
+    await renderLoaded()
+
+    expect(screen.getByRole('region', { name: 'Delivery marker legend' })).toBeInTheDocument()
+  })
+
   it('shows one details context at a time across Hubs, drones and orders', async () => {
     await renderLoaded()
     await screen.findAllByRole('button', { name: /^Marker / })

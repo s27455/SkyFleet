@@ -15,6 +15,7 @@ from app.missions import service as missions_service
 from app.missions.models import Mission, MissionStatus
 from app.missions.presence import hub_occupancy
 from app.missions.routing import distance_km, hub_point
+from app.orders import repository as order_repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.simulation import engine
 from app.simulation.clock import as_utc
@@ -165,7 +166,76 @@ def test_the_order_is_delivered_before_the_drone_returns_and_the_mission_complet
     flight = world.flight(mission_id)
     assert flight.phase == FlightPhase.RETURNING
     assert flight.delivered_at is not None
-    assert world.order(ORDER).delivered_at == flight.delivered_at  # Feature 017A
+    assert as_utc(world.order(ORDER).delivered_at) == at(21.0)  # type: ignore[arg-type]
+
+
+def test_a_delivered_order_stays_in_the_active_list_for_the_window_after_the_engine_delivers_it(
+    world: World, launch: Launch
+) -> None:
+    """Engine and active-orders query together (Feature 017A regression).
+
+    A worker that set DELIVERED without `delivered_at` made every delivery vanish at once, because
+    a delivered order without a delivery time is hidden. Each piece was tested alone; not this.
+    """
+    mission_id = launch(ORDER, DRONE)
+    window = world.settings.order_delivered_visibility_seconds
+
+    world.advance(mission_id, 21.0)
+
+    delivered_at = as_utc(world.order(ORDER).delivered_at)  # type: ignore[arg-type]
+    assert world.order(ORDER).status == OrderStatus.DELIVERED
+    assert delivered_at == at(21.0)
+
+    def listed(moment: datetime) -> bool:
+        active = order_repository.list_active_orders(world.session, moment, window)
+        return ORDER in {order.id for order in active}
+
+    assert listed(delivered_at)  # 0 s
+    assert listed(delivered_at + timedelta(seconds=window - 1))  # 119 s
+    assert not listed(delivered_at + timedelta(seconds=window))  # exactly 120 s
+    assert not listed(delivered_at + timedelta(seconds=window + 1))
+
+
+def test_the_order_delivery_time_is_the_actual_transition_not_the_flights_scheduled_instant(
+    world: World, launch: Launch
+) -> None:
+    """The flight keeps its timeline timestamp; the order is stamped when the worker commits."""
+    mission_id = launch(ORDER, DRONE)
+
+    world.advance(mission_id, 21.0)
+
+    order, flight = world.order(ORDER), world.flight(mission_id)
+    scheduled = as_utc(flight.delivered_at)  # type: ignore[arg-type]
+    assert scheduled < at(21.0)  # the parcel was due at about 19.4 s
+    assert as_utc(order.delivered_at) == at(21.0)  # type: ignore[arg-type]
+
+
+def test_a_late_worker_still_gives_the_full_window_from_the_moment_it_delivers(
+    world: World, launch: Launch
+) -> None:
+    """A worker that was stopped past the whole window must not make the order vanish at once."""
+    mission_id = launch(ORDER, DRONE)
+    window = world.settings.order_delivered_visibility_seconds
+
+    world.advance(mission_id, 500.0)  # the delivery was due at ~19 s; the worker only runs now
+
+    order, flight = world.order(ORDER), world.flight(mission_id)
+    assert as_utc(flight.delivered_at) < at(500.0 - window)  # type: ignore[arg-type]
+    assert as_utc(order.delivered_at) == at(500.0)  # type: ignore[arg-type]
+    active = order_repository.list_active_orders(world.session, at(500.0 + window - 1), window)
+    assert ORDER in {o.id for o in active}  # visible at 119 s from the actual transition
+
+
+def test_every_delivery_the_engine_records_has_a_delivery_time(
+    world: World, launch: Launch
+) -> None:
+    mission_id = launch(ORDER, DRONE)
+
+    world.advance(mission_id, 60.0)  # delivered, returned and landed
+
+    order = world.order(ORDER)
+    assert order.status == OrderStatus.DELIVERED
+    assert order.delivered_at is not None
 
 
 def test_landing_docks_the_drone_completes_the_mission_and_keeps_the_order_delivered(
