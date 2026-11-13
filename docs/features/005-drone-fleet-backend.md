@@ -29,7 +29,7 @@ This feature establishes data structures only. It does **not** implement flight 
 |---|---|---|
 | Model code | `SF-1` | Stable model identifier |
 | Display name | `SkyFleet SF-1 Courier` | Human-readable name |
-| Airframe | Electric hexacopter (6 rotors) | Descriptive metadata |
+| Airframe | Electric quadcopter (4 rotors, M1–M4; changed from hexacopter by migration `0008`) | Descriptive metadata |
 | Maximum payload | **3.0 kg** | Maximum parcel mass |
 | Maximum total flight distance | **20 km** | Nominal upper bound on one charge, not a delivery radius |
 | Conservative mission distance budget | **12–14 km** | Total route including travel to recipient and return to a suitable Hub |
@@ -184,7 +184,7 @@ Use the existing `/api` routing conventions and existing database session/depend
 ## 12. Implementation notes (as built)
 
 - **Structure:** flat `backend/app/drones/` package (`models`, `schemas`, `repository`, `seed`), route in `backend/app/api/routes/drones.py`, Alembic migration `0002` (`drone_models`, `drones`). `drones` depends on `hubs`, never the reverse.
-- **`drone_models`:** string code id (`SF-1`) plus the specification columns suggested in §5. Seeded values: 3.0 kg payload, 20.0 km maximum range, 14.0 km recommended mission range, 45.0 / 60.0 km/h cruise / maximum speed, 32 min nominal flight time, 20% reserve, 45 min charge to 80%, 10.0 m/s wind, 9.0 kg empty weight, airframe `hexacopter`. Floats are used for measurements, matching the Hub model. The operating altitude is documented in the README and not stored. CHECK constraints: positive values, recommended range at most the maximum range, maximum speed at least cruise speed, reserve between 0 and 100.
+- **`drone_models`:** string code id (`SF-1`) plus the specification columns suggested in §5. Seeded values: 3.0 kg payload, 20.0 km maximum range, 14.0 km recommended mission range, 45.0 / 60.0 km/h cruise / maximum speed, 32 min nominal flight time, 20% reserve, 45 min charge to 80%, 10.0 m/s wind, 9.0 kg empty weight, airframe `quadcopter` (seeded as `hexacopter` before migration `0008`). Floats are used for measurements, matching the Hub model. The operating altitude is documented in the README and not stored. CHECK constraints: positive values, recommended range at most the maximum range, maximum speed at least cruise speed, reserve between 0 and 100.
 - **`drones`:** string id (`DRN-001` style), `model_id` and `hub_id` foreign keys (RESTRICT), `status` as a string with a CHECK (`IDLE`, `IN_FLIGHT`, `CHARGING`, `MAINTENANCE`; a Python `StrEnum` types the API), `battery_pct` 0–100, and `longitude`/`latitude` with range checks. Model parameters are not duplicated on drone rows.
 - **Seed (`uv run python -m app.drones.seed`):** insert-only and idempotent. 12 drones, 3 per Hub in Hub-id order (`DRN-001`..`DRN-012`), battery 100 / 90 / 80 per Hub, all `IDLE`, positions copied from the Hub rows in the database. It validates before writing: it fails clearly if the Hubs are missing and fails if a Hub's assigned-drone count would exceed its `drone_capacity`, leaving the database unchanged.
 - **API:** `GET /api/drones` (ordered by id, `[]` when empty) and `GET /api/drones/{id}` (404 `{"detail": "Drone '<id>' not found"}`). A drone is `{id, hub_id, status, battery_pct, longitude, latitude, model}` with the full model object nested, so no separate model endpoint was added.

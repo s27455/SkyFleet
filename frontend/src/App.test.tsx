@@ -1242,6 +1242,18 @@ describe('App drone inspector', () => {
     )
   })
 
+  it('shows labelled simulated telemetry next to the real data', async () => {
+    await openPanel('DRN-002')
+    inspect()
+
+    const dialog = screen.getByRole('dialog', { name: 'DRN-002' })
+    const telemetry = await within(dialog).findByRole('region', { name: 'Simulated telemetry' })
+    expect(within(telemetry).getByText('Simulated')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(telemetry).getByText('Flying, parcel on board')).toBeInTheDocument(),
+    )
+  })
+
   it('puts the header out of reach while it is open', async () => {
     await openPanel('DRN-002')
     inspect()

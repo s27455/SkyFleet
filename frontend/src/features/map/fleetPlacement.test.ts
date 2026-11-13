@@ -13,7 +13,7 @@ const MODEL = {
   cruiseSpeedKmh: 45,
   nominalFlightTimeMin: 32,
   minBatteryReservePct: 20,
-  airframeType: 'hexacopter',
+  airframeType: 'quadcopter',
   maxSpeedKmh: 60,
   chargeTo80Minutes: 45,
   maxWindMps: 10,

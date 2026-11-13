@@ -35,7 +35,7 @@ export interface DroneResponse {
 export interface DroneModel {
   id: string
   name: string
-  /** Descriptive metadata from the backend, e.g. `hexacopter`. */
+  /** Descriptive metadata from the backend, e.g. `quadcopter`. */
   airframeType: string
   maxPayloadKg: number
   /** Nominal upper bound on total distance per charge, not a delivery radius. */

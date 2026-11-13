@@ -89,7 +89,7 @@ uv run python -m app.drones.seed         # SF-1 model + 12 drones (3 per Hub)
 # GET http://127.0.0.1:8000/api/drones  and  /api/drones/{id}  (e.g. DRN-001)
 ```
 
-The single drone model is **SkyFleet SF-1 Courier**: an electric hexacopter with 3.0 kg maximum
+The single drone model is **SkyFleet SF-1 Courier**: an electric quadcopter (four rotors) with 3.0 kg maximum
 payload, 20 km maximum total flight distance (a conservative mission budget of 14 km is stored; both
 cover the whole route including the return to a Hub, not a one-way delivery radius), 45 km/h cruise,
 60 km/h maximum speed, about 32 min nominal flight time, 20% minimum battery reserve, about 45 min to

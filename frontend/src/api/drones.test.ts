@@ -36,7 +36,7 @@ describe('getDrones', () => {
       model: {
         id: 'SF-1',
         name: 'SkyFleet SF-1 Courier',
-        airframeType: 'hexacopter',
+        airframeType: 'quadcopter',
         maxPayloadKg: 3,
         maxRangeKm: 20,
         recommendedMissionRangeKm: 14,

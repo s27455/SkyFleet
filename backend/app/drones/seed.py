@@ -34,7 +34,7 @@ def build_sf1_model() -> DroneModel:
     return DroneModel(
         id=SF1_MODEL_ID,
         name="SkyFleet SF-1 Courier",
-        airframe_type="hexacopter",
+        airframe_type="quadcopter",
         max_payload_kg=3.0,
         max_range_km=20.0,
         recommended_mission_range_km=14.0,

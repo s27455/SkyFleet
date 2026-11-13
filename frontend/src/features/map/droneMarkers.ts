@@ -78,7 +78,7 @@ const DRONE_MARKER_SELECTED_CLASSES = ['bg-accent', 'text-canvas', 'ring-4', 'ri
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
-/** A six-arm rotor glyph (the SF-1 is a hexacopter); decorative, the button carries the name. */
+/** A four-arm rotor glyph (the SF-1 is a quadcopter); decorative, the button carries the name. */
 function createRotorGlyph() {
   const svg = document.createElementNS(SVG_NS, 'svg')
   svg.setAttribute('viewBox', '0 0 24 24')
@@ -90,8 +90,8 @@ function createRotorGlyph() {
   svg.setAttribute('stroke-linecap', 'round')
   svg.setAttribute('aria-hidden', 'true')
 
-  const tips = Array.from({ length: 6 }, (_, index) => {
-    const angle = (Math.PI / 3) * index
+  const tips = Array.from({ length: 4 }, (_, index) => {
+    const angle = (Math.PI / 4) * (2 * index + 1)
     return [12 + 8 * Math.cos(angle), 12 + 8 * Math.sin(angle)] as const
   })
   const arms = document.createElementNS(SVG_NS, 'path')

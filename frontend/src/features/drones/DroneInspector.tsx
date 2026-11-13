@@ -10,6 +10,8 @@ import { ORDER_STATUS_DISPLAY } from '../orders/orderStatus'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
 import type { InspectorData, Lookup } from './inspectorData'
 import { useDialogFocus } from './useDialogFocus'
+import type { TelemetryInput } from '../telemetry/deriveTelemetry'
+import { TelemetryPanel } from '../telemetry/TelemetryPanel'
 
 /** Length of the exit animation; the dialog unmounts when it ends. Keep in sync with index.css. */
 const EXIT_MS = 150
@@ -128,6 +130,22 @@ export function DroneInspector({
   const [longitude, latitude] = drone.coordinates
   const hubName = (id: string) => hubs.find((candidate) => candidate.id === id)?.name ?? id
   const { flight, mission, payload } = data
+  // The simulated telemetry is estimated from the real state shown on this page, nothing else.
+  const telemetryInput: TelemetryInput = {
+    droneId: drone.id,
+    status: drone.status,
+    batteryPct: drone.batteryPct,
+    model,
+    flight:
+      flight.kind === 'found'
+        ? {
+            phase: flight.value.phase,
+            progress: flight.value.progress,
+            batteryPct: flight.value.batteryPct,
+          }
+        : null,
+    parcelKg: payload.kind === 'found' ? payload.value.packageWeightKg : null,
+  }
 
   return (
     <div
@@ -262,19 +280,8 @@ export function DroneInspector({
               </dl>
             </Section>
           </div>
-          {/* Reserved for the simulated diagnostics of Feature 016C. Nothing is shown as a value. */}
-          <section
-            aria-label="Diagnostics"
-            className="min-w-0 rounded-lg border border-dashed border-line p-4 lg:col-start-1 lg:row-start-2"
-          >
-            <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">
-              Diagnostics
-            </h3>
-            <p className="mt-2 text-sm text-fg-muted">
-              Simulated component telemetry is not available yet. When it is added, it will be
-              labelled as simulated and shown here.
-            </p>
-          </section>
+          {/* Simulated telemetry (016C): estimates from the real state above, labelled as such. */}
+          <TelemetryPanel input={telemetryInput} className="lg:col-start-1 lg:row-start-2" />
         </div>
         <p className="mt-4 text-xs text-fg-muted">
           Backend snapshot, refreshed about every 2 seconds; flights are simulated. Specifications

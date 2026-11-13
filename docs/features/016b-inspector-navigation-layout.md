@@ -14,7 +14,7 @@ Implemented and verified by automated checks and a scripted real-browser smoke t
 - **Smoke test (desktop 1440 px and narrow 390 px, no console errors):** idle drone DRN-001 and a flying DRN-002 (injected data); lazy 3D chunk loads; focus enters the dialog and the header is inert; drag, zoom buttons and arrow keys move the camera and it stays put across several polls; Escape closes only the inspector (panel and selection kept, focus restored), a second Escape closes the panel.
 
 ### Known issues and follow-ups
-- The seeded model SF-1 is a six-rotor `hexacopter` in the backend, while the 016A model has four motors. The inspector shows the real airframe value and labels the 3D model illustrative; resolving the mismatch (model or seed) is open.
+- At the time of 016B the seeded SF-1 was a six-rotor `hexacopter` while the 016A model has four motors. Resolved afterwards by the MVP scope correction (quadcopters only: backend seed and migration `0008`; see 016C).
 - At 390 px the existing app header clips the backend status and causes a horizontal scrollbar; this predates 016B and was not changed.
 - A touch drag over the viewer orbits the model and does not scroll the page.
 

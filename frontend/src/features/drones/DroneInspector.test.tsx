@@ -20,7 +20,7 @@ const DRONE: Drone = {
   model: {
     id: 'SF-1',
     name: 'SkyFleet SF-1 Courier',
-    airframeType: 'hexacopter',
+    airframeType: 'quadcopter',
     maxPayloadKg: 3,
     maxRangeKm: 20,
     recommendedMissionRangeKm: 14,
@@ -156,7 +156,7 @@ describe('DroneInspector', () => {
     renderInspector()
 
     const specification = section('Model specification')
-    expect(within(specification).getByText('hexacopter')).toBeInTheDocument()
+    expect(within(specification).getByText('quadcopter')).toBeInTheDocument()
     expect(within(specification).getByText('9 kg')).toBeInTheDocument()
     expect(within(specification).getByText('45 / 60 km/h')).toBeInTheDocument()
     expect(within(specification).getByText('45 min')).toBeInTheDocument()
@@ -203,10 +203,25 @@ describe('DroneInspector', () => {
     expect(within(section('Operational')).getByText('72%')).toBeInTheDocument()
   })
 
-  it('reserves a clearly empty diagnostics area without any values', () => {
+  it('shows labelled simulated telemetry estimated from the real flight and parcel', () => {
     renderInspector()
 
-    expect(within(section('Diagnostics')).getByText(/not available yet/)).toBeInTheDocument()
+    const telemetry = section('Simulated telemetry')
+    expect(within(telemetry).getByText('Simulated')).toBeInTheDocument()
+    // The flight phase (DELIVERING) and the 1.8 kg parcel are inputs of the estimate.
+    expect(within(telemetry).getByText('Flying, parcel on board')).toBeInTheDocument()
+    // The drone model is a quadcopter: a header row plus four motors.
+    expect(within(telemetry).getAllByRole('row')).toHaveLength(5)
+    // The real data sections stay separate and unlabelled by "simulated".
+    expect(within(section('Operational')).queryByText('Simulated')).not.toBeInTheDocument()
+  })
+
+  it('shows telemetry for an idle drone as standby', () => {
+    renderInspector({ drone: { ...DRONE, status: 'IDLE' }, data: IDLE })
+
+    expect(
+      within(section('Simulated telemetry')).getByText('Standby, motors off'),
+    ).toBeInTheDocument()
   })
 
   it('moves focus to the close button and closes with it', () => {
