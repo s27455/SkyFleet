@@ -13,6 +13,7 @@ const ORDER: Order = {
   coordinates: [18.6531, 54.3487],
   packageWeightKg: 0.3,
   status: 'READY_FOR_PICKUP',
+  deliveredAt: null,
   createdAt: '2026-11-11T21:53:08.077240Z',
   updatedAt: '2026-11-12T08:05:00Z',
 }

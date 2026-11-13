@@ -282,3 +282,23 @@ def test_recommendations_still_work(client: TestClient, live: Session) -> None:
 
     assert response.status_code == 200 and response.json()["recommendations"]
     assert _missions(live) == []
+
+
+def test_recommendations_are_unaffected_by_the_active_view_filter_of_feature_017a(
+    client: TestClient, live: Session
+) -> None:
+    """Expired DELIVERED orders are hidden from the active list, never from dispatch or storage."""
+    for order in live.scalars(select(DeliveryOrder)).all():
+        if order.id in {"ORD-001", "ORD-002"}:
+            order.status = OrderStatus.DELIVERED.value  # legacy: delivered, no delivery time
+    live.commit()
+    before = client.get("/api/dispatch/recommendations").json()
+
+    active = client.get("/api/orders", params={"active": "true"}).json()
+    after = client.get("/api/dispatch/recommendations").json()
+
+    assert {"ORD-001", "ORD-002"}.isdisjoint(o["id"] for o in active)
+    assert len(client.get("/api/orders").json()) == 11  # still stored and listed in full
+    assert after == before  # reading the active view changes nothing for dispatch
+    assert {"ORD-001", "ORD-002"}.isdisjoint(r["order_id"] for r in after["recommendations"])
+    assert after["recommendations"]

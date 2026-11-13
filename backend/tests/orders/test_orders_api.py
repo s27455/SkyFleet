@@ -12,6 +12,7 @@ ORDER_FIELDS = {
     "destination_latitude",
     "package_weight_kg",
     "status",
+    "delivered_at",
     "created_at",
     "updated_at",
 }

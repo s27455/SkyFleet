@@ -77,10 +77,47 @@ describe('OrdersManager', () => {
     expect(screen.getByRole('button', { name: 'Edit order ORD-006' })).toBeDisabled()
   })
 
-  it('shows an empty state', () => {
+  it('shows an empty state for the active view', () => {
     renderManager([])
 
-    expect(screen.getByText(/No orders yet/)).toBeInTheDocument()
+    expect(screen.getByText(/No active orders/)).toBeInTheDocument()
+  })
+
+  it('defaults to Active and reads the full history only after All is chosen', async () => {
+    const history = [
+      ...ORDER_RESPONSES.slice(3, 5),
+      { ...ORDER_RESPONSES[5], status: 'DELIVERED', delivered_at: '2026-11-13T10:00:00Z' },
+      { ...ORDER_RESPONSES[6], status: 'DELIVERED', delivered_at: null },
+    ]
+    const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(history)))
+    renderManager()
+
+    expect(screen.getByRole('heading', { name: 'Active orders (3)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Active' })).toHaveAttribute('aria-pressed', 'true')
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    expect(await screen.findByRole('heading', { name: 'All orders (4)' })).toBeInTheDocument()
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders$/)
+    expect(screen.getByText('ORD-007')).toBeInTheDocument() // legacy delivered order, still listed
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }))
+
+    expect(screen.getByRole('heading', { name: 'Active orders (3)' })).toBeInTheDocument()
+    expect(screen.queryByText('ORD-007')).not.toBeInTheDocument()
+  })
+
+  it('shows an error with Retry when the history cannot be read', async () => {
+    stubFetch(() => Promise.resolve(jsonResponse({ detail: 'oops' }, 500)))
+    renderManager()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load all orders')
+    fireEvent.click(screen.getByRole('button', { name: 'Show active orders' }))
+    expect(screen.getByRole('heading', { name: 'Active orders (3)' })).toBeInTheDocument()
   })
 
   it('creates an order, then refreshes the data and closes the form', async () => {

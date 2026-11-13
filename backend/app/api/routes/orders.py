@@ -1,11 +1,13 @@
 """Delivery order endpoints: reads plus administrative create, update and delete."""
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db.session import get_session
 from app.orders import generator, repository, service
 from app.orders.models import DeliveryOrder
@@ -37,8 +39,16 @@ def _http_error(error: service.OrderManagementError) -> HTTPException:
 
 
 @router.get("", response_model=list[OrderResponse])
-def list_orders(session: SessionDep) -> Sequence[DeliveryOrder]:
-    return repository.list_orders(session)
+def list_orders(session: SessionDep, active: bool = False) -> Sequence[DeliveryOrder]:
+    """All orders (full history), or with `?active=true` only those for the operational views.
+
+    The active view hides a `DELIVERED` order once its visibility window has passed (Feature 017A).
+    """
+    if not active:
+        return repository.list_orders(session)
+    return repository.list_active_orders(
+        session, datetime.now(UTC), get_settings().order_delivered_visibility_seconds
+    )
 
 
 @router.post("/generate", response_model=OrderResponse, status_code=201)

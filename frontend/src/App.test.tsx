@@ -128,6 +128,7 @@ function stubBackend(
   const hubsCalls = vi.fn(hubsHandler)
   const dronesCalls = vi.fn(dronesHandler)
   const ordersCalls = vi.fn(ordersHandler)
+  const allOrdersCalls = vi.fn(ordersHandler)
   const flightsCalls = vi.fn(more.flights ?? okFlights)
   const missionsCalls = vi.fn(more.missions ?? okMissions)
   const startCalls = vi.fn(more.start ?? okStart)
@@ -161,13 +162,22 @@ function stubBackend(
         return Promise.resolve(jsonResponse({ ...ORDER_RESPONSES[0], id: 'ORD-NEW00001' }, 201))
       }
       if (url.endsWith('/start')) return startCalls()
-      if (url.endsWith('/api/orders')) return ordersCalls()
+      if (url.endsWith('/api/orders?active=true')) return ordersCalls()
+      if (url.endsWith('/api/orders')) return allOrdersCalls()
       if (url.endsWith('/api/flights')) return flightsCalls()
       if (url.endsWith('/api/missions')) return missionsCalls()
       return url.endsWith('/api/drones') ? dronesCalls() : hubsCalls()
     }),
   )
-  return { hubsCalls, dronesCalls, ordersCalls, flightsCalls, missionsCalls, startCalls }
+  return {
+    hubsCalls,
+    dronesCalls,
+    ordersCalls,
+    allOrdersCalls,
+    flightsCalls,
+    missionsCalls,
+    startCalls,
+  }
 }
 
 const hubMarkers = () => screen.queryAllByRole('button', { name: /^Marker / })
@@ -607,6 +617,33 @@ describe('App orders', () => {
 
     expect(screen.getByRole('complementary', { name: 'Order details: ORD-003' })).toBeVisible()
     expect(screen.getByRole('button', { name: /^ORD-003/ })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('drops a selected order, its marker and its list row when it leaves the active list', async () => {
+    const previous = POLL_INTERVALS_MS.fleet
+    POLL_INTERVALS_MS.fleet = 20 // must be set before the hooks mount
+    try {
+      const stub = stubBackend(okHubs, okDrones, okOrders)
+      render(<App />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-003' }))
+      expect(screen.getByRole('complementary', { name: 'Order details: ORD-003' })).toBeVisible()
+
+      // The backend's next answer no longer contains ORD-003 (its delivered window ended).
+      stub.ordersCalls.mockImplementation(() =>
+        Promise.resolve(jsonResponse(ORDER_RESPONSES.filter((order) => order.id !== 'ORD-003'))),
+      )
+      await waitFor(() => expect(orderMarkers()).toHaveLength(9))
+
+      expect(screen.queryByRole('button', { name: 'Order marker ORD-003' })).toBeNull()
+      expect(screen.queryByRole('complementary', { name: 'Order details: ORD-003' })).toBeNull()
+      expect(ordersToggle()).toHaveTextContent('Orders (9)')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      // The other orders are still selectable afterwards.
+      fireEvent.click(screen.getByRole('button', { name: 'Order marker ORD-004' }))
+      expect(screen.getByRole('complementary', { name: 'Order details: ORD-004' })).toBeVisible()
+    } finally {
+      POLL_INTERVALS_MS.fleet = previous
+    }
   })
 
   it('shows one details context at a time across Hubs, drones and orders', async () => {
@@ -1148,7 +1185,9 @@ describe('App management area', () => {
 
     const dialog = screen.getByRole('dialog', { name: 'Management' })
     expect(within(dialog).getByRole('tab', { name: 'Orders' })).toBeInTheDocument()
-    expect(within(dialog).getByText(`Orders (${ORDER_RESPONSES.length})`)).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(`Active orders (${ORDER_RESPONSES.length})`),
+    ).toBeInTheDocument()
     expect(hubMarkers()).toHaveLength(4)
 
     fireEvent.click(within(dialog).getByRole('tab', { name: 'Drones' }))

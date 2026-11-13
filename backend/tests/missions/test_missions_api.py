@@ -326,6 +326,7 @@ def test_existing_apis_are_unchanged(client: TestClient, seeded: Session) -> Non
         "destination_latitude",
         "package_weight_kg",
         "status",
+        "delivered_at",
         "created_at",
         "updated_at",
     }

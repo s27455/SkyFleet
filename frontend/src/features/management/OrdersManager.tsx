@@ -6,6 +6,7 @@ import type { Hub } from '../../types/hub'
 import type { Mission } from '../../types/mission'
 import type { Order } from '../../types/order'
 import { ORDER_STATUS_DISPLAY } from '../orders/orderStatus'
+import { useAllOrders } from '../orders/useOrders'
 import { ConfirmDelete } from './ConfirmDelete'
 import { LINK_BUTTON_CLASS, PRIMARY_BUTTON_CLASS } from './formStyles'
 import { OrderForm } from './OrderForm'
@@ -25,12 +26,66 @@ type Mode =
   | { kind: 'edit'; id: string }
   | { kind: 'delete'; id: string }
 
+type Scope = 'active' | 'all'
+
 /**
- * Orders administration (Feature 012 API). Edit and Delete are offered only for a READY_FOR_PICKUP
- * order that no mission references; that is a hint taken from the polled missions, and the backend
- * still decides, with its message shown when it refuses.
+ * Orders administration (Feature 012 API). Shows the active orders by default; the Active / All
+ * switch (Feature 017A) also reaches the full history of delivered orders. The history is read
+ * only while "All" is chosen.
  */
-export function OrdersManager({ orders, hubs, missions, onChanged }: OrdersManagerProps) {
+export function OrdersManager(props: OrdersManagerProps) {
+  const [scope, setScope] = useState<Scope>('active')
+  if (scope === 'all') return <AllOrdersManager {...props} scope={scope} onScopeChange={setScope} />
+  return <OrdersAdmin {...props} scope={scope} onScopeChange={setScope} />
+}
+
+interface ScopedProps extends OrdersManagerProps {
+  scope: Scope
+  onScopeChange: (scope: Scope) => void
+}
+
+/** Reads the whole history (own polling) and hands it to the same table as the active view. */
+function AllOrdersManager(props: ScopedProps) {
+  const all = useAllOrders()
+  if (all.state.status === 'loading') {
+    return (
+      <p role="status" className="text-sm text-fg-muted">
+        Loading all orders…
+      </p>
+    )
+  }
+  if (all.state.status === 'error') {
+    return (
+      <div role="alert" className="flex flex-col gap-2 text-sm">
+        <p>Could not load all orders.</p>
+        <div className="flex gap-3">
+          <button type="button" className={LINK_BUTTON_CLASS} onClick={all.retry}>
+            Retry
+          </button>
+          <button
+            type="button"
+            className={LINK_BUTTON_CLASS}
+            onClick={() => props.onScopeChange('active')}
+          >
+            Show active orders
+          </button>
+        </div>
+      </div>
+    )
+  }
+  const onChanged = () => {
+    props.onChanged()
+    all.refresh()
+  }
+  return <OrdersAdmin {...props} orders={all.state.data} onChanged={onChanged} />
+}
+
+/**
+ * Edit and Delete are offered only for a READY_FOR_PICKUP order that no mission references; that is
+ * a hint taken from the polled missions, and the backend still decides, with its message shown when
+ * it refuses.
+ */
+function OrdersAdmin({ orders, hubs, missions, onChanged, scope, onScopeChange }: ScopedProps) {
   const [mode, setMode] = useState<Mode>({ kind: 'none' })
   const deletion = useAction()
   const hubNames = useMemo(() => new Map(hubs.map((hub) => [hub.id, hub.name])), [hubs])
@@ -66,7 +121,22 @@ export function OrdersManager({ orders, hubs, missions, onChanged }: OrdersManag
   return (
     <section aria-label="Orders management" className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Orders ({orders.length})</h3>
+        <h3 className="text-sm font-semibold">
+          {scope === 'all' ? 'All orders' : 'Active orders'} ({orders.length})
+        </h3>
+        <div role="group" aria-label="Orders shown" className="flex gap-1">
+          {(['active', 'all'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={LINK_BUTTON_CLASS}
+              aria-pressed={scope === value}
+              onClick={() => onScopeChange(value)}
+            >
+              {value === 'active' ? 'Active' : 'All'}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className={PRIMARY_BUTTON_CLASS}
@@ -104,7 +174,11 @@ export function OrdersManager({ orders, hubs, missions, onChanged }: OrdersManag
       )}
 
       {orders.length === 0 ? (
-        <p className="text-sm text-fg-muted">No orders yet. Create one to get started.</p>
+        <p className="text-sm text-fg-muted">
+          {scope === 'all'
+            ? 'No orders yet. Create one to get started.'
+            : 'No active orders. Create one, or choose All to see the history.'}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

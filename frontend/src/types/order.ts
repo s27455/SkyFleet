@@ -18,6 +18,8 @@ export interface OrderResponse {
   destination_latitude: number
   package_weight_kg: number
   status: OrderStatus
+  /** When the parcel was handed over; null if not delivered, or a legacy order without a time. */
+  delivered_at: string | null
   created_at: string
   updated_at: string
 }
@@ -32,6 +34,7 @@ export interface Order {
   packageWeightKg: number
   status: OrderStatus
   /** ISO 8601 timestamps as sent by the backend (validated to parse). */
+  deliveredAt: string | null
   createdAt: string
   updatedAt: string
 }

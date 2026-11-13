@@ -79,6 +79,12 @@ function App() {
     selection?.kind === 'drone' ? drones.find((drone) => drone.id === selection.id) : undefined
   const selectedOrder =
     selection?.kind === 'order' ? orders.find((order) => order.id === selection.id) : undefined
+  // An order can leave the active list while selected (its delivered window ended). Drop the
+  // selection then, once the orders are known, so no stale selection lingers. Adjusting state while
+  // rendering is allowed.
+  if (selection?.kind === 'order' && ordersResource.state.status === 'ready' && !selectedOrder) {
+    setSelection(null)
+  }
   // The inspector exists only for a drone that is still selected and still in the data.
   const inspectorOpen = selectedDrone !== undefined && inspectedDroneId === selectedDrone.id
   const inspectorData = useMemo(

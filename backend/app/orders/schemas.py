@@ -23,6 +23,7 @@ class OrderResponse(BaseModel):
     destination_latitude: float
     package_weight_kg: float
     status: OrderStatus
+    delivered_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

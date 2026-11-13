@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     order_sim_max_interval_seconds: float = Field(default=30.0, gt=0)
     order_sim_max_outstanding_orders: int = Field(default=20, ge=1)
 
+    # Feature 017A: how long a DELIVERED order stays in the active operational views, counted from
+    # its persisted delivery time. The order itself is never deleted.
+    order_delivered_visibility_seconds: float = Field(default=120.0, gt=0)
+
     # Mission planning (simulation assumptions, not certified performance). Extra energy per km
     # when carrying the full rated payload, as a fraction of the empty rate (0.5 = +50%).
     mission_payload_energy_factor: float = Field(default=0.5, ge=0)

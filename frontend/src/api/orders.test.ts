@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test/hubFixtures'
 import { ORDER_RESPONSES } from '../test/orderFixtures'
 import { ApiError } from './client'
-import { generateOrder, getOrders } from './orders'
+import { generateOrder, getActiveOrders, getOrders } from './orders'
 
 function stubFetch(response: () => Promise<Response>) {
   const fetchMock = vi.fn((_url: string) => response())
@@ -34,6 +34,7 @@ describe('getOrders', () => {
       coordinates: [18.5972, 54.3768], // [longitude, latitude], unchanged
       packageWeightKg: 0.8,
       status: 'READY_FOR_PICKUP',
+      deliveredAt: null,
       createdAt: '2026-11-11T21:53:08.077240Z',
       updatedAt: '2026-11-11T21:53:08.077240Z',
     })
@@ -94,6 +95,37 @@ describe('getOrders', () => {
 
     stubFetch(() => Promise.reject(new TypeError('Failed to fetch')))
     await expect(getOrders()).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('delivered_at and the active scope (Feature 017A)', () => {
+  it('maps a delivery time and a legacy null, and rejects a bad or zone-less one', async () => {
+    stubFetch(() =>
+      Promise.resolve(
+        jsonResponse([
+          { ...ORDER_RESPONSES[0], status: 'DELIVERED', delivered_at: '2026-11-13T12:00:00Z' },
+          { ...ORDER_RESPONSES[1], status: 'DELIVERED', delivered_at: null },
+        ]),
+      ),
+    )
+    const [flown, legacy] = await getOrders()
+    expect(flown.deliveredAt).toBe('2026-11-13T12:00:00Z')
+    expect(legacy.deliveredAt).toBeNull()
+
+    for (const bad of ['yesterday', '2026-11-13T12:00:00', 5]) {
+      stubFetch(() => Promise.resolve(jsonResponse([{ ...ORDER_RESPONSES[0], delivered_at: bad }])))
+      await expect(getOrders()).rejects.toBeInstanceOf(ApiError)
+    }
+  })
+
+  it('asks the backend for the active orders only with active=true; getOrders stays unfiltered', async () => {
+    const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(ORDER_RESPONSES)))
+
+    await getActiveOrders()
+    await getOrders()
+
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders\?active=true$/)
+    expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/api\/orders$/)
   })
 })
 

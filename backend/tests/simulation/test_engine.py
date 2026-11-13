@@ -165,6 +165,7 @@ def test_the_order_is_delivered_before_the_drone_returns_and_the_mission_complet
     flight = world.flight(mission_id)
     assert flight.phase == FlightPhase.RETURNING
     assert flight.delivered_at is not None
+    assert world.order(ORDER).delivered_at == flight.delivered_at  # Feature 017A
 
 
 def test_landing_docks_the_drone_completes_the_mission_and_keeps_the_order_delivered(

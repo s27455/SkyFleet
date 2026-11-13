@@ -29,6 +29,7 @@ export function toOrder(item: unknown): Order {
     destination_latitude: latitude,
     package_weight_kg: weight,
     status,
+    delivered_at: deliveredAt = null,
     created_at: createdAt,
     updated_at: updatedAt,
   } = raw
@@ -43,6 +44,7 @@ export function toOrder(item: unknown): Order {
   if (typeof status !== 'string' || !(ORDER_STATUSES as readonly string[]).includes(status)) {
     invalid(`unknown status for ${id}`)
   }
+  if (deliveredAt !== null && !isTimestamp(deliveredAt)) invalid(`bad delivered_at for ${id}`)
   if (!isTimestamp(createdAt)) invalid(`bad created_at for ${id}`)
   if (!isTimestamp(updatedAt)) invalid(`bad updated_at for ${id}`)
 
@@ -53,20 +55,34 @@ export function toOrder(item: unknown): Order {
     coordinates: [longitude, latitude],
     packageWeightKg: weight,
     status: status as Order['status'],
+    deliveredAt,
     createdAt,
     updatedAt,
   }
 }
 
-/** Fetches all orders. Rejects with `ApiError` on HTTP, network or data errors. */
-export async function getOrders(signal?: AbortSignal): Promise<Order[]> {
-  const payload = await apiGet<unknown>('/api/orders', signal)
+async function readOrders(path: string, signal?: AbortSignal): Promise<Order[]> {
+  const payload = await apiGet<unknown>(path, signal)
   if (!Array.isArray(payload)) invalid('response is not a list')
 
   const orders = payload.map(toOrder)
   if (new Set(orders.map((order) => order.id)).size !== orders.length)
     invalid('duplicate order ids')
   return orders
+}
+
+/** Fetches every order, the full history. Rejects with `ApiError` on HTTP, network or data errors. */
+export function getOrders(signal?: AbortSignal): Promise<Order[]> {
+  return readOrders('/api/orders', signal)
+}
+
+/**
+ * Fetches the orders for the active operational views (Feature 017A). The backend decides which
+ * delivered orders have expired, from their stored delivery time and its own clock, so the client
+ * clock is never involved. The map, the lists and the counters all use this one answer.
+ */
+export function getActiveOrders(signal?: AbortSignal): Promise<Order[]> {
+  return readOrders('/api/orders?active=true', signal)
 }
 
 /** Fields the administrator provides for a new order (Feature 012 `POST /api/orders`). */

@@ -37,6 +37,7 @@ export const ORDER_RESPONSES: OrderResponse[] = DESTINATIONS.map(
     destination_latitude: latitude,
     package_weight_kg: weight,
     status: 'READY_FOR_PICKUP' as const,
+    delivered_at: null,
     created_at: '2026-11-11T21:53:08.077240Z',
     updated_at: '2026-11-11T21:53:08.077240Z',
   }),

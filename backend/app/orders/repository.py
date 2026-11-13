@@ -1,17 +1,40 @@
 """Read queries for delivery orders."""
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.missions.models import Mission
 from app.orders.models import DeliveryOrder, OrderStatus
+from app.orders.visibility import visibility_cutoff
 
 
 def list_orders(session: Session) -> Sequence[DeliveryOrder]:
     """Return all orders in a stable order (creation time, then id)."""
     statement = select(DeliveryOrder).order_by(DeliveryOrder.created_at, DeliveryOrder.id)
+    return session.scalars(statement).all()
+
+
+def list_active_orders(
+    session: Session, now: datetime, window_seconds: float
+) -> Sequence[DeliveryOrder]:
+    """Orders for the active operational views (Feature 017A), in the same order as `list_orders`.
+
+    Every order that is not `DELIVERED`, plus `DELIVERED` orders still inside the visibility window.
+    A `DELIVERED` order without a delivery time never matches (`NULL > cutoff` is not true). The
+    SQL mirrors `visibility.is_order_active`; both are tested against the same boundaries.
+    """
+    cutoff = visibility_cutoff(now, window_seconds)
+    statement = (
+        select(DeliveryOrder)
+        .where(
+            (DeliveryOrder.status != OrderStatus.DELIVERED.value)
+            | (DeliveryOrder.delivered_at > cutoff)
+        )
+        .order_by(DeliveryOrder.created_at, DeliveryOrder.id)
+    )
     return session.scalars(statement).all()
 
 

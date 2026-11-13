@@ -152,6 +152,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
         if flight.delivered_at is None and elapsed >= delivery_end:
             order.status = OrderStatus.DELIVERED.value
             flight.delivered_at = started + timedelta(seconds=delivery_end)
+            order.delivered_at = flight.delivered_at
             _write_snapshot(flight, drone, state_for(elapsed), now)
             session.commit()
             return True

@@ -35,7 +35,7 @@ describe('the live hooks use those intervals', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
-        const name = url.split('/').pop() ?? ''
+        const name = (url.split('/').pop() ?? '').split('?')[0]
         calls[name] = (calls[name] ?? 0) + 1
         return Promise.resolve(jsonResponse(name === 'flights' ? { not: 'valid' } : []))
       }),

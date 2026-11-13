@@ -71,6 +71,10 @@ class DeliveryOrder(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, server_default=func.now()
     )
+    # When the parcel was handed over (Feature 017A); set by the flight simulation together with
+    # the DELIVERED status. Null for any order not delivered and for legacy delivered orders whose
+    # time cannot be recovered. It is the only reference for the active-view visibility window.
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     # Set on insert; a later lifecycle feature updates it when the status changes.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, server_default=func.now(), onupdate=_utc_now
