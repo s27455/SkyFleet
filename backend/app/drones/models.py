@@ -2,7 +2,8 @@
 
 A `DroneModel` holds the shared technical capabilities (simulation assumptions, not certified
 performance). A `Drone` is one physical unit with its own identity and operational snapshot; its
-`hub_id` is the assigned/home Hub (there is no separate DroneBase entity).
+`hub_id` is the Hub where the drone last docked successfully (there is no separate DroneBase
+entity).
 """
 
 from enum import StrEnum
@@ -77,8 +78,10 @@ class Drone(Base):
     # Stable unit id, e.g. "DRN-001".
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
     model_id: Mapped[str] = mapped_column(ForeignKey("drone_models.id", ondelete="RESTRICT"))
-    # Assigned/home Hub (administrative), not where the drone is. Physical presence at a Hub is
-    # derived from status and position (see app/missions/presence.py).
+    # The Hub where the drone last docked successfully (Feature 017C): the flight simulation sets it
+    # on a landing, a diversion that lands included, never in flight and never in an emergency.
+    # It is not where the drone is now: physical presence is derived from status and position (see
+    # app/missions/presence.py).
     hub_id: Mapped[str] = mapped_column(ForeignKey("hubs.id", ondelete="RESTRICT"))
     status: Mapped[str] = mapped_column(String(16))
     battery_pct: Mapped[int] = mapped_column(Integer)

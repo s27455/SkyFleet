@@ -46,13 +46,13 @@ describe('DroneDetailPanel', () => {
     expect(screen.getByText('SkyFleet SF-1 Courier')).toBeInTheDocument()
     expect(valueOf('Status')).toHaveTextContent('Idle')
     expect(valueOf('Battery')).toHaveTextContent('90%')
-    expect(valueOf('Assigned Hub')).toHaveTextContent('Centrum Riviera')
+    expect(valueOf('Current Hub')).toHaveTextContent('Centrum Riviera')
   })
 
   it('falls back to the Hub id when the Hub is not available', () => {
     render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
 
-    expect(valueOf('Assigned Hub')).toHaveTextContent('hub-centrum-riviera')
+    expect(valueOf('Current Hub')).toHaveTextContent('hub-centrum-riviera')
   })
 
   it('shows the model capabilities including the 3 kg payload', () => {

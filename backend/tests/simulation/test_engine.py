@@ -18,7 +18,9 @@ from app.missions.routing import distance_km, hub_point
 from app.orders import repository as order_repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.simulation import engine
+from app.simulation.charging import ChargingState, charge_step
 from app.simulation.clock import as_utc
+from app.simulation.flight import leg_from_dict
 from app.simulation.heartbeat import last_heartbeat
 from app.simulation.models import EmergencyReason, FlightPhase, MissionFlight
 
@@ -680,6 +682,105 @@ def test_a_drone_can_fly_from_one_hub_and_land_at_another(world: World, launch: 
     drone = world.drone("DRN-011")
     assert drone.status == DroneStatus.IDLE
     assert (drone.longitude, drone.latitude) == hub_point(forum)  # docked at the other Hub
-    assert drone.hub_id == BALTYCKA  # the administrative home Hub does not change
+    assert drone.hub_id == FORUM  # Feature 017C: the Hub where it last docked successfully
     assert world.occupancy()[FORUM] == before[FORUM] + 1
     assert world.occupancy()[BALTYCKA] == before[BALTYCKA] - 1
+
+
+# --- Feature 017C: the drone's hub_id follows its last successful docking ---------------------
+
+# ORD-011 is a seeded cross-Hub order: picked up at Bałtycka, delivered next to Forum Gdańsk,
+# whose Hub is the nearest return Hub. DRN-011 is docked at Bałtycka.
+CROSS_ORDER, CROSS_DRONE = "ORD-011", "DRN-011"
+
+
+def test_a_return_to_the_origin_hub_leaves_hub_id_unchanged(world: World, launch: Launch) -> None:
+    mission_id = launch(ORDER, DRONE)
+    assert world.drone(DRONE).hub_id == BALTYCKA
+
+    world.advance(mission_id, 60.0)
+
+    assert world.flight(mission_id).landed_hub_id == BALTYCKA
+    assert world.drone(DRONE).hub_id == BALTYCKA
+
+
+def test_a_planned_cross_hub_return_lands_there_and_moves_hub_id_only_at_landing(
+    world: World, launch: Launch
+) -> None:
+    mission_id = launch(CROSS_ORDER, CROSS_DRONE)
+    mission = world.mission(mission_id)
+    assert (mission.origin_hub_id, mission.return_hub_id) == (BALTYCKA, FORUM)
+    delivery_end = leg_from_dict(world.flight(mission_id).legs[1]).end_s
+
+    world.advance(mission_id, delivery_end - 1.0)  # still carrying the parcel, in the air
+    assert world.order(CROSS_ORDER).status == OrderStatus.OUT_FOR_DELIVERY
+    assert world.drone(CROSS_DRONE).status == DroneStatus.IN_FLIGHT
+    assert world.drone(CROSS_DRONE).hub_id == BALTYCKA  # unchanged in flight
+
+    world.advance(mission_id, 600.0)
+
+    flight, mission = world.flight(mission_id), world.mission(mission_id)
+    forum = world.session.get(Hub, FORUM)
+    assert forum is not None
+    assert mission.status == MissionStatus.COMPLETED
+    assert flight.landed_hub_id == FORUM == flight.planned_return_hub_id
+    drone = world.drone(CROSS_DRONE)
+    assert drone.hub_id == FORUM  # now the Hub where it last docked
+    assert drone.status == DroneStatus.IDLE
+    assert (drone.longitude, drone.latitude) == hub_point(forum)  # exactly at the Hub: no teleport
+    # History keeps where the drone really started and where the plan sent it.
+    assert (mission.origin_hub_id, mission.return_hub_id) == (BALTYCKA, FORUM)
+    assert world.order(CROSS_ORDER).origin_hub_id == BALTYCKA
+
+
+def test_a_drone_that_landed_elsewhere_charges_there_and_is_dispatched_from_the_new_hub(
+    world: World, launch: Launch
+) -> None:
+    mission_id = launch(CROSS_ORDER, CROSS_DRONE)
+    world.advance(mission_id, 600.0)
+    assert world.drone(CROSS_DRONE).hub_id == FORUM
+    assert world.drone(CROSS_DRONE).battery_pct < 100
+
+    fast = world.settings.model_copy(update={"sim_charge_rate_pct_per_minute": 600.0})
+    state = ChargingState()
+    for second in range(1000, 1060):
+        charge_step(world.factory, fast, at(second), state)
+    world.session.expire_all()
+
+    drone = world.drone(CROSS_DRONE)
+    assert (drone.status, drone.battery_pct) == (DroneStatus.IDLE, 100)  # charged at Forum
+    # A Forum order can now be served by this drone, because it is docked at Forum.
+    new_mission = missions_service.confirm_mission(
+        world.session, "ORD-004", CROSS_DRONE, world.settings
+    )
+    assert new_mission.origin_hub_id == FORUM
+    assert new_mission.drone_id == CROSS_DRONE
+
+
+def test_a_diversion_that_lands_moves_hub_id_to_the_hub_it_landed_at(
+    world: World, launch: Launch
+) -> None:
+    mission_id = launch(ORDER, DRONE)
+    world.set_capacity({BALTYCKA: 2})  # full on arrival: the drone is diverted to Forum
+
+    world.advance(mission_id, 34.7)
+    assert world.flight(mission_id).phase == FlightPhase.DIVERTING
+    assert world.drone(DRONE).hub_id == BALTYCKA  # still in flight: unchanged
+
+    world.advance(mission_id, 500.0)
+
+    assert world.flight(mission_id).landed_hub_id == FORUM
+    assert world.drone(DRONE).hub_id == FORUM
+    assert world.mission(mission_id).origin_hub_id == BALTYCKA  # history is not rewritten
+
+
+def test_an_emergency_never_changes_hub_id(world: World, launch: Launch) -> None:
+    mission_id = launch(ORDER, DRONE)
+    world.set_capacity({BALTYCKA: 2})
+    world.fill_every_other_hub()
+
+    world.advance(mission_id, 2000.0)
+
+    assert world.mission(mission_id).status == MissionStatus.EMERGENCY
+    assert world.drone(DRONE).status == DroneStatus.MAINTENANCE
+    assert world.drone(DRONE).hub_id == BALTYCKA  # never docked, so nothing changed

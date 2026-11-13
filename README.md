@@ -231,8 +231,10 @@ uv run python -m app.worker              # the simulation: required, or missions
     `SIM_HEARTBEAT_STALE_SECONDS` would make the worker look stale.
   - If advancing one flight fails, the error is logged and the other flights continue; the failing
     flight is retried on the next tick.
-  - `Drone.hub_id` is only the administrative home Hub: it is not used for occupancy and does not
-    change when a drone lands at a different Hub.
+  - `Drone.hub_id` is the Hub where the drone last docked successfully: the worker sets it on a
+    landing (a diversion that lands included), never during a flight or after an emergency. It is
+    not used for occupancy, which comes from status and position; missions and flights keep the Hub
+    the drone departed from.
 - `GET /api/flights` returns `{server_time, worker_heartbeat_at, worker_stale, flights}`; each flight has
   its phase, progress, position, battery, next target with seconds to reach it, and `updated_at`. If the
   worker stops after a start, `worker_stale` turns true and `updated_at` stops advancing.
@@ -308,8 +310,8 @@ real coordinates.
 
 MVP rule for "docked" (a simplification until the simulation defines it, see business rules Q8): a
 drone is docked at a Hub when its status is not `IN_FLIGHT` and its stored position is within 50 m of
-that Hub. `hub_id` is only the assigned/home Hub, so it is not used: a drone sitting at another Hub is
-counted there. A non-flying drone that is not at any Hub is a flagged exception: it still gets a small
+that Hub. `hub_id` (the Hub of the last successful docking) is not used for this: a drone is counted
+at the Hub it is physically at. A non-flying drone that is not at any Hub is a flagged exception: it still gets a small
 marker with a dashed border (never hidden). With the seeded data (12 `IDLE` drones at their Hubs) the
 map therefore shows four badges and no drone markers. Markers that share an exact point are spread on
 a small ring around it **on screen only**; the panel always shows the real stored position. Only one

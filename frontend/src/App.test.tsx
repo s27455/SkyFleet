@@ -431,7 +431,7 @@ describe('App selection', () => {
 
     expect(panels()).toHaveLength(1)
     const panel = screen.getByRole('complementary', { name: 'Drone details: DRN-005' })
-    expect(within(panel).getByText('Assigned Hub').nextElementSibling).toHaveTextContent(
+    expect(within(panel).getByText('Current Hub').nextElementSibling).toHaveTextContent(
       'Centrum Riviera',
     )
     expect(within(panel).getByText('Battery').nextElementSibling).toHaveTextContent('90%')

@@ -12,7 +12,7 @@ import { DRONE_STATUS_DISPLAY } from './droneStatus'
 
 interface DroneDetailPanelProps {
   drone: Drone
-  /** The assigned Hub if the Hub data is available; otherwise the Hub id is shown as is. */
+  /** The Hub where the drone last docked, if the Hub data is available; otherwise the Hub id is shown as is. */
   hub?: Hub
   /** True when the map marker is spread on screen because drones share this location. */
   markerSpread: boolean
@@ -93,7 +93,7 @@ export function DroneDetailPanel({
         <Row label="Battery">
           <span className="font-mono tabular-nums">{drone.batteryPct}%</span>
         </Row>
-        <Row label="Assigned Hub">{hub ? hub.name : drone.hubId}</Row>
+        <Row label="Current Hub">{hub ? hub.name : drone.hubId}</Row>
         <Row label="Stored position">
           <span className="font-mono text-xs tabular-nums">
             {latitude.toFixed(6)}, {longitude.toFixed(6)}

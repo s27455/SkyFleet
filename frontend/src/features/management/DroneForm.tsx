@@ -85,7 +85,7 @@ export function DroneForm({
           </label>
         )}
         <label className={FIELD_LABEL_CLASS}>
-          Assigned Hub
+          Current Hub
           <select
             className={INPUT_CLASS}
             value={hubId}

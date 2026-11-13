@@ -254,7 +254,7 @@ export function DroneInspector({
                     <span className="w-10 font-mono tabular-nums">{drone.batteryPct}%</span>
                   </span>
                 </Row>
-                <Row label="Assigned Hub">{hub ? hub.name : drone.hubId}</Row>
+                <Row label="Current Hub">{hub ? hub.name : drone.hubId}</Row>
                 <Row label="Stored position">
                   <span className="font-mono text-xs tabular-nums">
                     {latitude.toFixed(6)}, {longitude.toFixed(6)}

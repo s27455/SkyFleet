@@ -95,7 +95,7 @@ describe('DronesManager', () => {
 
     fireEvent.click(button('New drone'))
     fireEvent.change(screen.getByLabelText(/Drone id/), { target: { value: 'DRN-100' } })
-    fireEvent.change(screen.getByLabelText('Assigned Hub'), {
+    fireEvent.change(screen.getByLabelText('Current Hub'), {
       target: { value: 'hub-forum-gdansk' },
     })
     fireEvent.change(screen.getByLabelText('Battery (%)'), { target: { value: '60' } })
@@ -190,7 +190,7 @@ describe('DronesManager', () => {
 
     fireEvent.click(button('Edit drone DRN-004')) // in maintenance
 
-    expect(screen.getByLabelText('Assigned Hub')).toBeDisabled()
+    expect(screen.getByLabelText('Current Hub')).toBeDisabled()
   })
 
   it('moves a drone to maintenance and back with a single PATCH', async () => {

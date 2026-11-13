@@ -20,7 +20,7 @@ This document records business behavior independently of implementation details.
 - Hub occupancy counts ONLY drones physically present and docked at the Hub (50 places). A drone that takes off stops counting immediately; a drone in flight counts toward no Hub; a drone that lands and docks counts toward the Hub where it docked.
 - Mission assignment and cancellation never change physical occupancy. There are no landing-slot reservations: an active mission does not reserve capacity at its planned return Hub.
 - Actual physical occupancy must never exceed the Hub's capacity (50). Emergency returns do not exceed it.
-- In the MVP, physical presence is approximated from drone status (not in flight) and stored position (within 50 m of the Hub). This is a simulation approximation: future docking and charging hardware will confirm presence, and GPS proximity will not be the authoritative source. `Drone.hub_id` is only the administrative assignment, not presence.
+- In the MVP, physical presence is approximated from drone status (not in flight) and stored position (within 50 m of the Hub). This is a simulation approximation: future docking and charging hardware will confirm presence, and GPS proximity will not be the authoritative source. `Drone.hub_id` is the Hub where the drone last docked successfully (set on a successful landing, a valid diversion included; never during flight or after an emergency); it is not presence.
 - Hubs have no operational status in the MVP; every Hub is treated as operationally available.
 
 ## 3. Order and parcel flow

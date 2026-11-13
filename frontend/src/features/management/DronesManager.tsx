@@ -144,7 +144,7 @@ export function DronesManager({ drones, hubs, missions, onChanged }: DronesManag
                   Drone
                 </th>
                 <th scope="col" className="py-1 pr-3 font-medium">
-                  Assigned Hub
+                  Current Hub
                 </th>
                 <th scope="col" className="py-1 pr-3 font-medium">
                   Battery

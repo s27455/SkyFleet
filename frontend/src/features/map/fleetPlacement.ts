@@ -7,8 +7,8 @@ import type { Hub } from '../../types/hub'
  * within this distance of the Hub (the nearest Hub wins, ties go to the lower id). A drone in
  * MAINTENANCE is never docked, whatever its coordinates: the simulated emergency outcome parks the
  * drone in MAINTENANCE where it stopped, and it must never count toward a Hub. `Drone.hubId` is
- * only the assigned/home Hub and is deliberately not used: a drone that landed elsewhere counts
- * there. Position and status approximate presence until docking hardware confirms it.
+ * the Hub of the last successful docking and is deliberately not used: a drone counts at the Hub it
+ * is physically at. Position and status approximate presence until docking hardware confirms it.
  */
 export const DOCK_RADIUS_M = 50
 

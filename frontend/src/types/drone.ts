@@ -55,7 +55,7 @@ export interface DroneModel {
 /** One drone unit as last stored by the backend. */
 export interface Drone {
   id: string
-  /** Assigned/home Hub id (see `Hub.id`). */
+  /** The Hub where the drone last docked successfully (see `Hub.id`); not its position. */
   hubId: string
   status: DroneStatus
   batteryPct: number

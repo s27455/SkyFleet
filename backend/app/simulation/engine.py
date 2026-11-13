@@ -265,6 +265,10 @@ def _decide_landing(
     if occupancy[target.id] < target.drone_capacity:
         landed = state_for(final.end_s)
         drone.status = DroneStatus.IDLE.value
+        # Feature 017C: `hub_id` is the Hub where the drone last docked successfully. It changes
+        # only here (a landing, a diversion that lands included), never in flight and never in an
+        # emergency; the mission and flight keep the Hub the drone departed from.
+        drone.hub_id = target.id
         drone.longitude, drone.latitude = hub_point(target)
         drone.battery_pct = rounded_pct(landed.battery_pct)
         mission.status = MissionStatus.COMPLETED.value
