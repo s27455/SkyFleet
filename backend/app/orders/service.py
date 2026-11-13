@@ -11,6 +11,8 @@ import uuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.events.models import EventOrigin, EventType
+from app.events.service import append_event, delete_events_for_order
 from app.hubs.models import Hub
 from app.orders import repository
 from app.orders.models import DeliveryOrder, OrderStatus
@@ -67,8 +69,14 @@ def _ensure_modifiable(session: Session, order: DeliveryOrder) -> None:
         raise OrderNotEditableError(order.id, order.status)
 
 
-def create_order(session: Session, data: OrderCreateRequest) -> DeliveryOrder:
-    """Insert a `READY_FOR_PICKUP` order; the destination is stored as given."""
+def create_order(
+    session: Session, data: OrderCreateRequest, origin: EventOrigin = EventOrigin.MANUAL
+) -> DeliveryOrder:
+    """Insert a `READY_FOR_PICKUP` order and its `ORDER_CREATED` event in one transaction.
+
+    The destination is stored as given. `origin` is `MANUAL` for orders created through the API
+    and `AUTOMATIC` for simulated ones.
+    """
     for _ in range(MAX_ID_ATTEMPTS):
         order_id = new_order_id()
         try:
@@ -83,6 +91,14 @@ def create_order(session: Session, data: OrderCreateRequest) -> DeliveryOrder:
                     package_weight_kg=data.package_weight_kg,
                     status=OrderStatus.READY_FOR_PICKUP.value,
                 )
+            )
+            append_event(
+                session,
+                event_type=EventType.ORDER_CREATED,
+                origin=origin,
+                order_id=order_id,
+                reason="Order created as READY_FOR_PICKUP",
+                dedupe_key=f"{EventType.ORDER_CREATED.value}:{order_id}",
             )
             session.commit()
         except IntegrityError:
@@ -128,12 +144,17 @@ def update_order(session: Session, order_id: str, data: OrderUpdateRequest) -> D
 
 
 def delete_order(session: Session, order_id: str) -> None:
-    """Physically delete a mission-free `READY_FOR_PICKUP` order; never cascades."""
+    """Physically delete a mission-free `READY_FOR_PICKUP` order; never cascades.
+
+    This is a technical maintenance operation, not cancellation. The order's events are deleted
+    explicitly, in the same transaction, after the eligibility checks have passed.
+    """
     try:
         order = repository.get_order_for_update(session, order_id)
         if order is None:
             raise OrderNotFoundError(order_id)
         _ensure_modifiable(session, order)
+        delete_events_for_order(session, order_id)
         session.delete(order)
         session.commit()
     except IntegrityError:

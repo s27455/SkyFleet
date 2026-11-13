@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.drones.models import DroneModel
+from app.events.models import EventOrigin
 from app.hubs.models import Hub
 from app.missions.energy import estimate_energy, has_enough_battery
 from app.missions.routing import Point, distance_km, hub_point, hubs_by_distance
@@ -151,4 +152,4 @@ def generate_one_order(
             destination_latitude=route.latitude,
             package_weight_kg=pick_weight_kg(route, rng),
         )
-    return service.create_order(session, request)
+    return service.create_order(session, request, EventOrigin.AUTOMATIC)

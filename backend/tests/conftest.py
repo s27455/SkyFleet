@@ -22,6 +22,7 @@ from app.dispatch import models as dispatch_models  # noqa: F401  (registers tab
 from app.drones import models as drone_models  # noqa: F401  (registers tables on Base.metadata)
 from app.drones.models import Drone, DroneStatus
 from app.drones.seed import build_sf1_model, seed_drones
+from app.events import models as event_models  # noqa: F401  (registers tables)
 from app.hubs import models as hub_models  # noqa: F401  (registers tables on Base.metadata)
 from app.hubs.seed import seed_hubs
 from app.main import create_app

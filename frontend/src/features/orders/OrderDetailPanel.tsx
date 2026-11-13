@@ -5,6 +5,7 @@ import { StatusIndicator } from '../../components/ui/StatusIndicator'
 import type { Hub } from '../../types/hub'
 import type { Mission } from '../../types/mission'
 import type { Order } from '../../types/order'
+import { EventTimeline } from '../events/EventTimeline'
 import { StartMissionControl } from '../missions/StartMissionControl'
 import { ORDER_STATUS_DISPLAY, formatUtcTimestamp } from './orderStatus'
 
@@ -95,6 +96,8 @@ export function OrderDetailPanel({
           onStart={onStartMission}
         />
       )}
+
+      <EventTimeline orderId={order.id} />
 
       <p className="mt-3 border-t border-line pt-3 text-xs text-fg-muted">
         Simulation data: the destination is illustrative, not a verified customer address.

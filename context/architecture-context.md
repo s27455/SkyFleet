@@ -273,6 +273,8 @@ Events provide an auditable history of state changes and operational decisions.
 
 The final entity attributes, relationships, and state definitions should be specified when implementing each domain.
 
+Implemented foundation (Feature 018A): the append-only `operational_events` table with a read-only `GET /api/events`; only `ORDER_CREATED` is emitted so far. See `docs/decisions/0004-incident-event-foundation.md`.
+
 Do not over-engineer the initial domain model.
 
 ## 6. Operational Workflows
