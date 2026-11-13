@@ -1,4 +1,4 @@
-import { MOTOR_IDS, type MotorId } from './droneParts'
+import { MOTOR_IDS, type DronePartId, type MotorId } from './droneParts'
 
 /**
  * Layout constants of the model, in scene units (about one unit per metre-ish; only proportions
@@ -33,3 +33,25 @@ export const MOTOR_LAYOUT: readonly MotorLayout[] = MOTOR_IDS.map((id) => {
     spin: (sx * sz) as 1 | -1,
   }
 })
+
+/** Motor labels sit beyond the propeller, away from the airframe, so they fan out instead of piling up. */
+const LABEL_OUTWARD = 1.3
+/** Rear motors sit behind the battery from the usual view, so their labels are lifted clear of it. */
+const REAR_LABEL_LIFT = 0.4
+
+/** Model-space points the part labels are anchored to: outside each motor and above the battery. */
+export const LABEL_ANCHORS: Readonly<
+  Partial<Record<DronePartId, readonly [number, number, number]>>
+> = {
+  ...Object.fromEntries(
+    MOTOR_LAYOUT.map((layout) => [
+      layout.id,
+      [
+        layout.position[0] * LABEL_OUTWARD,
+        MOTOR_HEIGHT + 0.45 + (layout.position[2] < 0 ? REAR_LABEL_LIFT : 0),
+        layout.position[2] * LABEL_OUTWARD,
+      ] as const,
+    ]),
+  ),
+  battery: [0, 0.64, -0.22],
+}

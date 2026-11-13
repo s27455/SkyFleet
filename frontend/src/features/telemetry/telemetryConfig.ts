@@ -36,6 +36,26 @@ export const MODEL_PART_FOR_COMPONENT: Readonly<
   battery: 'battery',
 }
 
+/** The components that can be selected (from the 3D model or the list): motors and the battery. */
+export type SelectableComponentId = MotorComponentId | 'battery'
+
+/** The selectable component a part of the 3D model stands for, if any. */
+export function componentForPart(part: DronePartId): SelectableComponentId | undefined {
+  for (const [component, modelPart] of Object.entries(MODEL_PART_FOR_COMPONENT)) {
+    if (modelPart === part && component !== 'connectivity')
+      return component as SelectableComponentId
+  }
+  return undefined
+}
+
+/** Where each motor sits on the airframe, in words. */
+export const MOTOR_POSITION: Readonly<Record<MotorComponentId, string>> = {
+  'motor-1': 'front left',
+  'motor-2': 'front right',
+  'motor-3': 'rear right',
+  'motor-4': 'rear left',
+}
+
 /** Fixed ambient temperature: there is no weather data in the API. */
 export const AMBIENT_C = 22
 
@@ -78,7 +98,7 @@ export const REFERENCE_THRUST_PER_ROTOR_KG = 1.5
 export const MOTOR_TEMP_RISE_AT_FULL_LOAD_C = 40
 export const BATTERY_TEMP_RISE_AT_FULL_LOAD_C = 18
 /** Spread between motors: fixed per drone and motor, never changing over time. */
-export const MOTOR_RPM_SPREAD = 0.04
+export const MOTOR_RPM_SPREAD = 0.05
 export const MOTOR_TEMP_SPREAD_C = 6
 
 /**
@@ -88,6 +108,28 @@ export const MOTOR_TEMP_SPREAD_C = 6
 export const WARM_MOTOR_DRONE_FRACTION = 1 / 6
 export const WARM_MOTOR_MIN_EXTRA_C = 8
 export const WARM_MOTOR_EXTRA_RANGE_C = 6
+
+// ---- Variation over a flight ---------------------------------------------------------------------
+// Every one of these shapes a smooth function of the flight progress (0 to 1), never of time or a
+// random number, so the same flight state always shows the same readings.
+
+/** Warm-up of a motor, as the flight progress after which it is 63% of the way to steady state. */
+export const MOTOR_WARM_UP_PROGRESS = 0.4
+/** The battery warms up more slowly than the motors. */
+export const BATTERY_WARM_UP_PROGRESS = 0.65
+/** Over the last part of a flight the load eases (descent), so temperatures start to fall. */
+export const COOL_DOWN_START_PROGRESS = 0.88
+/** Share of the temperature rise that is gone by the end of the flight. */
+export const COOL_DOWN_FRACTION = 0.1
+/** Gentle swing of the shared power demand (gusts, climb and descent): +/- this share. */
+export const POWER_VARIATION = 0.02
+/** Each motor's own RPM wave: amplitude between `min` and `min + range` (a share of its RPM). */
+export const MOTOR_RPM_WAVE = { min: 0.006, range: 0.006 }
+/** Each motor's slow temperature wobble, in degrees, once it is warm. */
+export const MOTOR_TEMP_WOBBLE_C = { min: 0.5, range: 0.6 }
+export const BATTERY_TEMP_WOBBLE_C = 0.4
+/** Link quality swing, in percentage points. */
+export const LINK_WOBBLE_PCT = 2
 
 // ---- Reference ranges and warning thresholds (all estimates) -----------------------------------
 export const REFERENCE = {

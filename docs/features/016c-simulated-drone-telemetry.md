@@ -22,3 +22,6 @@ Values are stable, plausible for a demo, status-sensitive, correctly labeled and
 
 ## Scope correction (MVP: quadcopters only)
 The SkyFleet MVP fleet is quadcopters only (motors M1–M4). The telemetry derives motor readings only for the `quadcopter` airframe; any other airframe gets no motor telemetry and an explicit note. The earlier six-rotor support was removed. The backend seed now creates SF-1 as a `quadcopter`, and Alembic migration `0008` (data only, guarded to the SF-1 row while it still holds `hexacopter`, reversible) updates an existing database. Drone ids, fleet size, flight parameters and missions are unchanged.
+
+## Later change
+During Feature 016D the derivation gained smooth variation over the flight progress and the temperatures gained a display-only easing; see `016d-interactive-diagnostics-polish.md`. The thresholds and the labelling as simulated estimates are unchanged.

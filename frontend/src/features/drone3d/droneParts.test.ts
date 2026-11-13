@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MOTOR_LAYOUT, PROPELLER_RADIUS } from './droneLayout'
+import { LABEL_ANCHORS, MOTOR_LAYOUT, PROPELLER_RADIUS } from './droneLayout'
 import { DRONE_PART_IDS, MOTOR_IDS, isDronePartId, propellerName } from './droneParts'
 
 describe('drone parts', () => {
@@ -36,5 +36,20 @@ describe('motor layout', () => {
   it('keeps neighbouring propeller discs from overlapping', () => {
     const [a, b] = [MOTOR_LAYOUT[0].position, MOTOR_LAYOUT[1].position]
     expect(Math.abs(a[0] - b[0])).toBeGreaterThan(2 * PROPELLER_RADIUS)
+  })
+})
+
+describe('label anchors', () => {
+  it('has an anchor above every motor and the battery, and none for other parts', () => {
+    expect(Object.keys(LABEL_ANCHORS).sort()).toEqual([...MOTOR_IDS, 'battery'].sort())
+    for (const layout of MOTOR_LAYOUT) {
+      const [x, y, z] = LABEL_ANCHORS[layout.id]!
+      // Outside the motor, on the same side of the airframe, and above the propeller plane.
+      expect(Math.sign(x)).toBe(Math.sign(layout.position[0]))
+      expect(Math.sign(z)).toBe(Math.sign(layout.position[2]))
+      expect(Math.abs(x)).toBeGreaterThan(Math.abs(layout.position[0]))
+      expect(Math.abs(z)).toBeGreaterThan(Math.abs(layout.position[2]))
+      expect(y).toBeGreaterThan(layout.position[1])
+    }
   })
 })

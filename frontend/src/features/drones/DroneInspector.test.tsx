@@ -9,7 +9,31 @@ import { DroneInspector } from './DroneInspector'
 import type { InspectorData } from './inspectorData'
 
 // jsdom has no WebGL: the viewer itself is covered by its own tests.
-vi.mock('../drone3d', () => ({ Drone3DViewer: () => <div data-testid="viewer" /> }))
+vi.mock('../drone3d', () => ({
+  Drone3DViewer: ({
+    annotations = {},
+    selectedPart = null,
+    onPartSelect,
+  }: {
+    annotations?: Record<string, { label: string; level: string }>
+    selectedPart?: string | null
+    onPartSelect?: (part: string | null) => void
+  }) => (
+    <div data-testid="viewer" data-selected={selectedPart ?? ''}>
+      {Object.entries(annotations).map(([part, annotation]) => (
+        <button key={part} type="button" onClick={() => onPartSelect?.(part)}>
+          {`3D ${annotation.label} ${annotation.level}`}
+        </button>
+      ))}
+      <button type="button" onClick={() => onPartSelect?.('fuselage')}>
+        3D fuselage
+      </button>
+      <button type="button" onClick={() => onPartSelect?.(null)}>
+        3D empty space
+      </button>
+    </div>
+  ),
+}))
 
 const DRONE: Drone = {
   id: 'DRN-004',
@@ -281,5 +305,140 @@ describe('DroneInspector', () => {
 
     expect(opener).toHaveFocus()
     opener.remove()
+  })
+
+  describe('component selection', () => {
+    const details = () => screen.getByRole('region', { name: 'Component details' })
+    const viewer = () => screen.getByTestId('viewer')
+
+    it('starts with nothing selected and an invitation to select', () => {
+      renderInspector()
+
+      expect(within(details()).getByText(/Select a motor or the battery/)).toBeInTheDocument()
+      expect(viewer()).toHaveAttribute('data-selected', '')
+    })
+
+    it('draws the telemetry health on the model: four motors and the battery, with levels', () => {
+      renderInspector()
+
+      for (const label of ['M1', 'M2', 'M3', 'M4']) {
+        expect(screen.getByRole('button', { name: `3D ${label} nominal` })).toBeInTheDocument()
+      }
+      expect(screen.getByRole('button', { name: '3D Battery nominal' })).toBeInTheDocument()
+    })
+
+    it('shows a low battery as critical on the model and in the detail, in words', () => {
+      renderInspector({
+        data: { ...FLYING, flight: { kind: 'found', value: { ...FLIGHT, batteryPct: 8 } } },
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: '3D Battery critical' }))
+
+      expect(within(details()).getByRole('heading', { name: 'Battery' })).toBeInTheDocument()
+      expect(
+        within(details()).getByText(/Charge 8% is at or below the 10% critical threshold/),
+      ).toBeInTheDocument()
+    })
+
+    it('selecting on the model updates the detail panel, the list and the model outline', () => {
+      renderInspector()
+
+      fireEvent.click(screen.getByRole('button', { name: '3D M2 nominal' }))
+
+      expect(
+        within(details()).getByRole('heading', { name: 'Motor M2 (front right)' }),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Select motor M2' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      expect(viewer()).toHaveAttribute('data-selected', 'motor-fr')
+    })
+
+    it('selecting from the list updates the model outline and the detail panel', () => {
+      renderInspector()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select battery' }))
+
+      expect(viewer()).toHaveAttribute('data-selected', 'battery')
+      expect(within(details()).getByRole('heading', { name: 'Battery' })).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select motor M4' }))
+      expect(viewer()).toHaveAttribute('data-selected', 'motor-rl')
+      expect(
+        within(details()).getByRole('heading', { name: 'Motor M4 (rear left)' }),
+      ).toBeInTheDocument()
+    })
+
+    it('clears the selection from the list, the detail button and an empty-space click', () => {
+      renderInspector()
+      const select = (name: string) => fireEvent.click(screen.getByRole('button', { name }))
+
+      select('Select motor M1')
+      select('Select motor M1')
+      expect(viewer()).toHaveAttribute('data-selected', '')
+
+      select('Select motor M1')
+      select('Clear selection')
+      expect(viewer()).toHaveAttribute('data-selected', '')
+
+      select('Select motor M1')
+      select('3D empty space')
+      expect(viewer()).toHaveAttribute('data-selected', '')
+      expect(within(details()).getByText(/Select a motor or the battery/)).toBeInTheDocument()
+    })
+
+    it('ignores a click on a part that is not diagnosed', () => {
+      renderInspector()
+      fireEvent.click(screen.getByRole('button', { name: 'Select motor M1' }))
+
+      fireEvent.click(screen.getByRole('button', { name: '3D fuselage' }))
+
+      expect(viewer()).toHaveAttribute('data-selected', '')
+    })
+
+    it('keeps the selection when live data refreshes, and drops it for another drone', () => {
+      const { rerender } = renderInspector()
+      fireEvent.click(screen.getByRole('button', { name: 'Select motor M3' }))
+
+      const refreshed = {
+        ...FLYING,
+        flight: { kind: 'found' as const, value: { ...FLIGHT, progress: FLIGHT.progress + 0.01 } },
+      }
+      rerender(
+        <DroneInspector
+          drone={DRONE}
+          hub={HUBS[0]}
+          hubs={HUBS}
+          data={refreshed}
+          workerStale={false}
+          dataStale={false}
+          onClose={() => {}}
+        />,
+      )
+      expect(viewer()).toHaveAttribute('data-selected', 'motor-rr')
+
+      rerender(
+        <DroneInspector
+          drone={{ ...DRONE, id: 'DRN-005' }}
+          hub={HUBS[0]}
+          hubs={HUBS}
+          data={refreshed}
+          workerStale={false}
+          dataStale={false}
+          onClose={() => {}}
+        />,
+      )
+      expect(viewer()).toHaveAttribute('data-selected', '')
+    })
+
+    it('still closes only the inspector with Escape while a component is selected', () => {
+      const { onClose } = renderInspector()
+      fireEvent.click(screen.getByRole('button', { name: 'Select motor M1' }))
+
+      fireEvent.keyDown(document, { key: 'Escape' })
+
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
   })
 })

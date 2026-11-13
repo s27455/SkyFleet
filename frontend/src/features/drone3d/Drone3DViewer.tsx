@@ -13,7 +13,8 @@ import {
 
 import { usePrefersReducedMotion } from '../flights/usePrefersReducedMotion'
 import type { CameraApi } from './DroneCanvas'
-import type { DronePartId } from './droneParts'
+import type { DronePartId, PartAnnotation } from './droneParts'
+import { PartLabels } from './PartLabels'
 import { isWebGLAvailable } from './webgl'
 
 // The Three.js code is a separate chunk: it is only fetched when a viewer is actually shown.
@@ -22,8 +23,12 @@ const DroneCanvas = lazy(() => import('./DroneCanvas'))
 export interface Drone3DViewerProps {
   /** Spin the propellers. Ignored when the user prefers reduced motion. Default: true. */
   animate?: boolean
-  /** Reports a clicked part (motor, battery, ...). Reserved for the future component inspector. */
-  onPartSelect?: (part: DronePartId) => void
+  /** Reports a clicked part (motor, battery, ...), or `null` for a click on empty space. */
+  onPartSelect?: (part: DronePartId | null) => void
+  /** Health level and label per part, drawn on the model. Keep the object stable between renders. */
+  annotations?: Readonly<Partial<Record<DronePartId, PartAnnotation>>>
+  /** The selected part, drawn with an outline. */
+  selectedPart?: DronePartId | null
   /** Sizing/placement; the viewer fills its box, so give it a height. */
   className?: string
 }
@@ -112,6 +117,8 @@ const TILT_STEP = 0.1
 function Drone3DViewerComponent({
   animate = true,
   onPartSelect,
+  annotations,
+  selectedPart,
   className = '',
 }: Drone3DViewerProps) {
   const [webgl] = useState(isWebGLAvailable)
@@ -119,6 +126,7 @@ function Drone3DViewerComponent({
   const [focused, setFocused] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const api = useRef<CameraApi | null>(null)
+  const labelLayer = useRef<HTMLDivElement>(null)
   const reducedMotion = usePrefersReducedMotion()
   const active = useIsActive(root)
   const running = animate && !reducedMotion && active
@@ -174,9 +182,20 @@ function Drone3DViewerComponent({
               wheelZoom={focused}
               apiRef={api}
               onPartSelect={onPartSelect}
+              annotations={annotations}
+              selectedPart={selectedPart}
+              labelLayerRef={labelLayer}
               onContextLost={onContextLost}
             />
           </Suspense>
+          {annotations && (
+            <PartLabels
+              annotations={annotations}
+              selectedPart={selectedPart ?? null}
+              onPartSelect={onPartSelect}
+              layerRef={labelLayer}
+            />
+          )}
           <div className="absolute right-2 bottom-2 flex gap-1">
             <button
               type="button"
@@ -199,7 +218,9 @@ function Drone3DViewerComponent({
             </button>
           </div>
           <p className="pointer-events-none absolute bottom-2 left-2 hidden text-xs text-fg-muted @md:block">
-            Drag to rotate · click, then scroll to zoom
+            {onPartSelect
+              ? 'Drag to rotate · click a part to inspect it'
+              : 'Drag to rotate · click, then scroll to zoom'}
           </p>
         </ViewerErrorBoundary>
       ) : (

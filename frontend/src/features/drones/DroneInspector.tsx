@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { StatusIndicator } from '../../components/ui/StatusIndicator'
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
-import { Drone3DViewer } from '../drone3d'
+import { Drone3DViewer, type DronePartId } from '../drone3d'
 import { FlightSection } from '../flights/FlightSection'
 import { usePrefersReducedMotion } from '../flights/usePrefersReducedMotion'
 import { ORDER_STATUS_DISPLAY } from '../orders/orderStatus'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
 import type { InspectorData, Lookup } from './inspectorData'
 import { useDialogFocus } from './useDialogFocus'
+import { annotationsFor } from '../telemetry/componentHealth'
+import { ComponentDetail } from '../telemetry/ComponentDetail'
 import type { TelemetryInput } from '../telemetry/deriveTelemetry'
 import { TelemetryPanel } from '../telemetry/TelemetryPanel'
+import {
+  MODEL_PART_FOR_COMPONENT,
+  componentForPart,
+  type SelectableComponentId,
+} from '../telemetry/telemetryConfig'
+import { useStableValue, useTelemetry } from '../telemetry/useTelemetry'
 
 /** Length of the exit animation; the dialog unmounts when it ends. Keep in sync with index.css. */
 const EXIT_MS = 150
@@ -99,6 +107,11 @@ export function DroneInspector({
   const reducedMotion = usePrefersReducedMotion()
   const [closing, setClosing] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  // The selected component belongs to one drone: switching drones starts with nothing selected.
+  const [selection, setSelection] = useState<{
+    droneId: string
+    component: SelectableComponentId
+  } | null>(null)
 
   useDialogFocus(dialog)
 
@@ -146,6 +159,29 @@ export function DroneInspector({
         : null,
     parcelKg: payload.kind === 'found' ? payload.value.packageWeightKg : null,
   }
+  const { readings, health, statuses } = useTelemetry(telemetryInput)
+  // The model draws exactly the levels the telemetry panel states; the object only changes when a
+  // label or level does, so live refreshes never touch the scene.
+  const annotations = useStableValue(useMemo(() => annotationsFor(statuses), [statuses]))
+  const selectedComponent =
+    selection?.droneId === drone.id && statuses[selection.component] ? selection.component : null
+  const selectedStatus = selectedComponent ? (statuses[selectedComponent] ?? null) : null
+  const selectedPart = selectedComponent
+    ? (MODEL_PART_FOR_COMPONENT[selectedComponent] ?? null)
+    : null
+
+  const selectComponent = useCallback(
+    (component: SelectableComponentId | null) =>
+      setSelection(component ? { droneId: drone.id, component } : null),
+    [drone.id],
+  )
+  const selectPart = useCallback(
+    (part: DronePartId | null) => {
+      const component = part ? componentForPart(part) : undefined
+      selectComponent(component ?? null)
+    },
+    [selectComponent],
+  )
 
   return (
     <div
@@ -192,10 +228,21 @@ export function DroneInspector({
         )}
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem] lg:grid-rows-[auto_1fr] lg:items-start">
           <div className="relative min-w-0 lg:col-start-1 lg:row-start-1">
-            <Drone3DViewer className={VIEWER_CLASS} />
+            <Drone3DViewer
+              className={VIEWER_CLASS}
+              annotations={annotations}
+              selectedPart={selectedPart}
+              onPartSelect={selectPart}
+            />
             <p className="pointer-events-none absolute top-2 left-3 text-xs text-fg-muted">
-              Illustrative model, not drawn from drone data
+              Illustrative model; highlights show simulated telemetry
             </p>
+            <ComponentDetail
+              status={selectedStatus}
+              readings={readings}
+              onClear={() => selectComponent(null)}
+              className="mt-4"
+            />
           </div>
 
           <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
@@ -281,7 +328,14 @@ export function DroneInspector({
             </Section>
           </div>
           {/* Simulated telemetry (016C): estimates from the real state above, labelled as such. */}
-          <TelemetryPanel input={telemetryInput} className="lg:col-start-1 lg:row-start-2" />
+          <TelemetryPanel
+            input={telemetryInput}
+            readings={readings}
+            health={health}
+            selected={selectedComponent}
+            onSelect={selectComponent}
+            className="lg:col-start-1 lg:row-start-2"
+          />
         </div>
         <p className="mt-4 text-xs text-fg-muted">
           Backend snapshot, refreshed about every 2 seconds; flights are simulated. Specifications

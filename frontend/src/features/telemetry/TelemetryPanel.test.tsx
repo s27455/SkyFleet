@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { TelemetryInput } from './deriveTelemetry'
 import { TelemetryPanel } from './TelemetryPanel'
@@ -161,5 +161,59 @@ describe('TelemetryPanel', () => {
     rerender(<TelemetryPanel input={{ ...FLYING, parcelKg: 3 }} />)
 
     expect(panel().textContent).not.toBe(before)
+  })
+})
+
+describe('TelemetryPanel selection', () => {
+  it('is read-only without a selection handler', () => {
+    render(<TelemetryPanel input={FLYING} />)
+
+    expect(within(panel()).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  it('selects a motor or the battery from the list, and the same control clears it', () => {
+    const onSelect = vi.fn()
+    const { rerender } = render(<TelemetryPanel input={FLYING} onSelect={onSelect} />)
+
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Select motor M3' }))
+    expect(onSelect).toHaveBeenLastCalledWith('motor-3')
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Select battery' }))
+    expect(onSelect).toHaveBeenLastCalledWith('battery')
+
+    rerender(<TelemetryPanel input={FLYING} selected="motor-3" onSelect={onSelect} />)
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Select motor M3' }))
+    expect(onSelect).toHaveBeenLastCalledWith(null)
+  })
+
+  it('shows which component is selected, in the accessibility tree and visually', () => {
+    render(<TelemetryPanel input={FLYING} selected="motor-2" onSelect={() => {}} />)
+
+    expect(within(panel()).getByRole('button', { name: 'Select motor M2' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(within(panel()).getByRole('button', { name: 'Select motor M1' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(within(panel()).getByRole('button', { name: 'Select battery' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(motorRows()[1]).toHaveClass('bg-surface-raised')
+  })
+
+  it('has a button per motor of the airframe and none when motor telemetry is unavailable', () => {
+    const { rerender } = render(<TelemetryPanel input={IDLE} onSelect={() => {}} />)
+    expect(within(panel()).getAllByRole('button', { name: /Select motor/ })).toHaveLength(4)
+
+    rerender(
+      <TelemetryPanel
+        input={{ ...IDLE, model: { ...MODEL, airframeType: 'octocopter' } }}
+        onSelect={() => {}}
+      />,
+    )
+    expect(within(panel()).queryByRole('button', { name: /Select motor/ })).not.toBeInTheDocument()
+    expect(within(panel()).getByRole('button', { name: 'Select battery' })).toBeInTheDocument()
   })
 })

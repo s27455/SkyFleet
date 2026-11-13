@@ -3,21 +3,30 @@ import type { FlightPhase } from '../../types/flight'
 import {
   AMBIENT_C,
   BATTERY_TEMP_RISE_AT_FULL_LOAD_C,
+  BATTERY_TEMP_WOBBLE_C,
+  BATTERY_WARM_UP_PROGRESS,
   CONNECTIVITY_BANDS,
+  COOL_DOWN_FRACTION,
+  COOL_DOWN_START_PROGRESS,
   DEFAULT_PHASE_FACTOR,
   HOVER_W_PER_KG,
+  LINK_WOBBLE_PCT,
   MAINTENANCE_CURRENT_A,
   MAX_LOAD_MARGIN,
   MOTORS_OFF_PHASES,
   MOTOR_COMPONENT_IDS,
   MOTOR_RPM_SPREAD,
+  MOTOR_RPM_WAVE,
   MOTOR_TEMP_RISE_AT_FULL_LOAD_C,
   MOTOR_TEMP_SPREAD_C,
+  MOTOR_TEMP_WOBBLE_C,
+  MOTOR_WARM_UP_PROGRESS,
   NOMINAL_PACK_VOLTAGE_V,
   OPEN_CIRCUIT_CURVE,
   PACK_RESISTANCE_OHM,
   PARCEL_ON_BOARD_PHASES,
   PHASE_POWER_FACTOR,
+  POWER_VARIATION,
   REFERENCE,
   REFERENCE_RPM,
   REFERENCE_THRUST_PER_ROTOR_KG,
@@ -111,6 +120,10 @@ const round = (value: number, decimals: number) => {
   return Math.round(value * factor) / factor
 }
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+const smoothstep = (edge0: number, edge1: number, x: number) => {
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1)
+  return t * t * (3 - 2 * t)
+}
 
 function openCircuitVoltage(chargePct: number): number {
   const charge = clamp(chargePct, 0, 100)
@@ -163,10 +176,24 @@ export function deriveTelemetry(input: TelemetryInput): TelemetryReadings {
     ? (PHASE_POWER_FACTOR[flight.phase] ?? DEFAULT_PHASE_FACTOR)
     : DEFAULT_PHASE_FACTOR
 
-  // Power in flight, and the motor load as a share of the maximum (0 to 1).
-  const flightPowerW = motorsRunning ? HOVER_W_PER_KG * massKg * phaseFactor : 0
+  // How far along the flight is (0 to 1). Everything that varies in flight is a smooth function of
+  // it plus a fixed per-drone, per-component phase: the same flight state always reads the same.
+  const progress = flight ? clamp(flight.progress, 0, 1) : 0.5
+  const wave = (key: string, cycles: number) =>
+    Math.sin(2 * Math.PI * (cycles * progress + hash01(`${droneId}:${key}`)))
+  // Shared power demand: it moves the power, current and (through thrust) every motor's RPM together.
+  const dynamics = 1 + POWER_VARIATION * wave('dynamics', 2.2)
+
+  // Power in flight. The motor load, as a share of the maximum (0 to 1), uses the steady demand
+  // without the swing: heat builds up slowly and does not follow every gust.
+  const steadyPowerW = HOVER_W_PER_KG * massKg * phaseFactor
+  const flightPowerW = motorsRunning ? steadyPowerW * dynamics : 0
   const maxPowerW = HOVER_W_PER_KG * (model.emptyWeightKg + model.maxPayloadKg) * MAX_LOAD_MARGIN
-  const load = clamp(flightPowerW / maxPowerW, 0, 1)
+  const heatLoad = motorsRunning ? clamp(steadyPowerW / maxPowerW, 0, 1) : 0
+  // Warming up from the standby temperature, and easing off during the descent.
+  const coolDown = 1 - COOL_DOWN_FRACTION * smoothstep(COOL_DOWN_START_PROGRESS, 1, progress)
+  const motorWarm = 1 - Math.exp(-progress / MOTOR_WARM_UP_PROGRESS)
+  const batteryWarm = 1 - Math.exp(-progress / BATTERY_WARM_UP_PROGRESS)
 
   // ---- Battery
   const chargePct = clamp(motorsRunning && flight ? flight.batteryPct : input.batteryPct, 0, 100)
@@ -200,7 +227,11 @@ export function deriveTelemetry(input: TelemetryInput): TelemetryReadings {
   const batteryOffsetC = (hash01(`${droneId}:battery-temp`) - 0.5) * 3
   const batteryTempC =
     mode === 'flight'
-      ? AMBIENT_C + BATTERY_TEMP_RISE_AT_FULL_LOAD_C * load
+      ? AMBIENT_C +
+        2 +
+        (BATTERY_TEMP_RISE_AT_FULL_LOAD_C * heatLoad * coolDown +
+          BATTERY_TEMP_WOBBLE_C * wave('battery-wobble', 1.3)) *
+          batteryWarm
       : mode === 'charging'
         ? AMBIENT_C + 4 + 14 * (maxChargeA > 0 ? currentA / maxChargeA : 0)
         : AMBIENT_C + 2
@@ -216,19 +247,31 @@ export function deriveTelemetry(input: TelemetryInput): TelemetryReadings {
       const rpmUnit = hash01(`${droneId}:rpm:${index}`) - 0.5
       const tempUnit = hash01(`${droneId}:temp:${index}`) - 0.5
       let rpm = 0
-      let temperatureC = AMBIENT_C + 3 + tempUnit * 2
+      // The standby temperature is where a flight starts from (no jump when the drone takes off).
+      const standbyC = AMBIENT_C + 3 + tempUnit * 2
+      let temperatureC = standbyC
       if (motorsRunning) {
         const thrustPerRotorKg = massKg / rotorCount
+        // Each motor has its own wave, of its own amplitude and pace, on top of its fixed offset.
+        const rpmWave =
+          (MOTOR_RPM_WAVE.min + hash01(`${droneId}:rpm-amp:${index}`) * MOTOR_RPM_WAVE.range) *
+          wave(`rpm-wave:${index}`, 3 + 2 * hash01(`${droneId}:rpm-pace:${index}`))
         rpm =
           REFERENCE_RPM *
           Math.sqrt(thrustPerRotorKg / REFERENCE_THRUST_PER_ROTOR_KG) *
-          Math.sqrt(phaseFactor) *
-          (1 + rpmUnit * MOTOR_RPM_SPREAD)
-        temperatureC =
+          Math.sqrt(phaseFactor * dynamics) *
+          (1 + rpmUnit * MOTOR_RPM_SPREAD) *
+          (1 + rpmWave)
+        const steadyC =
           AMBIENT_C +
-          MOTOR_TEMP_RISE_AT_FULL_LOAD_C * load +
+          MOTOR_TEMP_RISE_AT_FULL_LOAD_C * heatLoad * coolDown +
           tempUnit * MOTOR_TEMP_SPREAD_C +
           (warmDrone && index === warmIndex ? warmExtraC : 0)
+        const wobbleC =
+          (MOTOR_TEMP_WOBBLE_C.min +
+            hash01(`${droneId}:temp-amp:${index}`) * MOTOR_TEMP_WOBBLE_C.range) *
+          wave(`temp-wobble:${index}`, 1 + hash01(`${droneId}:temp-pace:${index}`))
+        temperatureC = standbyC + (steadyC - standbyC + wobbleC) * motorWarm
       }
       return {
         id,
@@ -241,9 +284,13 @@ export function deriveTelemetry(input: TelemetryInput): TelemetryReadings {
 
   // ---- Connectivity: a smooth, stable function of the flight progress (never of time).
   const linkOffset = hash01(`${droneId}:link`) * 4
-  const progress = flight ? clamp(flight.progress, 0, 1) : 0.5
   const qualityPct = round(
-    mode === 'flight' ? 92 - 14 * Math.sin(Math.PI * progress) - linkOffset : 97 - linkOffset,
+    mode === 'flight'
+      ? 92 -
+          14 * Math.sin(Math.PI * progress) -
+          linkOffset +
+          LINK_WOBBLE_PCT * wave('link-wobble', 3)
+      : 97 - linkOffset,
     0,
   )
 
@@ -288,7 +335,7 @@ export interface HealthAssessment {
 }
 
 const LEVEL_ORDER: Record<HealthLevel, number> = { nominal: 0, attention: 1, critical: 2 }
-const worst = (levels: readonly HealthLevel[]): HealthLevel =>
+export const worstLevel = (levels: readonly HealthLevel[]): HealthLevel =>
   levels.reduce<HealthLevel>(
     (current, level) => (LEVEL_ORDER[level] > LEVEL_ORDER[current] ? level : current),
     'nominal',
@@ -393,7 +440,7 @@ export function assessHealth(
   })
 
   return {
-    level: worst(indicators.map((indicator) => indicator.level)),
+    level: worstLevel(indicators.map((indicator) => indicator.level)),
     indicators,
     warnings: indicators.filter((indicator) => indicator.level !== 'nominal'),
   }

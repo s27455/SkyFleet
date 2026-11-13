@@ -1,7 +1,7 @@
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { memo, useEffect, useRef, type ComponentRef, type RefObject } from 'react'
-import type { PerspectiveCamera } from 'three'
+import { Vector3, type PerspectiveCamera } from 'three'
 
 import {
   CAMERA_LIMITS,
@@ -13,8 +13,8 @@ import {
   type Vec3,
 } from './cameraMath'
 import { DroneModel } from './DroneModel'
-import { SKID_Y } from './droneLayout'
-import type { DronePartId } from './droneParts'
+import { LABEL_ANCHORS, SKID_Y } from './droneLayout'
+import type { DronePartId, PartAnnotation } from './droneParts'
 
 /** Camera commands the viewer's keyboard and buttons use; filled in once the scene is mounted. */
 export interface CameraApi {
@@ -29,7 +29,11 @@ export interface DroneCanvasProps {
   /** Mouse-wheel zoom is enabled only while the viewer has focus so it never hijacks page scroll. */
   wheelZoom: boolean
   apiRef: RefObject<CameraApi | null>
-  onPartSelect?: (part: DronePartId) => void
+  onPartSelect?: (part: DronePartId | null) => void
+  annotations?: Readonly<Partial<Record<DronePartId, PartAnnotation>>>
+  selectedPart?: DronePartId | null
+  /** The DOM layer holding the part labels, which the scene keeps positioned over their parts. */
+  labelLayerRef?: RefObject<HTMLDivElement | null>
   onContextLost?: () => void
 }
 
@@ -75,6 +79,42 @@ function CameraRig({
   return null
 }
 
+/**
+ * Moves each label (a DOM element with `data-label-part`) over its part's anchor point. It writes
+ * straight to the elements' style, with no React state, and runs only on rendered frames: whenever
+ * the camera moves, the view resizes or the annotations change.
+ */
+function LabelProjector({
+  layerRef,
+  annotations,
+}: {
+  layerRef: RefObject<HTMLDivElement | null>
+  annotations: DroneCanvasProps['annotations']
+}) {
+  const invalidate = useThree((state) => state.invalidate)
+  const point = useRef(new Vector3())
+
+  // New or changed labels need one frame to be placed.
+  useEffect(() => invalidate(), [annotations, invalidate])
+
+  useFrame(({ camera, size }) => {
+    const layer = layerRef.current
+    if (!layer) return
+    camera.updateMatrixWorld()
+    for (const element of layer.querySelectorAll<HTMLElement>('[data-label-part]')) {
+      const anchor = LABEL_ANCHORS[element.dataset.labelPart as DronePartId]
+      if (!anchor) continue
+      point.current.set(...anchor).project(camera)
+      const x = ((point.current.x + 1) / 2) * size.width
+      const y = ((1 - point.current.y) / 2) * size.height
+      element.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`
+      element.style.visibility = point.current.z < 1 ? 'visible' : 'hidden'
+    }
+  })
+
+  return null
+}
+
 // Module-level constants: React Three Fiber re-applies a changed `camera` prop, which would snap the
 // user's orbit back to the default whenever the parent re-renders (e.g. on every data poll).
 const CAMERA_PROPS = {
@@ -91,6 +131,9 @@ function DroneCanvas({
   wheelZoom,
   apiRef,
   onPartSelect,
+  annotations,
+  selectedPart,
+  labelLayerRef,
   onContextLost,
 }: DroneCanvasProps) {
   const controls = useRef<Controls>(null)
@@ -101,6 +144,7 @@ function DroneCanvas({
       frameloop={running ? 'always' : 'demand'}
       dpr={DPR_RANGE}
       camera={CAMERA_PROPS}
+      onPointerMissed={onPartSelect ? () => onPartSelect(null) : undefined}
       onCreated={({ gl }) => {
         gl.domElement.addEventListener('webglcontextlost', (event) => {
           event.preventDefault()
@@ -131,7 +175,12 @@ function DroneCanvas({
       <directionalLight position={[3, 5, 4]} intensity={1.1} />
       <ambientLight intensity={0.12} />
 
-      <DroneModel spinning={running} onPartSelect={onPartSelect} />
+      <DroneModel
+        spinning={running}
+        onPartSelect={onPartSelect}
+        annotations={annotations}
+        selectedPart={selectedPart}
+      />
       <ContactShadows
         position={[0, SKID_Y - 0.05, 0]}
         opacity={0.5}
@@ -157,6 +206,7 @@ function DroneCanvas({
         maxPolarAngle={CAMERA_LIMITS.maxPolar}
       />
       <CameraRig apiRef={apiRef} controls={controls} />
+      {labelLayerRef && <LabelProjector layerRef={labelLayerRef} annotations={annotations} />}
     </Canvas>
   )
 }

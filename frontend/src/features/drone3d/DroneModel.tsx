@@ -1,7 +1,8 @@
 import { RoundedBox } from '@react-three/drei'
-import { useFrame, type ThreeEvent } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  BackSide,
   CapsuleGeometry,
   CircleGeometry,
   CylinderGeometry,
@@ -25,8 +26,14 @@ import {
   SKID_Y,
   type MotorLayout,
 } from './droneLayout'
-import { createDroneMaterials, disposeMaterials, type DroneMaterials } from './droneMaterials'
-import { propellerName, type DronePartId } from './droneParts'
+import {
+  createDroneMaterials,
+  disposeMaterials,
+  highlightFor,
+  ledFor,
+  type DroneMaterials,
+} from './droneMaterials'
+import { propellerName, type DronePartId, type PartAnnotation } from './droneParts'
 
 const PROPELLER_SPEED = 9 // rad/s: clearly spinning, but calm enough not to strobe
 const Y_AXIS = new Vector3(0, 1, 0)
@@ -74,6 +81,9 @@ function createGeometries() {
     motorBell: new CylinderGeometry(0.135, 0.15, 0.05, 40),
     motorMount: new CylinderGeometry(0.2, 0.2, 0.03, 32),
     motorRing: new TorusGeometry(0.168, 0.011, 8, 48),
+    // Health ring around a motor and the selection outline around its propeller (rotated flat on use).
+    haloRing: new TorusGeometry(0.3, 0.024, 10, 64),
+    selectRing: new TorusGeometry(PROPELLER_RADIUS + 0.1, 0.02, 8, 72),
     hub: new CylinderGeometry(0.035, 0.075, 0.07, 24),
     post: new CylinderGeometry(0.024, 0.024, 0.4, 12),
   }
@@ -139,6 +149,8 @@ function Strut({
 
 interface PartHandlers {
   onClick?: (event: ThreeEvent<MouseEvent>) => void
+  onPointerOver?: (event: ThreeEvent<PointerEvent>) => void
+  onPointerOut?: (event: ThreeEvent<PointerEvent>) => void
 }
 
 function Motor({
@@ -147,13 +159,19 @@ function Motor({
   materials,
   spinning,
   handlers,
+  annotation,
+  outlined,
 }: {
   layout: MotorLayout
   geometries: Geometries
   materials: DroneMaterials
   spinning: boolean
   handlers: PartHandlers
+  annotation?: PartAnnotation
+  /** Drawn with the selection outline (selected or hovered). */
+  outlined: boolean
 }) {
+  const highlight = annotation ? highlightFor(materials, annotation.level) : null
   const propeller = useRef<Group>(null)
   useFrame((_, delta) => {
     if (spinning && propeller.current) {
@@ -177,10 +195,35 @@ function Motor({
       />
       <mesh
         geometry={geometries.motorRing}
-        material={materials.ledAccent}
+        material={
+          highlight && annotation ? ledFor(materials, annotation.level) : materials.ledAccent
+        }
         position={[0, -0.02, 0]}
         rotation={[Math.PI / 2, 0, 0]}
       />
+      {highlight && (
+        <>
+          <mesh
+            geometry={geometries.haloRing}
+            material={highlight.ring}
+            position={[0, 0.06, 0]}
+            rotation={[Math.PI / 2, 0, 0]}
+          />
+          <mesh
+            geometry={geometries.disc}
+            material={highlight.wash}
+            position={[0, PROPELLER_LIFT + 0.02, 0]}
+          />
+        </>
+      )}
+      {outlined && (
+        <mesh
+          geometry={geometries.selectRing}
+          material={materials.selection}
+          position={[0, PROPELLER_LIFT + 0.02, 0]}
+          rotation={[Math.PI / 2, 0, 0]}
+        />
+      )}
       <mesh geometry={geometries.motorBell} material={materials.metal} position={[0, 0.185, 0]} />
       <group
         name={propellerName(layout.id)}
@@ -206,17 +249,39 @@ function Motor({
 export interface DroneModelProps {
   /** Spin the propellers and add a gentle hover. */
   spinning?: boolean
-  /** When set, clicking a named part reports it (for the future component inspector). */
-  onPartSelect?: (part: DronePartId) => void
+  /**
+   * When set, clicking a part reports it, and clicking empty space reports `null`. Without
+   * `annotations` every part is clickable; with them, only the annotated parts are.
+   */
+  onPartSelect?: (part: DronePartId | null) => void
+  /** Health level and label per part: drawn as highlights and labels on the model. */
+  annotations?: Readonly<Partial<Record<DronePartId, PartAnnotation>>>
+  /** The selected part, drawn with an outline. */
+  selectedPart?: DronePartId | null
 }
 
 const LEG_SPAN = 0.5
 
 /** Procedural quadcopter built from named groups; geometry and materials are built once. */
-export function DroneModel({ spinning = false, onPartSelect }: DroneModelProps) {
+export function DroneModel({
+  spinning = false,
+  onPartSelect,
+  annotations,
+  selectedPart = null,
+}: DroneModelProps) {
   const geometries = useGeometries()
   const materials = useMaterials()
   const hover = useRef<Group>(null)
+  const gl = useThree((state) => state.gl)
+  const [hovered, setHovered] = useState<DronePartId | null>(null)
+
+  // Leave the canvas cursor as found if the model unmounts while a part is hovered.
+  useEffect(
+    () => () => {
+      gl.domElement.style.cursor = ''
+    },
+    [gl],
+  )
 
   useFrame(({ clock }) => {
     if (hover.current) {
@@ -225,14 +290,31 @@ export function DroneModel({ spinning = false, onPartSelect }: DroneModelProps) 
   })
 
   const handlersFor = (part: DronePartId): PartHandlers =>
-    onPartSelect
+    onPartSelect && (!annotations || part in annotations)
       ? {
           onClick: (event) => {
+            // A drag that orbits the camera also ends in a click: it is not a selection.
+            if (event.delta > 4) return
             event.stopPropagation()
             onPartSelect(part)
           },
+          onPointerOver: (event) => {
+            event.stopPropagation()
+            setHovered(part)
+            gl.domElement.style.cursor = 'pointer'
+          },
+          onPointerOut: () => {
+            setHovered((current) => (current === part ? null : current))
+            gl.domElement.style.cursor = ''
+          },
         }
       : {}
+  const outlined = (part: DronePartId) =>
+    annotations !== undefined && (selectedPart === part || hovered === part)
+  const batteryAnnotation = annotations?.battery
+  const batteryHighlight = batteryAnnotation
+    ? highlightFor(materials, batteryAnnotation.level)
+    : null
 
   return (
     <group ref={hover} name="drone">
@@ -300,9 +382,24 @@ export function DroneModel({ spinning = false, onPartSelect }: DroneModelProps) 
             args={[0.02, 0.05, 0.34]}
             radius={0.008}
             position={[sx * 0.255, 0, 0]}
-            material={materials.ledOk}
+            material={
+              batteryAnnotation ? ledFor(materials, batteryAnnotation.level) : materials.ledOk
+            }
           />
         ))}
+        {batteryHighlight && (
+          <RoundedBox
+            args={[0.57, 0.22, 0.79]}
+            radius={0.06}
+            smoothness={4}
+            material={batteryHighlight.wash}
+          />
+        )}
+        {outlined('battery') && (
+          <RoundedBox args={[0.6, 0.25, 0.82]} radius={0.07} smoothness={4}>
+            <meshBasicMaterial color="#22d3ee" side={BackSide} toneMapped={false} />
+          </RoundedBox>
+        )}
         <RoundedBox
           args={[0.14, 0.04, 0.03]}
           radius={0.01}
@@ -407,6 +504,8 @@ export function DroneModel({ spinning = false, onPartSelect }: DroneModelProps) 
           materials={materials}
           spinning={spinning}
           handlers={handlersFor(layout.id)}
+          annotation={annotations?.[layout.id]}
+          outlined={outlined(layout.id)}
         />
       ))}
     </group>
