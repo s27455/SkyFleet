@@ -1,7 +1,7 @@
 # Feature 016A — Procedural Drone 3D Model
 
 ## Status
-Implemented and verified by automated checks; approved as complete by the user at Finish; not committed. No QA or code-review agent run. The visuals were checked by the implementer only through headless-Chrome screenshots (software WebGL, 1100 px and 390 px wide); propeller animation, drag/wheel orbit and real-GPU behavior were not observed by the implementer.
+Implemented and verified by automated checks; approved as complete by the user at Finish; committed (`3e57c58`). No QA or code-review agent run. The visuals were checked by the implementer only through headless-Chrome screenshots (software WebGL, 1100 px and 390 px wide); propeller animation, drag/wheel orbit and real-GPU behavior were not observed by the implementer.
 
 ### Implementation summary
 - Frontend only, in `frontend/src/features/drone3d/`; no backend, database, API, map or popup change. `src/main.tsx` only mounts the dev preview.

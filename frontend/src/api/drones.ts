@@ -22,7 +22,14 @@ function toDroneModel(item: unknown, droneId: string): DroneModel {
   if (!isPositiveFiniteNumber(raw.recommended_mission_range_km)) {
     invalid(`bad recommended_mission_range_km for ${droneId}`)
   }
+  if (!isNonEmptyString(raw.airframe_type)) invalid(`missing airframe_type for ${droneId}`)
   if (!isPositiveFiniteNumber(raw.cruise_speed_kmh)) invalid(`bad cruise_speed_kmh for ${droneId}`)
+  if (!isPositiveFiniteNumber(raw.max_speed_kmh)) invalid(`bad max_speed_kmh for ${droneId}`)
+  if (!isPositiveFiniteNumber(raw.charge_to_80_minutes)) {
+    invalid(`bad charge_to_80_minutes for ${droneId}`)
+  }
+  if (!isPositiveFiniteNumber(raw.max_wind_mps)) invalid(`bad max_wind_mps for ${droneId}`)
+  if (!isPositiveFiniteNumber(raw.empty_weight_kg)) invalid(`bad empty_weight_kg for ${droneId}`)
   if (!isPositiveFiniteNumber(raw.nominal_flight_time_min)) {
     invalid(`bad nominal_flight_time_min for ${droneId}`)
   }
@@ -33,12 +40,17 @@ function toDroneModel(item: unknown, droneId: string): DroneModel {
   return {
     id: raw.id,
     name: raw.name,
+    airframeType: raw.airframe_type,
     maxPayloadKg: raw.max_payload_kg,
     maxRangeKm: raw.max_range_km,
     recommendedMissionRangeKm: raw.recommended_mission_range_km,
     cruiseSpeedKmh: raw.cruise_speed_kmh,
+    maxSpeedKmh: raw.max_speed_kmh,
     nominalFlightTimeMin: raw.nominal_flight_time_min,
     minBatteryReservePct: raw.min_battery_reserve_pct,
+    chargeTo80Minutes: raw.charge_to_80_minutes,
+    maxWindMps: raw.max_wind_mps,
+    emptyWeightKg: raw.empty_weight_kg,
   }
 }
 

@@ -13,6 +13,11 @@ const MODEL = {
   cruiseSpeedKmh: 45,
   nominalFlightTimeMin: 32,
   minBatteryReservePct: 20,
+  airframeType: 'hexacopter',
+  maxSpeedKmh: 60,
+  chargeTo80Minutes: 45,
+  maxWindMps: 10,
+  emptyWeightKg: 9,
 }
 
 const HUB_A: Hub = {

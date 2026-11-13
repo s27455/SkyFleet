@@ -35,14 +35,21 @@ export interface DroneResponse {
 export interface DroneModel {
   id: string
   name: string
+  /** Descriptive metadata from the backend, e.g. `hexacopter`. */
+  airframeType: string
   maxPayloadKg: number
   /** Nominal upper bound on total distance per charge, not a delivery radius. */
   maxRangeKm: number
   /** Conservative total mission distance including the return to a Hub. */
   recommendedMissionRangeKm: number
   cruiseSpeedKmh: number
+  maxSpeedKmh: number
   nominalFlightTimeMin: number
   minBatteryReservePct: number
+  /** Minutes to charge from empty to 80%. */
+  chargeTo80Minutes: number
+  maxWindMps: number
+  emptyWeightKg: number
 }
 
 /** One drone unit as last stored by the backend. */

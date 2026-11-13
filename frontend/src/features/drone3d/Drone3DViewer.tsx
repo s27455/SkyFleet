@@ -2,6 +2,7 @@ import {
   Component,
   Suspense,
   lazy,
+  memo,
   useCallback,
   useEffect,
   useRef,
@@ -108,7 +109,7 @@ const TILT_STEP = 0.1
  * buttons, +/- keys, or the wheel once the viewer has focus (so it never captures page scrolling).
  * Renders only while needed: animation frames run just while the propellers spin on a visible tab.
  */
-export function Drone3DViewer({
+function Drone3DViewerComponent({
   animate = true,
   onPartSelect,
   className = '',
@@ -207,3 +208,6 @@ export function Drone3DViewer({
     </div>
   )
 }
+
+/** Memoized: re-rendering the parent (live data) must not re-render the scene. */
+export const Drone3DViewer = memo(Drone3DViewerComponent)

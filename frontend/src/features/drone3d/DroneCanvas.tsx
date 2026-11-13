@@ -1,6 +1,6 @@
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei'
 import { Canvas, useThree } from '@react-three/fiber'
-import { useEffect, useRef, type ComponentRef, type RefObject } from 'react'
+import { memo, useEffect, useRef, type ComponentRef, type RefObject } from 'react'
 import type { PerspectiveCamera } from 'three'
 
 import {
@@ -75,7 +75,18 @@ function CameraRig({
   return null
 }
 
-export default function DroneCanvas({
+// Module-level constants: React Three Fiber re-applies a changed `camera` prop, which would snap the
+// user's orbit back to the default whenever the parent re-renders (e.g. on every data poll).
+const CAMERA_PROPS = {
+  position: [...DEFAULT_CAMERA_POSITION] as [number, number, number],
+  fov: 38,
+  near: 0.1,
+  far: 40,
+}
+const CONTROLS_TARGET = [...CAMERA_TARGET] as [number, number, number]
+const DPR_RANGE: [number, number] = [1, 2]
+
+function DroneCanvas({
   running,
   wheelZoom,
   apiRef,
@@ -88,8 +99,8 @@ export default function DroneCanvas({
     <Canvas
       className="touch-none"
       frameloop={running ? 'always' : 'demand'}
-      dpr={[1, 2]}
-      camera={{ position: [...DEFAULT_CAMERA_POSITION], fov: 38, near: 0.1, far: 40 }}
+      dpr={DPR_RANGE}
+      camera={CAMERA_PROPS}
       onCreated={({ gl }) => {
         gl.domElement.addEventListener('webglcontextlost', (event) => {
           event.preventDefault()
@@ -133,7 +144,7 @@ export default function DroneCanvas({
 
       <OrbitControls
         ref={controls}
-        target={[...CAMERA_TARGET]}
+        target={CONTROLS_TARGET}
         enablePan={false}
         enableZoom={wheelZoom}
         enableDamping
@@ -149,3 +160,6 @@ export default function DroneCanvas({
     </Canvas>
   )
 }
+
+// Memoized so a parent re-render with unchanged props never touches the scene.
+export default memo(DroneCanvas)

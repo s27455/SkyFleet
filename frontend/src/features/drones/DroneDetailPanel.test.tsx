@@ -20,6 +20,11 @@ const DRONE: Drone = {
     cruiseSpeedKmh: 45,
     nominalFlightTimeMin: 32,
     minBatteryReservePct: 20,
+    airframeType: 'hexacopter',
+    maxSpeedKmh: 60,
+    chargeTo80Minutes: 45,
+    maxWindMps: 10,
+    emptyWeightKg: 9,
   },
 }
 
@@ -85,5 +90,52 @@ describe('DroneDetailPanel', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
 
     expect(onClose).toHaveBeenCalledTimes(2)
+  })
+
+  describe('inspector entry point', () => {
+    it('shows no Inspect Drone button unless the inspector can be opened', () => {
+      render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
+
+      expect(screen.queryByRole('button', { name: 'Inspect Drone' })).not.toBeInTheDocument()
+    })
+
+    it('opens the inspector from the Inspect Drone button below the primary information', () => {
+      const onInspect = vi.fn()
+      render(
+        <DroneDetailPanel
+          drone={DRONE}
+          hub={HUB}
+          markerSpread={false}
+          onClose={() => {}}
+          onInspect={onInspect}
+        />,
+      )
+
+      const button = screen.getByRole('button', { name: 'Inspect Drone' })
+      expect(valueOf('Stored position')?.closest('dl')?.nextElementSibling).toBe(button)
+      fireEvent.click(button)
+
+      expect(onInspect).toHaveBeenCalledTimes(1)
+    })
+
+    it('stops closing on Escape while the inspector is open on top', () => {
+      const onClose = vi.fn()
+      const { rerender } = render(
+        <DroneDetailPanel drone={DRONE} markerSpread={false} onClose={onClose} />,
+      )
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalledTimes(1)
+
+      rerender(
+        <DroneDetailPanel
+          drone={DRONE}
+          markerSpread={false}
+          onClose={onClose}
+          closeOnEscape={false}
+        />,
+      )
+      fireEvent.keyDown(window, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalledTimes(1)
+    })
   })
 })

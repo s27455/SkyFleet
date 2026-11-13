@@ -26,6 +26,10 @@ interface DroneDetailPanelProps {
   /** An `ASSIGNED` mission of this drone, which can be started from here. */
   assignedMission?: Mission
   onStartMission?: (missionId: string) => Promise<void>
+  /** Opens the drone inspector; the button is shown only when this is given. */
+  onInspect?: () => void
+  /** False while the inspector is open on top, so Escape closes only the inspector. Default: true. */
+  closeOnEscape?: boolean
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -49,14 +53,17 @@ export function DroneDetailPanel({
   workerStale = false,
   assignedMission,
   onStartMission,
+  onInspect,
+  closeOnEscape = true,
 }: DroneDetailPanelProps) {
   useEffect(() => {
+    if (!closeOnEscape) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onClose])
+  }, [onClose, closeOnEscape])
 
   const status = DRONE_STATUS_DISPLAY[drone.status]
   const { model } = drone
@@ -93,6 +100,16 @@ export function DroneDetailPanel({
           </span>
         </Row>
       </dl>
+
+      {onInspect && (
+        <button
+          type="button"
+          onClick={onInspect}
+          className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-md border border-line px-3 text-sm hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-accent"
+        >
+          Inspect Drone
+        </button>
+      )}
 
       {flight && <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />}
       {assignedMission && onStartMission && (

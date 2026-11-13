@@ -4,6 +4,8 @@ import { startMission } from './api/missions'
 import { AutoDispatchControl } from './features/dispatch/AutoDispatchControl'
 import { ResourceStatusBanner } from './features/data/ResourceStatusBanner'
 import { DroneDetailPanel } from './features/drones/DroneDetailPanel'
+import { DroneInspector } from './features/drones/DroneInspector'
+import { resolveInspectorData } from './features/drones/inspectorData'
 import { useDrones } from './features/drones/useDrones'
 import { canAnimateFlights, flightsByDrone, isActiveFlight } from './features/flights/flightStatus'
 import type { FlightVisual } from './features/flights/interpolation'
@@ -60,10 +62,16 @@ function App() {
 
   const [selection, setSelection] = useState<Selection | null>(null)
   const [managementOpen, setManagementOpen] = useState(false)
+  // The inspector opens above the selected drone's panel; the selection itself is never touched.
+  const [inspectedDroneId, setInspectedDroneId] = useState<string | null>(null)
   const selectHub = useCallback((id: string) => setSelection({ kind: 'hub', id }), [])
   const selectDrone = useCallback((id: string) => setSelection({ kind: 'drone', id }), [])
   const selectOrder = useCallback((id: string) => setSelection({ kind: 'order', id }), [])
-  const clearSelection = useCallback(() => setSelection(null), [])
+  const clearSelection = useCallback(() => {
+    setInspectedDroneId(null)
+    setSelection(null)
+  }, [])
+  const closeInspector = useCallback(() => setInspectedDroneId(null), [])
 
   const selectedHub =
     selection?.kind === 'hub' ? hubs.find((hub) => hub.id === selection.id) : undefined
@@ -71,6 +79,31 @@ function App() {
     selection?.kind === 'drone' ? drones.find((drone) => drone.id === selection.id) : undefined
   const selectedOrder =
     selection?.kind === 'order' ? orders.find((order) => order.id === selection.id) : undefined
+  // The inspector exists only for a drone that is still selected and still in the data.
+  const inspectorOpen = selectedDrone !== undefined && inspectedDroneId === selectedDrone.id
+  const inspectorData = useMemo(
+    () =>
+      selectedDrone
+        ? resolveInspectorData({
+            droneId: selectedDrone.id,
+            flights,
+            missions,
+            orders,
+            flightsStatus: flightsResource.state.status,
+            missionsStatus: missionsResource.state.status,
+            ordersStatus: ordersResource.state.status,
+          })
+        : null,
+    [
+      selectedDrone,
+      flights,
+      missions,
+      orders,
+      flightsResource.state.status,
+      missionsResource.state.status,
+      ordersResource.state.status,
+    ],
+  )
   const orderOffsets = useMemo(() => computeOrderOffsets(orders, hubs), [orders, hubs])
 
   // Docked drones are shown as a count on their Hub; only the rest get individual markers.
@@ -176,7 +209,10 @@ function App() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6">
+      <header
+        inert={inspectorOpen}
+        className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6"
+      >
         <div className="flex items-baseline gap-3">
           <h1 className="text-lg font-semibold tracking-tight">
             Sky<span className="text-accent">Fleet</span>
@@ -317,6 +353,24 @@ function App() {
             workerStale={workerStale}
             assignedMission={assignedByDrone.get(selectedDrone.id)}
             onStartMission={startAssignedMission}
+            onInspect={() => setInspectedDroneId(selectedDrone.id)}
+            closeOnEscape={!inspectorOpen}
+          />
+        )}
+        {selectedDrone && inspectorOpen && inspectorData && (
+          <DroneInspector
+            drone={selectedDrone}
+            hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
+            hubs={hubs}
+            data={inspectorData}
+            workerStale={workerStale}
+            dataStale={
+              dronesResource.stale ||
+              flightsResource.stale ||
+              missionsResource.stale ||
+              ordersResource.stale
+            }
+            onClose={closeInspector}
           />
         )}
       </main>
