@@ -223,7 +223,7 @@ The system can assign orders to suitable drones using predictable, testable busi
 - [ ] Implement drone operational states.
 - [ ] Simulate drone movement between pickup hubs and delivery addresses.
 - [ ] Generate mock telemetry.
-- [ ] Simulate Partner delivery request arrivals.
+- [ ] Simulate Partner delivery request arrivals. (Partly done: Feature 015A, `docs/features/015a-order-generator-core.md`, creates one simulated `READY_FOR_PICKUP` order on demand via `POST /api/orders/generate`, picking a random route from a curated, prevalidated catalog (`app/orders/generator_catalog.py`) and creating it through the existing order service; no migration. The test suite re-checks every catalog route at both weight bounds with the planner's routing and energy helpers. Verified by backend tests (including a PostgreSQL parallel-generation test), ruff and mypy; no QA or code-review agent run; not run live on the development database. Still open: 015B periodic generation, 015C operator controls, 015D backlog protections.)
 - [ ] Simulate mission progression.
 - [ ] Implement post-delivery return to the nearest suitable Hub (with or without the parcel).
 - [ ] Simulate charging and waiting at Hubs.

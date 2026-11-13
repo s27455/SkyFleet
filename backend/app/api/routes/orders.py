@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.orders import repository, service
+from app.orders import generator, repository, service
 from app.orders.models import DeliveryOrder
 from app.orders.schemas import OrderCreateRequest, OrderResponse, OrderUpdateRequest
 
@@ -39,6 +39,15 @@ def _http_error(error: service.OrderManagementError) -> HTTPException:
 @router.get("", response_model=list[OrderResponse])
 def list_orders(session: SessionDep) -> Sequence[DeliveryOrder]:
     return repository.list_orders(session)
+
+
+@router.post("/generate", response_model=OrderResponse, status_code=201)
+def generate_order(session: SessionDep) -> DeliveryOrder:
+    """Create one simulated `READY_FOR_PICKUP` order from the prevalidated route catalog."""
+    try:
+        return generator.generate_one_order(session)
+    except service.OrderManagementError as error:
+        raise _http_error(error) from error
 
 
 @router.get("/{order_id}", response_model=OrderResponse)
