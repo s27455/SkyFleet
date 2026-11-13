@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { startMission } from './api/missions'
+import { AutoDispatchControl } from './features/dispatch/AutoDispatchControl'
 import { ResourceStatusBanner } from './features/data/ResourceStatusBanner'
 import { DroneDetailPanel } from './features/drones/DroneDetailPanel'
 import { useDrones } from './features/drones/useDrones'
@@ -182,6 +183,7 @@ function App() {
           <span className="hidden text-sm text-fg-muted sm:inline">Operations Center</span>
         </div>
         <div className="flex items-center gap-4">
+          <AutoDispatchControl />
           <button
             type="button"
             aria-expanded={managementOpen}

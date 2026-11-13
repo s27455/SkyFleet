@@ -1,6 +1,6 @@
 # Feature 014B — Dispatch Execution
 
-**Status:** Implemented (backend only) and verified by automated tests, including concurrency tests on PostgreSQL; QA and code-review agents not run. Not committed.
+**Status:** Implemented (backend only) and verified by automated tests, including concurrency tests on PostgreSQL; QA and code-review agents not run. Committed in `b0629e4`.
 
 ## Implementation notes (verified)
 - Endpoint `POST /api/dispatch/execute` with body `{order_id, drone_id}`; 201 returns the existing mission response (status `IN_FLIGHT`). Code: `backend/app/dispatch/service.py` (`execute_dispatch`), `backend/app/dispatch/schemas.py`, `backend/app/api/routes/dispatch.py`; tests: `backend/tests/dispatch/test_dispatch_execution.py` (SQLite) and `backend/tests/dispatch/test_dispatch_postgres.py` (opt-in `-m postgres`). No migration.

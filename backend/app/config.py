@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # A mission can only be started if the worker's last heartbeat is at most this old.
     sim_heartbeat_stale_seconds: float = Field(default=10.0, gt=0)
 
+    # Seconds between automatic-dispatch passes in the worker (only used while the mode is ON).
+    dispatch_auto_interval_seconds: float = Field(default=3.0, gt=0)
+
     # Mission planning (simulation assumptions, not certified performance). Extra energy per km
     # when carrying the full rated payload, as a fraction of the empty rate (0.5 = +50%).
     mission_payload_energy_factor: float = Field(default=0.5, ge=0)

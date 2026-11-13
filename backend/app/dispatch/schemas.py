@@ -1,5 +1,6 @@
 """Response contract of the read-only dispatch recommendations (Feature 014A)."""
 
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
@@ -44,3 +45,14 @@ class DispatchExecuteRequest(BaseModel):
 
     order_id: str = Field(min_length=1)
     drone_id: str = Field(min_length=1)
+
+
+class AutoDispatchStatus(BaseModel):
+    """What the server is actually doing, never a client-side assumption."""
+
+    # True only while the mode is ON and the simulation worker (the loop's owner) is alive.
+    enabled: bool
+    worker_running: bool
+    last_check_at: datetime | None
+    # A short summary of the last pass (what was started, or why nothing was).
+    last_outcome: str | None

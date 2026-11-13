@@ -18,6 +18,7 @@ from sqlalchemy.pool import ConnectionPoolEntry, StaticPool
 
 from app.config import Settings
 from app.db.session import Base, get_session
+from app.dispatch import models as dispatch_models  # noqa: F401  (registers tables)
 from app.drones import models as drone_models  # noqa: F401  (registers tables on Base.metadata)
 from app.drones.models import Drone, DroneStatus
 from app.drones.seed import build_sf1_model, seed_drones

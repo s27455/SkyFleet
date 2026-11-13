@@ -7,8 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
-from app.dispatch import service
-from app.dispatch.schemas import DispatchExecuteRequest, RecommendationsResponse
+from app.dispatch import auto, service
+from app.dispatch.schemas import (
+    AutoDispatchStatus,
+    DispatchExecuteRequest,
+    RecommendationsResponse,
+)
 from app.missions import service as missions_service
 from app.missions.models import Mission
 from app.missions.schemas import MissionResponse
@@ -18,6 +22,19 @@ from app.simulation import service as simulation_service
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+def _worker_unavailable(error: simulation_service.WorkerUnavailableError) -> HTTPException:
+    last = error.last_heartbeat_at
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": "SIMULATION_WORKER_UNAVAILABLE",
+            "message": str(error),
+            "last_heartbeat_at": last.isoformat() if last else None,
+            "max_age_seconds": error.max_age_seconds,
+        },
+    )
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)
@@ -78,16 +95,7 @@ def execute_dispatch(
             },
         ) from error
     except simulation_service.WorkerUnavailableError as error:
-        last = error.last_heartbeat_at
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "SIMULATION_WORKER_UNAVAILABLE",
-                "message": str(error),
-                "last_heartbeat_at": last.isoformat() if last else None,
-                "max_age_seconds": error.max_age_seconds,
-            },
-        ) from error
+        raise _worker_unavailable(error) from error
     except service.DispatchStartFailedError as error:
         raise HTTPException(
             status_code=409,
@@ -99,3 +107,24 @@ def execute_dispatch(
                 "cause": error.cause,
             },
         ) from error
+
+
+@router.get("/auto/status", response_model=AutoDispatchStatus)
+def get_auto_status(session: SessionDep, settings: SettingsDep) -> AutoDispatchStatus:
+    """The server's actual automatic-dispatch state (OFF by default)."""
+    return auto.get_status(session, clock.utcnow(), settings)
+
+
+@router.post("/auto/enable", response_model=AutoDispatchStatus)
+def enable_auto(session: SessionDep, settings: SettingsDep) -> AutoDispatchStatus:
+    """Turn automatic dispatch ON (idempotent); refused while no simulation worker is alive."""
+    try:
+        return auto.enable(session, clock.utcnow(), settings)
+    except simulation_service.WorkerUnavailableError as error:
+        raise _worker_unavailable(error) from error
+
+
+@router.post("/auto/disable", response_model=AutoDispatchStatus)
+def disable_auto(session: SessionDep, settings: SettingsDep) -> AutoDispatchStatus:
+    """Turn automatic dispatch OFF (idempotent). Flights already started continue."""
+    return auto.disable(session, clock.utcnow(), settings)

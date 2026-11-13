@@ -121,6 +121,16 @@ function stubBackend(
     'fetch',
     vi.fn((url: string) => {
       if (url.endsWith('/api/health')) return Promise.resolve(jsonResponse({ status: 'ok' }))
+      if (url.endsWith('/api/dispatch/auto/status')) {
+        return Promise.resolve(
+          jsonResponse({
+            enabled: false,
+            worker_running: true,
+            last_check_at: null,
+            last_outcome: null,
+          }),
+        )
+      }
       if (url.endsWith('/start')) return startCalls()
       if (url.endsWith('/api/orders')) return ordersCalls()
       if (url.endsWith('/api/flights')) return flightsCalls()
