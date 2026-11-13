@@ -1,4 +1,4 @@
-/** Order states the backend currently allows: initial, delivery and cancelled. */
+/** Order states the backend currently allows: initial, delivery, cancelled and delivery failed. */
 export const ORDER_STATUSES = [
   'CREATED',
   'AWAITING_HANDOVER',
@@ -6,6 +6,7 @@ export const ORDER_STATUSES = [
   'OUT_FOR_DELIVERY',
   'DELIVERED',
   'CANCELLED',
+  'DELIVERY_FAILED',
 ] as const
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
@@ -23,6 +24,8 @@ export interface OrderResponse {
   delivered_at: string | null
   /** When the order was cancelled (Feature 018B); null otherwise. */
   cancelled_at: string | null
+  /** When the delivery attempt failed (recipient unavailable, Feature 018D); null otherwise. */
+  delivery_failed_at: string | null
   created_at: string
   updated_at: string
 }
@@ -39,6 +42,7 @@ export interface Order {
   /** ISO 8601 timestamps as sent by the backend (validated to parse). */
   deliveredAt: string | null
   cancelledAt: string | null
+  deliveryFailedAt: string | null
   createdAt: string
   updatedAt: string
 }

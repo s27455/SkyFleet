@@ -2,7 +2,13 @@ import type { OrderStatus } from '../../types/order'
 
 /** What a destination marker tells the operator. Styling lives apart, in `ORDER_MARKER_STATES`. */
 export type OrderMarkerState =
-  'pending' | 'in_progress' | 'delivered' | 'cancelled' | 'interrupted' | 'other'
+  | 'pending'
+  | 'in_progress'
+  | 'delivered'
+  | 'cancelled'
+  | 'interrupted'
+  | 'delivery_failed'
+  | 'other'
 
 /**
  * Backend order status to marker state, written out for every status (Feature 017B). Only the
@@ -16,6 +22,7 @@ const STATE_BY_STATUS: Record<OrderStatus, OrderMarkerState> = {
   OUT_FOR_DELIVERY: 'in_progress',
   DELIVERED: 'delivered',
   CANCELLED: 'cancelled',
+  DELIVERY_FAILED: 'delivery_failed',
 }
 
 /** A status this build does not know (a newer backend) is shown neutrally, never guessed. */
@@ -60,6 +67,11 @@ export const ORDER_MARKER_STATES: Record<OrderMarkerState, OrderMarkerStyle> = {
     label: 'Interrupted',
     diamondClasses: ['bg-status-warning', 'border-status-critical'],
     swatchClass: 'bg-status-warning',
+  },
+  delivery_failed: {
+    label: 'Delivery failed',
+    diamondClasses: ['bg-status-failed', 'border-fg'],
+    swatchClass: 'bg-status-failed',
   },
   other: {
     label: 'Other',

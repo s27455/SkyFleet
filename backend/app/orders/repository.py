@@ -11,6 +11,13 @@ from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.visibility import visibility_cutoff
 from app.simulation.models import FlightPhase, MissionFlight
 
+# These statuses are final: each one stays in the active views only for the visibility window.
+_TERMINAL_STATUSES = [
+    OrderStatus.DELIVERED.value,
+    OrderStatus.CANCELLED.value,
+    OrderStatus.DELIVERY_FAILED.value,
+]
+
 
 def list_orders(session: Session) -> Sequence[DeliveryOrder]:
     """Return all orders in a stable order (creation time, then id)."""
@@ -40,8 +47,7 @@ def list_active_orders(
     statement = (
         select(DeliveryOrder)
         .where(
-            DeliveryOrder.status.not_in([OrderStatus.DELIVERED.value, OrderStatus.CANCELLED.value])
-            & ~interrupted_expired
+            DeliveryOrder.status.not_in(_TERMINAL_STATUSES) & ~interrupted_expired
             | (
                 (DeliveryOrder.status == OrderStatus.DELIVERED.value)
                 & (DeliveryOrder.delivered_at > cutoff)
@@ -49,6 +55,10 @@ def list_active_orders(
             | (
                 (DeliveryOrder.status == OrderStatus.CANCELLED.value)
                 & (DeliveryOrder.cancelled_at > cutoff)
+            )
+            | (
+                (DeliveryOrder.status == OrderStatus.DELIVERY_FAILED.value)
+                & (DeliveryOrder.delivery_failed_at > cutoff)
             )
         )
         .order_by(DeliveryOrder.created_at, DeliveryOrder.id)

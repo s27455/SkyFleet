@@ -40,6 +40,10 @@ export interface FlightResponse {
   recalled_at: string | null
   /** Set when a drone failure interrupted the flight (Feature 018C). */
   failed_at: string | null
+  /** Set when "recipient unavailable" was reported: the delivery fails on arrival (Feature 018D). */
+  recipient_unavailable_at: string | null
+  /** Set when the handover failed: the drone returns to a Hub with the parcel on board. */
+  handover_failed_at: string | null
   updated_at: string
   emergency: { reason: EmergencyReason; at: string; position: [number, number] } | null
 }
@@ -83,6 +87,10 @@ export interface Flight {
   recalledAt: string | null
   /** Set when a drone failure interrupted the flight: it flies an emergency approach and lands. */
   failedAt: string | null
+  /** The recipient was reported unavailable; until `handoverFailedAt` the attempt is pending. */
+  recipientUnavailableAt: string | null
+  /** The handover failed and the drone is returning (or has returned) with the parcel. */
+  handoverFailedAt: string | null
   updatedAt: string
   /** Seconds between the snapshot and the response, both on the backend's clock. */
   snapshotAgeS: number

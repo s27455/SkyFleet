@@ -14,6 +14,7 @@ ORDER_FIELDS = {
     "status",
     "delivered_at",
     "cancelled_at",
+    "delivery_failed_at",
     "created_at",
     "updated_at",
 }

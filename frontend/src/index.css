@@ -20,6 +20,8 @@
   --color-status-neutral: #6b7280;
   /* Work in progress (a parcel on its way); distinct from the cyan accent used for selection. */
   --color-status-active: #3b82f6;
+  /* A delivery that failed at the door (recipient unavailable); distinct from every other state. */
+  --color-status-failed: #a78bfa;
 
   --font-sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;

@@ -34,7 +34,7 @@ from app.hubs.models import Hub
 from app.missions import repository as mission_repository
 from app.missions.energy import consumption_rates
 from app.missions.models import ACTIVE_MISSION_STATUSES, Mission, MissionStatus
-from app.missions.routing import hub_point, hubs_by_distance
+from app.missions.routing import hub_point, nearest_reachable_hub
 from app.orders import repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.service import OrderManagementError, OrderNotFoundError
@@ -60,6 +60,12 @@ class OrderAlreadyDeliveredError(OrderManagementError):
 
 class OrderNotCancellableError(OrderManagementError):
     def __init__(self, order_id: str, status: str) -> None:
+        if status == OrderStatus.DELIVERY_FAILED.value:
+            super().__init__(
+                f"Order '{order_id}' cannot be cancelled: the delivery was attempted and failed "
+                "(recipient unavailable) and the drone is bringing the parcel back"
+            )
+            return
         super().__init__(f"Order '{order_id}' is {status} and cannot be cancelled in this state")
 
 
@@ -148,6 +154,8 @@ def _cancel_once(
             return order  # idempotent: no second event, no second recall
         if order.status == OrderStatus.DELIVERED.value:
             raise OrderAlreadyDeliveredError(order_id)
+        if order.status == OrderStatus.DELIVERY_FAILED.value:
+            raise OrderNotCancellableError(order_id, order.status)  # final; the drone returns
 
         if mission is None:
             if _active_mission_id(session, order_id) is not None:
@@ -257,14 +265,11 @@ def _recall(
     )
     hubs: list[Hub] = list(mission_repository.list_hubs(session))
     # The parcel is still on board, so the loaded rate decides what is reachable.
-    reachable = [
-        (hub, km)
-        for hub, km in hubs_by_distance(here.position, hubs)
-        if here.battery_pct - loaded * km >= settings.sim_critical_battery_pct
-    ]
-    if not reachable:
+    target = nearest_reachable_hub(
+        here.position, hubs, here.battery_pct, loaded, settings.sim_critical_battery_pct
+    )
+    if target is None:
         raise RecallNotPossibleError(order.id)
-    target, _ = reachable[0]
 
     new_legs = recall_legs(legs, elapsed, here.position, hub_point(target), flight.pace_s_per_km)
     flight.legs = [leg_to_dict(leg) for leg in new_legs]

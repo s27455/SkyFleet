@@ -7,6 +7,7 @@ const LEGEND_STATES: readonly OrderMarkerState[] = [
   'delivered',
   'cancelled',
   'interrupted',
+  'delivery_failed',
 ]
 
 interface OrderMarkerLegendProps {

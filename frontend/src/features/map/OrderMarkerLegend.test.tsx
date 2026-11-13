@@ -12,7 +12,14 @@ describe('OrderMarkerLegend', () => {
       within(legend)
         .getAllByRole('listitem')
         .map((item) => item.textContent),
-    ).toEqual(['Waiting', 'In delivery', 'Delivered', 'Cancelled', 'Interrupted'])
+    ).toEqual([
+      'Waiting',
+      'In delivery',
+      'Delivered',
+      'Cancelled',
+      'Interrupted',
+      'Delivery failed',
+    ])
   })
 
   it('can be hidden on narrow screens only', () => {

@@ -16,6 +16,7 @@ const ORDER: Order = {
   status: 'READY_FOR_PICKUP',
   deliveredAt: null,
   cancelledAt: null,
+  deliveryFailedAt: null,
   createdAt: '2026-11-11T21:53:08.077240Z',
   updatedAt: '2026-11-12T08:05:00Z',
 }
@@ -126,6 +127,8 @@ describe('OrderDetailPanel', () => {
       deliveredAt: null,
       recalledAt: '2026-11-13T12:00:00Z',
       failedAt: null,
+      recipientUnavailableAt: null,
+      handoverFailedAt: null,
       updatedAt: '2026-11-13T12:00:02Z',
       snapshotAgeS: 1,
       emergency: null,
@@ -171,6 +174,8 @@ describe('OrderDetailPanel', () => {
       deliveredAt: null,
       recalledAt: null,
       failedAt: '2026-11-13T12:00:00Z',
+      recipientUnavailableAt: null,
+      handoverFailedAt: null,
       updatedAt: '2026-11-13T12:00:10Z',
       snapshotAgeS: 1,
       emergency: { reason: 'DRONE_FAILURE', at: '2026-11-13T12:00:09Z', position: [18.6, 54.37] },
@@ -194,6 +199,100 @@ describe('OrderDetailPanel', () => {
     expect(screen.getByText(/Cancelling is not available for this order/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Flight' })).toHaveTextContent('requires service')
+  })
+
+  const ON_ITS_WAY: Flight = {
+    missionId: 'MIS-AAAA0001',
+    orderId: 'ORD-004',
+    droneId: 'DRN-010',
+    missionStatus: 'IN_FLIGHT',
+    phase: 'OUTBOUND',
+    progress: 0.3,
+    position: [18.6, 54.37],
+    batteryPct: 90,
+    target: { position: [18.61, 54.38], etaS: 6 },
+    originHubId: 'hub-forum-gdansk',
+    plannedReturnHubId: 'hub-forum-gdansk',
+    landingTargetHubId: 'hub-forum-gdansk',
+    startedAt: '2026-11-13T11:59:50Z',
+    deliveredAt: null,
+    recalledAt: null,
+    failedAt: null,
+    recipientUnavailableAt: null,
+    handoverFailedAt: null,
+    updatedAt: '2026-11-13T12:00:10Z',
+    snapshotAgeS: 1,
+    emergency: null,
+  }
+
+  it('explains a pending recipient-unavailable outcome without saying it already failed', () => {
+    render(
+      <OrderDetailPanel
+        order={{ ...ORDER, status: 'OUT_FOR_DELIVERY' }}
+        hub={HUB}
+        hubs={[HUB]}
+        flight={{ ...ON_ITS_WAY, recipientUnavailableAt: '2026-11-13T12:00:05Z' }}
+        markerSpread={false}
+        onClose={() => {}}
+        onCancelled={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/Recipient unavailable reported/)).toHaveTextContent(
+      'the delivery fails when it arrives',
+    )
+    expect(screen.queryByText(/Delivery failed:/)).not.toBeInTheDocument()
+  })
+
+  it('shows a failed delivery, offers no cancellation and explains why', () => {
+    const failed: Order = {
+      ...ORDER,
+      status: 'DELIVERY_FAILED',
+      deliveryFailedAt: '2026-11-13T12:00:20Z',
+    }
+
+    render(
+      <OrderDetailPanel
+        order={failed}
+        hub={HUB}
+        hubs={[HUB]}
+        flight={{
+          ...ON_ITS_WAY,
+          phase: 'RETURNING',
+          recipientUnavailableAt: '2026-11-13T12:00:05Z',
+          handoverFailedAt: '2026-11-13T12:00:19Z',
+        }}
+        markerSpread={false}
+        onClose={() => {}}
+        onCancelled={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/Delivery failed: the recipient was unavailable/)).toHaveTextContent(
+      'drone DRN-010 is returning with it',
+    )
+    expect(
+      screen.getByText(/Cancelling is not available: the delivery attempt/),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Flight' })).toHaveTextContent(
+      'Delivery failed: returning with the parcel',
+    )
+  })
+
+  it('still shows a failed delivery once the drone has landed and its flight is gone', () => {
+    render(
+      <OrderDetailPanel
+        order={{ ...ORDER, status: 'DELIVERY_FAILED', deliveryFailedAt: '2026-11-13T12:00:20Z' }}
+        hub={HUB}
+        markerSpread={false}
+        onClose={() => {}}
+        onCancelled={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/brought back to a Hub/)).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Flight' })).not.toBeInTheDocument()
   })
 
   it('still offers Cancel order for an order whose drone has not failed', () => {

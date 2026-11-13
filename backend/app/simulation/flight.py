@@ -280,6 +280,19 @@ def recall_legs(
     return [*stop_legs(legs, at_s, point), recall]
 
 
+def handover_failed_legs(legs: list[Leg], hub: Point, pace_s_per_km: float) -> list[Leg]:
+    """The schedule after a failed handover (Feature 018D): the drone is at the destination.
+
+    The outbound leg and the delivery stop are kept; the empty return is replaced by one loaded
+    return leg to `hub` that starts when the stop ends (position and battery stay continuous),
+    flown at the original pace.
+    """
+    stop = legs[1]
+    km = distance_km(stop.target, hub)
+    back = Leg(LegKind.RETURN, stop.end_s, km * pace_s_per_km, stop.target, hub, km, loaded=True)
+    return [*legs[:2], back]
+
+
 METRES_PER_DEGREE_LATITUDE = 111_320.0
 
 

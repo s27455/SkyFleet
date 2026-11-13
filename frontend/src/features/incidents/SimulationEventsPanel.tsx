@@ -1,6 +1,10 @@
 import { type ReactNode, useState } from 'react'
 
-import { isNoEligibleTarget, triggerDroneFailure } from '../../api/incidents'
+import {
+  isNoEligibleTarget,
+  triggerDroneFailure,
+  triggerRecipientUnavailable,
+} from '../../api/incidents'
 import { cancelOrder } from '../../api/orders'
 import type { Order } from '../../types/order'
 import { useAction } from '../management/useAction'
@@ -55,20 +59,16 @@ const DRONE_FAILURE_ICON = (
   </Icon>
 )
 
-/** The two future incident scenarios. Neither is implemented yet, so each control is disabled. */
+const RECIPIENT_ICON = (
+  <Icon>
+    {BOX}
+    <path d="M22 16h-6" />
+    <path d="m18 13-3 3 3 3" />
+  </Icon>
+)
+
+/** The future incident scenario. It is not implemented yet, so its control is disabled. */
 const SCENARIOS: Scenario[] = [
-  {
-    id: 'recipient-unavailable',
-    label: 'Recipient unavailable',
-    availableIn: '018D',
-    icon: (
-      <Icon>
-        {BOX}
-        <path d="M22 16h-6" />
-        <path d="m18 13-3 3 3 3" />
-      </Icon>
-    ),
-  },
   {
     id: 'lpr-transit',
     label: 'LPR transit',
@@ -96,14 +96,19 @@ interface SimulationEventsPanelProps {
   canFailDrone?: boolean
   /** Called after a Drone failure request (whatever the answer) so the views are re-read. */
   onDroneFailed?: () => void
+  /** Whether a delivery is on its way that could still fail at the handover (backend decides). */
+  canMarkRecipient?: boolean
+  /** Called after a Recipient unavailable request (whatever the answer) so the views refresh. */
+  onRecipientMarked?: () => void
 }
 
 /**
  * Simulation Events controls: an MVP/demo-only cluster. "Cancel order" (Feature 018B) acts on the
  * selected order after an explicit confirmation and shows what the backend answers. "Drone failure"
- * (Feature 018C) asks the backend to fail one eligible flying drone; the backend chooses it. The
- * other two scenarios stay visible but disabled until Features 018D and 018E implement real backend
- * behavior. The Random incidents switch is disabled for the same reason and does not claim that
+ * (Feature 018C) asks the backend to fail one eligible flying drone; the backend chooses it.
+ * "Recipient unavailable" (Feature 018D) marks one delivery on its way; the failure is pending until
+ * the drone reaches the destination. LPR transit stays visible but disabled until Feature 018E
+ * implements real backend behavior. The Random incidents switch is disabled for the same reason and does not claim that
  * incidents are being produced.
  */
 export function SimulationEventsPanel({
@@ -111,9 +116,16 @@ export function SimulationEventsPanel({
   onOrderCancelled,
   canFailDrone = false,
   onDroneFailed,
+  canMarkRecipient = false,
+  onRecipientMarked,
 }: SimulationEventsPanelProps) {
   const cancellation = useAction()
   const failure = useAction()
+  const recipient = useAction()
+  const [recipientNote, setRecipientNote] = useState<{
+    kind: 'done' | 'none'
+    text: string
+  } | null>(null)
   const [failureNote, setFailureNote] = useState<{ kind: 'done' | 'none'; text: string } | null>(
     null,
   )
@@ -148,6 +160,27 @@ export function SimulationEventsPanel({
       }
     })
     onDroneFailed?.() // the state may have changed whatever the answer was
+  }
+
+  const markRecipient = async () => {
+    setRecipientNote(null)
+    await recipient.run(async () => {
+      try {
+        const result = await triggerRecipientUnavailable()
+        // The order is not failed yet: say what happens, not that it already did.
+        setRecipientNote({
+          kind: 'done',
+          text: `Recipient unavailable reported for ${result.orderId} (drone ${result.droneId}). The delivery fails when the drone reaches the destination.`,
+        })
+      } catch (error) {
+        if (!isNoEligibleTarget(error)) throw error
+        setRecipientNote({
+          kind: 'none',
+          text: 'No drone is on its way to a delivery that could still fail at the handover.',
+        })
+      }
+    })
+    onRecipientMarked?.() // the state may have changed whatever the answer was
   }
 
   const confirm = async () => {
@@ -205,6 +238,29 @@ export function SimulationEventsPanel({
             </span>
           </button>
         </li>
+        <li>
+          <button
+            type="button"
+            disabled={!canMarkRecipient || recipient.busy}
+            title={
+              canMarkRecipient
+                ? 'Mark one delivery on its way as recipient unavailable'
+                : 'No delivery is on its way'
+            }
+            onClick={markRecipient}
+            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+          >
+            {RECIPIENT_ICON}
+            <span>Recipient unavailable</span>
+            <span className="text-[11px] text-fg-muted">
+              {recipient.busy
+                ? 'Triggering…'
+                : canMarkRecipient
+                  ? 'Fail a delivery on arrival'
+                  : 'No delivery on its way'}
+            </span>
+          </button>
+        </li>
         {SCENARIOS.map((scenario) => (
           <li key={scenario.id}>
             <button
@@ -231,6 +287,16 @@ export function SimulationEventsPanel({
       {failure.error && (
         <p role="alert" className="mt-2 text-xs text-status-critical">
           {failure.error}
+        </p>
+      )}
+      {recipient.error && (
+        <p role="alert" className="mt-2 text-xs text-status-critical">
+          {recipient.error}
+        </p>
+      )}
+      {recipientNote && (
+        <p role="status" className="mt-2 text-xs text-fg-muted">
+          {recipientNote.text}
         </p>
       )}
       {failureNote && (

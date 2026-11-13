@@ -9,6 +9,7 @@ export const ORDER_STATUS_DISPLAY: Record<OrderStatus, { tone: StatusTone; label
   OUT_FOR_DELIVERY: { tone: 'warning', label: 'Out for delivery' },
   DELIVERED: { tone: 'neutral', label: 'Delivered' },
   CANCELLED: { tone: 'critical', label: 'Cancelled' },
+  DELIVERY_FAILED: { tone: 'warning', label: 'Delivery failed' },
 }
 
 /** Order states the operator may try to cancel; the backend makes the final decision. */

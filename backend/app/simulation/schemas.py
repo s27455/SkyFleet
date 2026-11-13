@@ -46,6 +46,10 @@ class FlightResponse(BaseModel):
     recalled_at: datetime | None
     # Set when a drone failure was triggered: the drone makes an emergency landing (Feature 018C).
     failed_at: datetime | None
+    # Feature 018D: the recipient was reported unavailable (the attempt is still pending until
+    # `handover_failed_at`); after it the drone returns with the parcel.
+    recipient_unavailable_at: datetime | None
+    handover_failed_at: datetime | None
     updated_at: datetime
     emergency: FlightEmergency | None
 
@@ -61,11 +65,24 @@ class FlightsResponse(BaseModel):
     flights: list[FlightResponse]
 
 
+class RecipientUnavailableResponse(BaseModel):
+    """What a manual Recipient unavailable trigger did (Feature 018D).
+
+    The outcome is pending: the order is only marked as failed when the drone reaches the
+    destination at `attempt_at` (the scheduled instant of the delivery attempt).
+    """
+
+    drone_id: str
+    mission_id: str
+    order_id: str
+    attempt_at: datetime
+
+
 class DroneFailureResponse(BaseModel):
     """What a manual Drone failure trigger did (Feature 018C)."""
 
     drone_id: str
     mission_id: str
     order_id: str
-    stage: str  # BEFORE_DELIVERY, RECALL or AFTER_DELIVERY
+    stage: str  # BEFORE_DELIVERY, RECALL, HANDOVER_FAILED or AFTER_DELIVERY
     landing_position: tuple[float, float]  # [longitude, latitude], a simulated point

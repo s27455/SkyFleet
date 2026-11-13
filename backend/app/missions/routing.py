@@ -27,3 +27,21 @@ def hubs_by_distance(point: Point, hubs: Sequence[Hub]) -> list[tuple[Hub, float
     """Hubs with their distance to `point`, nearest first; equal distances go to the lower id."""
     measured = [(hub, distance_km(point, hub_point(hub))) for hub in hubs]
     return sorted(measured, key=lambda item: (item[1], item[0].id))
+
+
+def nearest_reachable_hub(
+    point: Point,
+    hubs: Sequence[Hub],
+    battery_pct: float,
+    rate_pct_per_km: float,
+    floor_pct: float,
+) -> Hub | None:
+    """The nearest Hub the battery reaches at `rate_pct_per_km` and still stays above `floor_pct`.
+
+    Capacity is not considered here: the landing decision rechecks it and diverts if needed. Used
+    for a loaded return (recall, Feature 018B; failed handover, Feature 018D).
+    """
+    for hub, km in hubs_by_distance(point, hubs):
+        if battery_pct - rate_pct_per_km * km >= floor_pct:
+            return hub
+    return None

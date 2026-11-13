@@ -35,6 +35,27 @@ export const isFailable = (flight: Flight) =>
   flight.missionStatus === 'IN_FLIGHT' &&
   FAILABLE_PHASES.includes(flight.phase)
 
+/**
+ * Flights on their way to a delivery that "recipient unavailable" can still mark (Feature 018D):
+ * before the handover, not recalled, not failed and not marked yet. The backend decides; this only
+ * enables the control.
+ */
+export const isRecipientTargetable = (flight: Flight) =>
+  flight.missionStatus === 'IN_FLIGHT' &&
+  (flight.phase === 'OUTBOUND' || flight.phase === 'DELIVERING') &&
+  flight.deliveredAt === null &&
+  flight.recalledAt === null &&
+  flight.failedAt === null &&
+  flight.recipientUnavailableAt === null
+
+/** The attempt was reported to fail but the drone has not reached the recipient yet. */
+export const isRecipientPending = (flight: Flight) =>
+  flight.recipientUnavailableAt !== null &&
+  flight.handoverFailedAt === null &&
+  flight.deliveredAt === null &&
+  flight.recalledAt === null &&
+  flight.failedAt === null
+
 export const isActiveFlight = (flight: Flight) => MOVING_PHASES.includes(flight.phase)
 
 /**

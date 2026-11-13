@@ -36,11 +36,27 @@ def test_a_delivered_order_without_a_delivery_time_is_hidden() -> None:
 
 @pytest.mark.parametrize(
     "status",
-    [s.value for s in OrderStatus if s not in (OrderStatus.DELIVERED, OrderStatus.CANCELLED)],
+    [
+        s.value
+        for s in OrderStatus
+        if s not in (OrderStatus.DELIVERED, OrderStatus.CANCELLED, OrderStatus.DELIVERY_FAILED)
+    ],
 )
 def test_every_other_status_stays_visible_whatever_its_timestamp(status: str) -> None:
     assert is_order_active(status, None, NOW, WINDOW) is True
     assert is_order_active(status, NOW - timedelta(days=9), NOW, WINDOW) is True
+
+
+def test_a_failed_delivery_is_visible_for_the_window_after_the_failure() -> None:
+    failed = OrderStatus.DELIVERY_FAILED.value
+    inside = NOW - timedelta(seconds=WINDOW - 1)
+    edge = NOW - timedelta(seconds=WINDOW)
+
+    assert is_order_active(failed, None, NOW, WINDOW, delivery_failed_at=inside) is True
+    assert is_order_active(failed, None, NOW, WINDOW, delivery_failed_at=edge) is False
+    assert is_order_active(failed, None, NOW, WINDOW, delivery_failed_at=None) is False
+    # `delivered_at` is never used for it: a failed delivery is not a delivery.
+    assert is_order_active(failed, inside, NOW, WINDOW) is False
 
 
 def test_a_cancelled_order_is_visible_for_the_window_after_cancellation() -> None:

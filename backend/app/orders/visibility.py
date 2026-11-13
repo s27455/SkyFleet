@@ -2,7 +2,8 @@
 
 A `DELIVERED` order stays in the active operational views for a fixed window after its persisted
 delivery time, and a `CANCELLED` order (Feature 018B) for the same window after its persisted
-cancellation time. An undelivered order whose drone failed (Feature 018C) keeps its status and
+cancellation time, and a `DELIVERY_FAILED` order (Feature 018D) for the same window after its
+persisted failure time. An undelivered order whose drone failed (Feature 018C) keeps its status and
 stays for the same window after the emergency landing completed. Then it drops out of them; the
 row is never deleted. Feature 017B reuses this rule for the delivery-address markers: the map
 draws exactly the orders the active list returns.
@@ -25,17 +26,21 @@ def is_order_active(
     window_seconds: float,
     cancelled_at: datetime | None = None,
     interrupted_at: datetime | None = None,
+    delivery_failed_at: datetime | None = None,
 ) -> bool:
     """Whether an order belongs in the active views at `now`.
 
     Neither `DELIVERED` nor `CANCELLED`: always. `DELIVERED`: only while
-    `now < delivered_at + window`. `CANCELLED`: the same with `cancelled_at`. An order without the
-    matching time (legacy data) is hidden; no time is ever invented for it.
+    `now < delivered_at + window`. `CANCELLED`: the same with `cancelled_at`. `DELIVERY_FAILED`:
+    the same with `delivery_failed_at`. An order without the matching time (legacy data) is
+    hidden; no time is ever invented for it.
     """
     if status == OrderStatus.DELIVERED.value:
         moment = delivered_at
     elif status == OrderStatus.CANCELLED.value:
         moment = cancelled_at
+    elif status == OrderStatus.DELIVERY_FAILED.value:
+        moment = delivery_failed_at
     elif interrupted_at is not None:
         moment = interrupted_at  # the delivery was interrupted by a drone failure
     else:

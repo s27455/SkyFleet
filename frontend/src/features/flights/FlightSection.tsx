@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { StatusIndicator } from '../../components/ui/StatusIndicator'
 import type { Flight } from '../../types/flight'
 import type { Hub } from '../../types/hub'
-import { EMERGENCY_REASON_TEXT, FLIGHT_PHASE_DISPLAY } from './flightStatus'
+import { EMERGENCY_REASON_TEXT, FLIGHT_PHASE_DISPLAY, isRecipientPending } from './flightStatus'
 
 interface FlightSectionProps {
   flight: Flight
@@ -41,6 +41,10 @@ function Bar({ value, label }: { value: number; label: string }) {
 export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps) {
   const failed = flight.failedAt !== null
   const recalled = flight.recalledAt !== null && !failed
+  // Feature 018D: the handover failed and the drone brings the parcel back; or it is still on its
+  // way and the failure is pending until it reaches the recipient.
+  const handoverFailed = flight.handoverFailedAt !== null && !failed
+  const pending = isRecipientPending(flight)
   // A recall is a return like any other to the flight model, and a failure ends in the generic
   // EMERGENCY phase, so both are said in words here.
   let phase = FLIGHT_PHASE_DISPLAY[flight.phase]
@@ -48,6 +52,8 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
     phase = { tone: 'critical', label: 'Grounded after drone failure: requires service' }
   } else if (recalled && flight.phase !== 'LANDED' && flight.phase !== 'EMERGENCY') {
     phase = { tone: 'warning', label: 'Recalled: returning with the parcel' }
+  } else if (handoverFailed && flight.phase !== 'LANDED' && flight.phase !== 'EMERGENCY') {
+    phase = { tone: 'warning', label: 'Delivery failed: returning with the parcel' }
   }
   const hubName = (id: string) => hubs.find((hub) => hub.id === id)?.name ?? id
   const diverted = flight.landingTargetHubId !== flight.plannedReturnHubId
@@ -92,13 +98,25 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
             </span>
           </Row>
         )}
-        {!failed && <Row label="Planned return Hub">{hubName(flight.plannedReturnHubId)}</Row>}
+        {pending && (
+          <Row label="Recipient">
+            <span>Unavailable: the delivery fails on arrival</span>
+          </Row>
+        )}
+        {!failed && !handoverFailed && (
+          <Row label="Planned return Hub">{hubName(flight.plannedReturnHubId)}</Row>
+        )}
+        {handoverFailed && !emergency && (
+          <Row label="Returning">
+            <span>With the parcel to {hubName(flight.landingTargetHubId)}</span>
+          </Row>
+        )}
         {recalled && !emergency && (
           <Row label="Recalled">
             <span>Returning with the parcel to {hubName(flight.landingTargetHubId)}</span>
           </Row>
         )}
-        {diverted && !recalled && !failed && !emergency && (
+        {diverted && !recalled && !handoverFailed && !failed && !emergency && (
           <Row label="Now heading to">{hubName(flight.landingTargetHubId)}</Row>
         )}
       </dl>
@@ -106,6 +124,18 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
         <p role="status" className="mt-2 text-xs text-fg-muted">
           The simulation worker has stopped updating this flight; the figures above are the last
           known ones.
+        </p>
+      )}
+      {pending && (
+        <p role="status" className="mt-2 rounded-md border border-status-failed p-2 text-xs">
+          The recipient was reported unavailable. The drone still flies to the destination; the
+          delivery fails when it arrives and the drone then returns with the parcel.
+        </p>
+      )}
+      {handoverFailed && !emergency && (
+        <p role="status" className="mt-2 rounded-md border border-status-failed p-2 text-xs">
+          The recipient was unavailable, so the parcel was not delivered. The drone is bringing it
+          back to a Hub.
         </p>
       )}
       {approaching && (

@@ -17,6 +17,7 @@ import {
   flightsByDrone,
   isActiveFlight,
   isFailable,
+  isRecipientTargetable,
 } from './features/flights/flightStatus'
 import type { FlightVisual } from './features/flights/interpolation'
 import { LiveDataNotices } from './features/flights/LiveDataNotices'
@@ -152,6 +153,7 @@ function App() {
   const droneEmergencies = useMemo(() => deriveDroneEmergencies(emergencyPoints), [emergencyPoints])
   const interruptedOrderIds = useMemo(() => deriveInterruptedOrderIds(flights), [flights])
   const canFailDrone = useMemo(() => flights.some(isFailable), [flights])
+  const canMarkRecipient = useMemo(() => flights.some(isRecipientTargetable), [flights])
   const receivedAt = flightsResource.receivedAt
   const flightsStale = flightsResource.stale
   const flightVisuals = useMemo<FlightVisual[]>(
@@ -360,6 +362,8 @@ function App() {
                       onOrderCancelled={refreshAfterIncident}
                       canFailDrone={canFailDrone}
                       onDroneFailed={refreshAfterIncident}
+                      canMarkRecipient={canMarkRecipient}
+                      onRecipientMarked={refreshAfterIncident}
                     />
                     <OrdersManager
                       selectedOrderId={selection?.kind === 'order' ? selection.id : null}

@@ -57,3 +57,31 @@ export function isNoEligibleTarget(error: unknown): boolean {
     (detail as { code?: unknown }).code === 'NO_ELIGIBLE_TARGET'
   )
 }
+
+/** What a manual Recipient unavailable did (`POST /api/incidents/recipient-unavailable`). */
+export interface RecipientUnavailableResult {
+  droneId: string
+  missionId: string
+  orderId: string
+  /** ISO 8601: when the drone reaches the destination and the delivery really fails. */
+  attemptAt: string
+}
+
+/**
+ * Asks the backend to mark one delivery on its way as "recipient unavailable". The outcome is
+ * pending: the drone still flies to the destination and the order only fails there. With nothing
+ * eligible it answers 409 `NO_ELIGIBLE_TARGET` (see `isNoEligibleTarget`) and creates nothing.
+ */
+export async function triggerRecipientUnavailable(): Promise<RecipientUnavailableResult> {
+  const payload = await apiPost<unknown>('/api/incidents/recipient-unavailable')
+  if (typeof payload !== 'object' || payload === null) invalid('not an object')
+  const raw = payload as Record<string, unknown>
+  const { drone_id: droneId, mission_id: missionId, order_id: orderId, attempt_at: attemptAt } = raw
+  if (typeof droneId !== 'string' || droneId === '') invalid('missing drone_id')
+  if (typeof missionId !== 'string' || missionId === '') invalid('missing mission_id')
+  if (typeof orderId !== 'string' || orderId === '') invalid('missing order_id')
+  if (typeof attemptAt !== 'string' || Number.isNaN(Date.parse(attemptAt))) {
+    invalid('bad attempt_at')
+  }
+  return { droneId, missionId, orderId, attemptAt }
+}

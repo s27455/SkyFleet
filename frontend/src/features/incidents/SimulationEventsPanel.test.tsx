@@ -17,6 +17,7 @@ const order = (status: OrderStatus): Order => ({
   status,
   deliveredAt: null,
   cancelledAt: null,
+  deliveryFailedAt: null,
   createdAt: '2026-11-11T21:53:08Z',
   updatedAt: '2026-11-11T21:53:08Z',
 })
@@ -25,13 +26,10 @@ const cancelButton = () => screen.getByRole('button', { name: /Cancel order/ })
 const confirmation = () => screen.getByRole('group', { name: 'Confirm cancellation' })
 
 describe('SimulationEventsPanel', () => {
-  it('shows the two future scenarios as named, disabled controls with their feature', () => {
+  it('shows LPR transit as a named, disabled control with its feature', () => {
     render(<SimulationEventsPanel />)
 
-    const expected: [string, string][] = [
-      ['Recipient unavailable', '018D'],
-      ['LPR transit', '018E'],
-    ]
+    const expected: [string, string][] = [['LPR transit', '018E']]
     for (const [label, feature] of expected) {
       const button = screen.getByRole('button', { name: new RegExp(label) })
       expect(button).toBeDisabled()
@@ -180,6 +178,91 @@ describe('SimulationEventsPanel', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.queryByText(/failed: emergency landing/)).not.toBeInTheDocument()
+  })
+
+  it('keeps Recipient unavailable disabled, and calls nothing, while no delivery is on its way', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SimulationEventsPanel />)
+
+    const button = screen.getByRole('button', { name: /Recipient unavailable/ })
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('No delivery on its way')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('marks one delivery on click, says the failure is pending and refreshes the views', async () => {
+    let release: (response: Response) => void = () => {}
+    const fetchMock = vi.fn(
+      (_url: string, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          release = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const onRecipientMarked = vi.fn()
+    render(<SimulationEventsPanel canMarkRecipient onRecipientMarked={onRecipientMarked} />)
+
+    const button = screen.getByRole('button', { name: /Recipient unavailable/ })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+    fireEvent.click(button) // a second click while pending must not send a second request
+
+    expect(await screen.findByText('Triggering…')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/incidents\/recipient-unavailable$/)
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+
+    release(
+      jsonResponse({
+        drone_id: 'DRN-010',
+        mission_id: 'MIS-AAAA0001',
+        order_id: 'ORD-001',
+        attempt_at: '2026-11-13T12:00:20Z',
+      }),
+    )
+
+    const note = await screen.findByText(/Recipient unavailable reported for ORD-001/)
+    expect(note).toHaveTextContent('The delivery fails when the drone reaches the destination.')
+    expect(note).not.toHaveTextContent('failed:') // nothing has failed yet
+    expect(onRecipientMarked).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows "no eligible target" for Recipient unavailable as information, not as an error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({ detail: { code: 'NO_ELIGIBLE_TARGET', message: 'Nothing' } }, 409),
+        ),
+      ),
+    )
+    const onRecipientMarked = vi.fn()
+    render(<SimulationEventsPanel canMarkRecipient onRecipientMarked={onRecipientMarked} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Recipient unavailable/ }))
+
+    expect(
+      await screen.findByText(/No drone is on its way to a delivery that could still fail/),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/reported for/)).not.toBeInTheDocument()
+    await waitFor(() => expect(onRecipientMarked).toHaveBeenCalledTimes(1))
+  })
+
+  it('shows any other failure of the Recipient unavailable request as an error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+    )
+    render(<SimulationEventsPanel canMarkRecipient />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Recipient unavailable/ }))
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByText(/reported for/)).not.toBeInTheDocument()
   })
 
   it('keeps the order when the operator backs out', () => {

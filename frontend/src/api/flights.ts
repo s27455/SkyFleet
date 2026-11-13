@@ -91,6 +91,11 @@ function toFlight(item: unknown, serverTimeMs: number): Flight {
   if (raw.failed_at !== null && raw.failed_at !== undefined && !isTimestamp(raw.failed_at)) {
     invalid(`bad failed_at for ${id}`)
   }
+  for (const key of ['recipient_unavailable_at', 'handover_failed_at'] as const) {
+    const value = raw[key]
+    if (value !== null && value !== undefined && !isTimestamp(value))
+      invalid(`bad ${key} for ${id}`)
+  }
 
   let target: Flight['target'] = null
   if (raw.target !== null && raw.target !== undefined) {
@@ -121,6 +126,8 @@ function toFlight(item: unknown, serverTimeMs: number): Flight {
     deliveredAt: (raw.delivered_at as string | null | undefined) ?? null,
     recalledAt: (raw.recalled_at as string | null | undefined) ?? null,
     failedAt: (raw.failed_at as string | null | undefined) ?? null,
+    recipientUnavailableAt: (raw.recipient_unavailable_at as string | null | undefined) ?? null,
+    handoverFailedAt: (raw.handover_failed_at as string | null | undefined) ?? null,
     updatedAt: raw.updated_at,
     snapshotAgeS: Math.max((serverTimeMs - Date.parse(raw.updated_at)) / 1000, 0),
     emergency: toEmergency(raw.emergency, id),

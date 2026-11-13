@@ -77,7 +77,9 @@ export function OrdersList({
                       className={
                         order.status === 'CANCELLED'
                           ? 'font-medium text-status-critical'
-                          : 'text-fg-muted'
+                          : order.status === 'DELIVERY_FAILED'
+                            ? 'font-medium text-status-failed'
+                            : 'text-fg-muted'
                       }
                     >
                       {ORDER_STATUS_DISPLAY[order.status].label} · {order.packageWeightKg} kg

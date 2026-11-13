@@ -36,6 +36,7 @@ describe('getOrders', () => {
       status: 'READY_FOR_PICKUP',
       deliveredAt: null,
       cancelledAt: null,
+      deliveryFailedAt: null,
       createdAt: '2026-11-11T21:53:08.077240Z',
       updatedAt: '2026-11-11T21:53:08.077240Z',
     })
@@ -201,5 +202,33 @@ describe('cancelOrder (Feature 018B)', () => {
       ),
     )
     await expect(cancelOrder('ORD-001')).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('delivery_failed_at (Feature 018D)', () => {
+  it('maps a failed delivery and its time, and rejects a zone-less one', async () => {
+    const failed = {
+      ...ORDER_RESPONSES[0],
+      status: 'DELIVERY_FAILED',
+      delivery_failed_at: '2026-11-13T12:00:00Z',
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse([failed]))),
+    )
+
+    const [order] = await getOrders()
+
+    expect(order.status).toBe('DELIVERY_FAILED')
+    expect(order.deliveryFailedAt).toBe('2026-11-13T12:00:00Z')
+    expect(order.deliveredAt).toBeNull()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(jsonResponse([{ ...failed, delivery_failed_at: '2026-11-13 12:00:00' }])),
+      ),
+    )
+    await expect(getOrders()).rejects.toBeInstanceOf(ApiError)
   })
 })

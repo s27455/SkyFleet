@@ -31,6 +31,7 @@ export function toOrder(item: unknown): Order {
     status,
     delivered_at: deliveredAt = null,
     cancelled_at: cancelledAt = null,
+    delivery_failed_at: deliveryFailedAt = null,
     created_at: createdAt,
     updated_at: updatedAt,
   } = raw
@@ -47,6 +48,9 @@ export function toOrder(item: unknown): Order {
   }
   if (deliveredAt !== null && !isTimestamp(deliveredAt)) invalid(`bad delivered_at for ${id}`)
   if (cancelledAt !== null && !isTimestamp(cancelledAt)) invalid(`bad cancelled_at for ${id}`)
+  if (deliveryFailedAt !== null && !isTimestamp(deliveryFailedAt)) {
+    invalid(`bad delivery_failed_at for ${id}`)
+  }
   if (!isTimestamp(createdAt)) invalid(`bad created_at for ${id}`)
   if (!isTimestamp(updatedAt)) invalid(`bad updated_at for ${id}`)
 
@@ -59,6 +63,7 @@ export function toOrder(item: unknown): Order {
     status: status as Order['status'],
     deliveredAt,
     cancelledAt,
+    deliveryFailedAt,
     createdAt,
     updatedAt,
   }

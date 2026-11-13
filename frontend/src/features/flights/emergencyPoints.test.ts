@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Drone } from '../../types/drone'
 import type { Flight } from '../../types/flight'
 import { droneEmergencies, emergencyPoints, interruptedOrderIds } from './emergencyPoints'
-import { isFailable } from './flightStatus'
+import { isFailable, isRecipientPending, isRecipientTargetable } from './flightStatus'
 
 const flight = (overrides: Partial<Flight> = {}): Flight => ({
   missionId: 'MIS-1',
@@ -22,6 +22,8 @@ const flight = (overrides: Partial<Flight> = {}): Flight => ({
   deliveredAt: null,
   recalledAt: null,
   failedAt: null,
+  recipientUnavailableAt: null,
+  handoverFailedAt: null,
   updatedAt: '2026-11-13T10:00:08Z',
   snapshotAgeS: 1,
   emergency: null,
@@ -111,5 +113,32 @@ describe('isFailable', () => {
     expect(isFailable(flight({ phase: 'EMERGENCY' }))).toBe(false)
     expect(isFailable(flight({ phase: 'LANDED' }))).toBe(false)
     expect(isFailable(flight({ missionStatus: 'COMPLETED' }))).toBe(false)
+  })
+})
+
+describe('recipient unavailable (Feature 018D)', () => {
+  it('can mark a flight on its way to the delivery, and only once', () => {
+    expect(isRecipientTargetable(flight())).toBe(true)
+    expect(isRecipientTargetable(flight({ phase: 'DELIVERING' }))).toBe(true)
+    expect(isRecipientTargetable(flight({ recipientUnavailableAt: '2026-11-13T10:00:05Z' }))).toBe(
+      false,
+    )
+  })
+
+  it('cannot mark a flight past the handover, recalled, failed or not flying', () => {
+    expect(isRecipientTargetable(flight({ phase: 'RETURNING' }))).toBe(false)
+    expect(isRecipientTargetable(flight({ deliveredAt: '2026-11-13T10:00:05Z' }))).toBe(false)
+    expect(isRecipientTargetable(flight({ recalledAt: '2026-11-13T10:00:05Z' }))).toBe(false)
+    expect(isRecipientTargetable(flight({ failedAt: '2026-11-13T10:00:05Z' }))).toBe(false)
+    expect(isRecipientTargetable(flight({ missionStatus: 'COMPLETED' }))).toBe(false)
+  })
+
+  it('is pending only between the report and the failed handover', () => {
+    const marked = flight({ recipientUnavailableAt: '2026-11-13T10:00:05Z' })
+    expect(isRecipientPending(marked)).toBe(true)
+    expect(isRecipientPending(flight())).toBe(false)
+    expect(isRecipientPending({ ...marked, handoverFailedAt: '2026-11-13T10:00:19Z' })).toBe(false)
+    expect(isRecipientPending({ ...marked, recalledAt: '2026-11-13T10:00:07Z' })).toBe(false)
+    expect(isRecipientPending({ ...marked, failedAt: '2026-11-13T10:00:07Z' })).toBe(false)
   })
 })

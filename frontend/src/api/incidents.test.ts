@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { jsonResponse } from '../test/hubFixtures'
 import { ApiError } from './client'
-import { isNoEligibleTarget, triggerDroneFailure } from './incidents'
+import { isNoEligibleTarget, triggerDroneFailure, triggerRecipientUnavailable } from './incidents'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -59,5 +59,57 @@ describe('triggerDroneFailure', () => {
     expect(isNoEligibleTarget(new ApiError('Backend is unreachable'))).toBe(false)
     expect(isNoEligibleTarget(new ApiError('x', 409, { code: 'OTHER' }))).toBe(false)
     expect(isNoEligibleTarget(new Error('x'))).toBe(false)
+  })
+})
+
+describe('triggerRecipientUnavailable', () => {
+  const PENDING = {
+    drone_id: 'DRN-010',
+    mission_id: 'MIS-AAAA0001',
+    order_id: 'ORD-001',
+    attempt_at: '2026-11-13T12:00:20Z',
+  }
+
+  it('posts to the endpoint without a body and maps the pending answer', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(jsonResponse(PENDING)),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await triggerRecipientUnavailable()
+
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/incidents\/recipient-unavailable$/)
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined()
+    expect(result).toEqual({
+      droneId: 'DRN-010',
+      missionId: 'MIS-AAAA0001',
+      orderId: 'ORD-001',
+      attemptAt: '2026-11-13T12:00:20Z',
+    })
+  })
+
+  it('rejects an answer without a usable attempt time', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse({ ...PENDING, attempt_at: 'soon' }))),
+    )
+
+    await expect(triggerRecipientUnavailable()).rejects.toBeInstanceOf(ApiError)
+  })
+
+  it('surfaces the clear "no eligible target" answer', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({ detail: { code: 'NO_ELIGIBLE_TARGET', message: 'Nothing' } }, 409),
+        ),
+      ),
+    )
+
+    const none = await triggerRecipientUnavailable().catch((error: unknown) => error)
+
+    expect(isNoEligibleTarget(none)).toBe(true)
   })
 })

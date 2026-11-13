@@ -23,6 +23,8 @@ const baseFlight: Flight = {
   deliveredAt: '2026-11-12T10:00:03Z',
   recalledAt: null,
   failedAt: null,
+  recipientUnavailableAt: null,
+  handoverFailedAt: null,
   updatedAt: '2026-11-12T10:00:09Z',
   snapshotAgeS: 0,
   emergency: {

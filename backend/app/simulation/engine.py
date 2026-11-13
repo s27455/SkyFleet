@@ -34,19 +34,22 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
+from app.events.models import EventOrigin, EventType
+from app.events.service import append_event
 from app.hubs.models import Hub
 from app.missions import repository
 from app.missions.energy import consumption_rates
 from app.missions.models import Mission, MissionStatus
 from app.missions.presence import hub_occupancy
-from app.missions.routing import Point, distance_km, hub_point
-from app.orders.models import OrderStatus
+from app.missions.routing import Point, distance_km, hub_point, nearest_reachable_hub
+from app.orders.models import DeliveryOrder, OrderStatus
 from app.simulation.clock import as_utc
 from app.simulation.flight import (
     FlightState,
     Leg,
     diversion_leg,
     first_time_below,
+    handover_failed_legs,
     landing_decision,
     leg_from_dict,
     leg_to_dict,
@@ -155,13 +158,34 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                 session, flight, mission, drone, legs, started, elapsed, now, state_for
             )
 
-        # A recalled flight is carrying its parcel back: no delivery, and the loaded rate applies.
+        # A recalled flight (018B) or one whose handover failed (018D) is carrying its parcel
+        # back: no delivery, and the loaded rate applies.
         recalled = flight.recalled_at is not None
-        return_rate = loaded if recalled else empty
+        handover_failed = flight.handover_failed_at is not None
+        loaded_return = recalled or handover_failed
+        return_rate = loaded if loaded_return else empty
 
-        # Milestone 1: the parcel is handed over at the destination.
+        # Milestone 1: the parcel is handed over at the destination (or, when the recipient was
+        # reported unavailable, the handover fails and the drone turns back with the parcel).
         delivery_end = legs[1].end_s if not recalled else 0.0
-        if not recalled and flight.delivered_at is None and elapsed >= delivery_end:
+        if not loaded_return and flight.delivered_at is None and elapsed >= delivery_end:
+            if flight.recipient_unavailable_at is not None:
+                _fail_handover(
+                    session,
+                    settings,
+                    flight,
+                    mission,
+                    order,
+                    drone,
+                    hubs,
+                    legs,
+                    loaded,
+                    started,
+                    delivery_end,
+                    now,
+                    state_for,
+                )
+                return True
             order.status = OrderStatus.DELIVERED.value
             flight.delivered_at = started + timedelta(seconds=delivery_end)
             # The order's delivery time is the moment this transition is committed, in real UTC
@@ -175,7 +199,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
 
         # Milestone 2: the landing decision (capacity recheck, docking, diversion or emergency).
         decision_s, decision_point = landing_decision(legs[-1], settings.sim_landing_approach_m)
-        if flight.delivered_at is not None or recalled:
+        if flight.delivered_at is not None or loaded_return:
             # The battery falling below the critical floor before the landing decision is an
             # emergency at the exact crossing time, however late this tick runs (deterministic).
             crossing = first_time_below(
@@ -206,7 +230,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                 )
                 session.commit()
                 return False
-        if (flight.delivered_at is not None or recalled) and elapsed >= decision_s:
+        if (flight.delivered_at is not None or loaded_return) and elapsed >= decision_s:
             return _decide_landing(
                 session,
                 settings,
@@ -223,7 +247,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
             )
 
         state = state_for(elapsed)
-        if flight.delivered_at is None and state.battery_pct < 0:
+        if flight.delivered_at is None and not handover_failed and state.battery_pct < 0:
             raise FlightInvariantError(f"Flight {mission_id} ran out of battery before delivery")
 
         write_snapshot(flight, drone, state, now)
@@ -232,6 +256,69 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
     except BaseException:
         session.rollback()
         raise
+
+
+def _fail_handover(
+    session: Session,
+    settings: Settings,
+    flight: MissionFlight,
+    mission: Mission,
+    order: DeliveryOrder,
+    drone: Drone,
+    hubs: dict[str, Hub],
+    legs: list[Leg],
+    loaded_rate: float,
+    started: datetime,
+    delivery_end: float,
+    now: datetime,
+    state_for: StateFor,
+) -> None:
+    """Feature 018D: the recipient is unavailable, so the parcel is not handed over.
+
+    The order becomes DELIVERY_FAILED (real UTC `now`, which starts its visibility window; never
+    `delivered_at`) and the empty return is replaced by a loaded return to the nearest Hub the
+    battery reaches with the parcel. The drone turns back where it stands: position and battery
+    continue from the schedule. The existing landing logic then docks (or diverts) it; nothing
+    here touches `drone.hub_id`. If no Hub were reachable (planned missions keep a reserve, so not
+    expected) the planned return Hub is kept and the existing safeguards decide. One event, in the
+    same transaction; the flight leaves the pending state at the same commit, so it runs once.
+    """
+    at_stop = state_for(delivery_end)
+    target = (
+        nearest_reachable_hub(
+            legs[1].target,
+            list(hubs.values()),
+            at_stop.battery_pct,
+            loaded_rate,
+            settings.sim_critical_battery_pct,
+        )
+        or hubs[flight.planned_return_hub_id]
+    )
+    new_legs = handover_failed_legs(legs, hub_point(target), flight.pace_s_per_km)
+    flight.legs = [leg_to_dict(leg) for leg in new_legs]
+    flight.handover_failed_at = started + timedelta(seconds=delivery_end)
+    flight.landing_target_hub_id = target.id
+    flight.tried_hub_ids = []
+    order.status = OrderStatus.DELIVERY_FAILED.value
+    order.delivery_failed_at = now
+    order.updated_at = now
+    elapsed = max((now - started).total_seconds(), 0.0)
+    write_snapshot(flight, drone, state_for(elapsed, new_legs), now)
+    append_event(
+        session,
+        event_type=EventType.RECIPIENT_UNAVAILABLE,
+        # The trigger's origin, kept on the flight; SYSTEM only if a marker predates it.
+        origin=EventOrigin(flight.recipient_unavailable_origin or EventOrigin.SYSTEM.value),
+        order_id=order.id,
+        mission_id=mission.id,
+        flight_id=flight.mission_id,
+        drone_id=drone.id,
+        reason=f"Recipient unavailable; drone {drone.id} returns to {target.name} with the parcel",
+        details={"return_hub_id": target.id},
+        dedupe_key=f"{EventType.RECIPIENT_UNAVAILABLE.value}:{mission.id}",
+        occurred_at=now,
+    )
+    session.commit()
 
 
 def _advance_failed(
@@ -372,7 +459,8 @@ def _decide_landing(
                 hub_point(chosen),
                 decision_s,
                 flight.pace_s_per_km,
-                loaded=flight.recalled_at is not None,  # a recalled drone still carries the parcel
+                # a recalled drone, or one whose handover failed, still carries the parcel
+                loaded=flight.recalled_at is not None or flight.handover_failed_at is not None,
             ),
         ]
         flight.legs = [leg_to_dict(leg) for leg in new_legs]
@@ -424,7 +512,11 @@ def _end_in_emergency(
     occupancy rule never counts as docked. The order stays DELIVERED (the parcel was handed over
     before the return), which is why an emergency before delivery cannot be represented.
     """
-    if flight.delivered_at is None and flight.recalled_at is None:
+    if (
+        flight.delivered_at is None
+        and flight.recalled_at is None
+        and flight.handover_failed_at is None
+    ):
         raise FlightInvariantError("An emergency before the delivery is not supported")
     stopped = stop_legs(legs, at_s, point)
     flight.legs = [leg_to_dict(leg) for leg in stopped]

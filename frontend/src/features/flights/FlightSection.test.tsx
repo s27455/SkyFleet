@@ -39,6 +39,8 @@ const FLIGHT: Flight = {
   deliveredAt: '2026-11-12T10:00:19Z',
   recalledAt: null,
   failedAt: null,
+  recipientUnavailableAt: null,
+  handoverFailedAt: null,
   updatedAt: '2026-11-12T10:00:25Z',
   snapshotAgeS: 2,
   emergency: null,
@@ -163,6 +165,41 @@ describe('FlightSection', () => {
     expect(section).toHaveTextContent('Grounded after drone failure: requires service')
     expect(section).toHaveTextContent('grounded, requiring service')
     expect(section).toHaveTextContent('Its mission does not resume')
+  })
+
+  it('says the recipient was reported unavailable while the attempt is still pending', () => {
+    const pending: Flight = {
+      ...FLIGHT,
+      phase: 'OUTBOUND',
+      deliveredAt: null,
+      recipientUnavailableAt: '2026-11-12T10:00:05Z',
+    }
+
+    render(<FlightSection flight={pending} hubs={HUBS} workerStale={false} />)
+
+    const section = screen.getByRole('region', { name: 'Flight' })
+    expect(section).toHaveTextContent('Unavailable: the delivery fails on arrival')
+    expect(section).toHaveTextContent('The drone still flies to the destination')
+    expect(section).not.toHaveTextContent('Delivery failed')
+  })
+
+  it('shows the loaded return after a failed handover with its target Hub', () => {
+    const returning: Flight = {
+      ...FLIGHT,
+      phase: 'RETURNING',
+      deliveredAt: null,
+      recipientUnavailableAt: '2026-11-12T10:00:05Z',
+      handoverFailedAt: '2026-11-12T10:00:19Z',
+    }
+
+    render(<FlightSection flight={returning} hubs={HUBS} workerStale={false} />)
+
+    const section = screen.getByRole('region', { name: 'Flight' })
+    expect(section).toHaveTextContent('Delivery failed: returning with the parcel')
+    expect(section).toHaveTextContent('With the parcel to')
+    expect(section).toHaveTextContent('the parcel was not delivered')
+    expect(within(section).queryByText('Planned return Hub')).not.toBeInTheDocument()
+    expect(section).not.toHaveTextContent('fails on arrival') // no longer pending
   })
 
   it('shows a simulated emergency, labelled as not a real landing site', () => {

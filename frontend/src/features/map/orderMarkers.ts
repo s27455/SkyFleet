@@ -24,7 +24,9 @@ export function orderMarkerLabel(order: Order, interrupted = false) {
   const reason =
     interrupted && order.status === 'OUT_FOR_DELIVERY'
       ? ', delivery interrupted by drone failure'
-      : ''
+      : order.status === 'DELIVERY_FAILED'
+        ? ', recipient unavailable, parcel not delivered'
+        : ''
   return `Order ${order.id} destination, ${statusText} (${state})${reason}, ${order.packageWeightKg} kg`
 }
 

@@ -22,8 +22,7 @@ MAX_PACKAGE_WEIGHT_KG = 3.0
 class OrderStatus(StrEnum):
     """Initial states (business-rules.md section 3) plus the two delivery states of Feature 010.
 
-    Failed delivery and parcel-return states are not decided yet (section 8); further states are
-    added by a migration when a feature needs them.
+    Further states are added by a migration when a feature needs them.
     """
 
     CREATED = "CREATED"
@@ -36,6 +35,9 @@ class OrderStatus(StrEnum):
     # Feature 018B: terminal, set by the cancellation service. History is kept; a recalled parcel
     # stays on the drone until it lands (the flight records the recall, not the order).
     CANCELLED = "CANCELLED"
+    # Feature 018D: terminal, set by the flight simulation when the recipient was unavailable at the
+    # delivery attempt. The parcel never left the drone, which flies it back to a Hub.
+    DELIVERY_FAILED = "DELIVERY_FAILED"
 
 
 _STATUS_VALUES = ", ".join(f"'{status.value}'" for status in OrderStatus)
@@ -82,6 +84,11 @@ class DeliveryOrder(Base):
     # When the order was cancelled (Feature 018B): the real UTC time of the transition. Like
     # `delivered_at`, it is the only reference for the active-view visibility window.
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # When the delivery attempt failed (Feature 018D): the real UTC time at which the flight
+    # simulation committed `DELIVERY_FAILED`. The only reference for its visibility window.
+    delivery_failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
     # Set on insert; a later lifecycle feature updates it when the status changes.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, server_default=func.now(), onupdate=_utc_now

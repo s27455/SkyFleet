@@ -328,6 +328,7 @@ def test_existing_apis_are_unchanged(client: TestClient, seeded: Session) -> Non
         "status",
         "delivered_at",
         "cancelled_at",
+        "delivery_failed_at",
         "created_at",
         "updated_at",
     }

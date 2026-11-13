@@ -11,6 +11,7 @@ describe('orderMarkerState', () => {
     ['OUT_FOR_DELIVERY', 'in_progress'],
     ['DELIVERED', 'delivered'],
     ['CANCELLED', 'cancelled'],
+    ['DELIVERY_FAILED', 'delivery_failed'],
   ])('maps %s to %s', (status, state) => {
     expect(orderMarkerState(status)).toBe(state)
   })
@@ -22,6 +23,16 @@ describe('orderMarkerState', () => {
     expect(orderMarkerState('CANCELLED', true)).toBe('cancelled') // a cancellation stays visible
     expect(ORDER_MARKER_STATES.interrupted.label).toBe('Interrupted')
     expect(ORDER_MARKER_STATES.interrupted.diamondClasses).not.toContain('bg-status-ok')
+  })
+
+  it('gives a failed delivery its own words and a colour no other state uses', () => {
+    const failed = ORDER_MARKER_STATES.delivery_failed
+    expect(failed.label).toBe('Delivery failed')
+    for (const [state, style] of Object.entries(ORDER_MARKER_STATES)) {
+      if (state === 'delivery_failed') continue
+      expect(style.swatchClass).not.toBe(failed.swatchClass)
+    }
+    expect(orderMarkerState('DELIVERY_FAILED', true)).toBe('delivery_failed') // never "interrupted"
   })
 
   it('covers every status the frontend knows', () => {

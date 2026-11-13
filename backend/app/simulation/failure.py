@@ -58,11 +58,14 @@ class FailureStage(StrEnum):
     BEFORE_DELIVERY = "BEFORE_DELIVERY"  # the parcel is still on board, nothing was handed over
     RECALL = "RECALL"  # the order was cancelled and the drone is flying back (018B)
     AFTER_DELIVERY = "AFTER_DELIVERY"  # the parcel was delivered; the drone is on its way back
+    HANDOVER_FAILED = "HANDOVER_FAILED"  # recipient unavailable; flying back with the parcel (018D)
 
 
 class NoEligibleTargetError(Exception):
-    def __init__(self) -> None:
-        super().__init__("No drone is flying a mission that a failure could interrupt")
+    def __init__(
+        self, message: str = "No drone is flying a mission that a failure could interrupt"
+    ) -> None:
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -144,12 +147,14 @@ def _fail_flight(
         legs = [leg_from_dict(entry) for entry in flight.legs]
         recalled = flight.recalled_at is not None
         delivered = flight.delivered_at is not None
+        handover_failed = flight.handover_failed_at is not None
+        returning = recalled or handover_failed
         # The worker has not applied the next milestone yet; leave this flight to it.
-        if not delivered and not recalled and elapsed >= legs[1].end_s:
+        if not delivered and not returning and elapsed >= legs[1].end_s:
             session.rollback()
             return None
         decision_s, _ = landing_decision(legs[-1], settings.sim_landing_approach_m)
-        if (delivered or recalled) and elapsed >= decision_s:
+        if (delivered or returning) and elapsed >= decision_s:
             session.rollback()
             return None
 
@@ -179,6 +184,8 @@ def _fail_flight(
         stage = (
             FailureStage.RECALL
             if recalled
+            else FailureStage.HANDOVER_FAILED
+            if handover_failed
             else FailureStage.AFTER_DELIVERY
             if delivered
             else FailureStage.BEFORE_DELIVERY

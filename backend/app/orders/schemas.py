@@ -25,6 +25,7 @@ class OrderResponse(BaseModel):
     status: OrderStatus
     delivered_at: datetime | None
     cancelled_at: datetime | None
+    delivery_failed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

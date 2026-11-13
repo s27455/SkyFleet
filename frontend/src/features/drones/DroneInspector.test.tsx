@@ -85,6 +85,8 @@ const FLIGHT: Flight = {
   deliveredAt: null,
   recalledAt: null,
   failedAt: null,
+  recipientUnavailableAt: null,
+  handoverFailedAt: null,
   updatedAt: '2026-11-12T10:00:01Z',
   snapshotAgeS: 1,
   emergency: null,
@@ -99,6 +101,7 @@ const ORDER: Order = {
   status: 'OUT_FOR_DELIVERY',
   deliveredAt: null,
   cancelledAt: null,
+  deliveryFailedAt: null,
   createdAt: '2026-11-12T09:00:00Z',
   updatedAt: '2026-11-12T10:00:00Z',
 }

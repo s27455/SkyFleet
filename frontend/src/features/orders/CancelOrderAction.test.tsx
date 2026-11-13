@@ -17,6 +17,7 @@ const order = (status: OrderStatus): Order => ({
   status,
   deliveredAt: null,
   cancelledAt: null,
+  deliveryFailedAt: null,
   createdAt: '2026-11-11T21:53:08Z',
   updatedAt: '2026-11-11T21:53:08Z',
 })

@@ -8,6 +8,7 @@ import type { Mission } from '../../types/mission'
 import type { Order } from '../../types/order'
 import { EventTimeline } from '../events/EventTimeline'
 import { FlightSection } from '../flights/FlightSection'
+import { isRecipientPending } from '../flights/flightStatus'
 import { StartMissionControl } from '../missions/StartMissionControl'
 import { CancelOrderAction } from './CancelOrderAction'
 import { ORDER_STATUS_DISPLAY, formatUtcTimestamp } from './orderStatus'
@@ -69,6 +70,11 @@ export function OrderDetailPanel({
   const failed = flight?.failedAt != null
   const interrupted = failed && flight?.deliveredAt === null && order.status === 'OUT_FOR_DELIVERY'
   const grounded = flight?.phase === 'EMERGENCY'
+  // Feature 018D: "recipient unavailable" is pending until the drone reaches the destination; after
+  // that the order itself is DELIVERY_FAILED (a real status, unlike an interruption).
+  const pendingRecipient =
+    flight !== undefined && order.status === 'OUT_FOR_DELIVERY' && isRecipientPending(flight)
+  const deliveryFailed = order.status === 'DELIVERY_FAILED'
   const [longitude, latitude] = order.coordinates
 
   return (
@@ -105,9 +111,14 @@ export function OrderDetailPanel({
         <Row label="Created">{formatUtcTimestamp(order.createdAt)}</Row>
         <Row label="Updated">{formatUtcTimestamp(order.updatedAt)}</Row>
         {order.cancelledAt && <Row label="Cancelled">{formatUtcTimestamp(order.cancelledAt)}</Row>}
+        {order.deliveryFailedAt && (
+          <Row label="Delivery failed">{formatUtcTimestamp(order.deliveryFailedAt)}</Row>
+        )}
       </dl>
 
-      {onCancelled && !interrupted && <CancelOrderAction order={order} onCancelled={onCancelled} />}
+      {onCancelled && !interrupted && !deliveryFailed && (
+        <CancelOrderAction order={order} onCancelled={onCancelled} />
+      )}
 
       {order.status === 'CANCELLED' && (
         <p
@@ -125,6 +136,40 @@ export function OrderDetailPanel({
       )}
       {order.status === 'CANCELLED' && (flight?.recalledAt || failed) && flight && (
         <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
+      )}
+      {pendingRecipient && flight && (
+        <>
+          <p
+            role="status"
+            className="mt-3 rounded border border-status-failed p-2 text-xs text-status-failed"
+          >
+            Recipient unavailable reported. Drone {flight.droneId} is still flying to the
+            destination; the delivery fails when it arrives. Until then the order stays out for
+            delivery.
+          </p>
+          <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
+        </>
+      )}
+      {deliveryFailed && (
+        <>
+          <p
+            role="status"
+            className="mt-3 rounded border border-status-failed p-2 text-xs text-status-failed"
+          >
+            Delivery failed: the recipient was unavailable
+            {order.deliveryFailedAt ? ` at ${formatUtcTimestamp(order.deliveryFailedAt)}` : ''}. The
+            parcel was not delivered
+            {flight && flight.phase !== 'LANDED' && flight.handoverFailedAt
+              ? `; drone ${flight.droneId} is returning with it.`
+              : ' and was brought back to a Hub.'}
+          </p>
+          <p className="mt-2 text-xs text-fg-muted">
+            Cancelling is not available: the delivery attempt has already failed.
+          </p>
+          {flight && flight.handoverFailedAt && (
+            <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
+          )}
+        </>
       )}
       {interrupted && flight && (
         <>

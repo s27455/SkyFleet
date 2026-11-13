@@ -94,6 +94,19 @@ class MissionFlight(Base):
     # Feature 018C: set when a drone failure was triggered. From then on the flight only flies the
     # emergency approach: no delivery milestone, no landing decision, no resumption.
     failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Feature 018D: set when "recipient unavailable" was triggered before the delivery attempt (a
+    # pending outcome: the drone still flies to the destination), and `handover_failed_at` when the
+    # attempt really failed. From then on the drone flies back loaded to the Hub in
+    # `landing_target_hub_id` and the parcel is never delivered.
+    recipient_unavailable_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    handover_failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    # Who triggered the pending outcome (an `EventOrigin` value): the event written at the failed
+    # handover keeps it, so a manual trigger stays MANUAL and a future automatic one AUTOMATIC.
+    recipient_unavailable_origin: Mapped[str | None] = mapped_column(String(16), default=None)
     emergency_reason: Mapped[str | None] = mapped_column(String(24), default=None)
     emergency_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     updated_at: Mapped[datetime] = mapped_column(
