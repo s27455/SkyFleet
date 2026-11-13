@@ -33,6 +33,9 @@ class OrderStatus(StrEnum):
     # order is DELIVERED before the drone returns and the mission completes.
     OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
     DELIVERED = "DELIVERED"
+    # Feature 018B: terminal, set by the cancellation service. History is kept; a recalled parcel
+    # stays on the drone until it lands (the flight records the recall, not the order).
+    CANCELLED = "CANCELLED"
 
 
 _STATUS_VALUES = ", ".join(f"'{status.value}'" for status in OrderStatus)
@@ -76,6 +79,9 @@ class DeliveryOrder(Base):
     # order not delivered and for legacy delivered orders whose time cannot be recovered. It is the
     # only reference for the active-view visibility window.
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # When the order was cancelled (Feature 018B): the real UTC time of the transition. Like
+    # `delivered_at`, it is the only reference for the active-view visibility window.
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     # Set on insert; a later lifecycle feature updates it when the status changes.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, server_default=func.now(), onupdate=_utc_now

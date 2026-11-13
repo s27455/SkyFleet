@@ -182,6 +182,15 @@ function App() {
   const refreshOrders = ordersResource.refresh
   const refreshFlights = flightsResource.refresh
   const refreshMissions = missionsResource.refresh
+  const [activityTick, setActivityTick] = useState(0)
+  const refreshAfterCancel = useCallback(() => {
+    setActivityTick((tick) => tick + 1) // the Activity timeline re-reads at once
+    // A cancellation can recall a flying drone and cancel an assigned mission.
+    refreshOrders()
+    refreshMissions()
+    refreshDrones()
+    refreshFlights()
+  }, [refreshOrders, refreshMissions, refreshDrones, refreshFlights])
   const startAssignedMission = useCallback(
     async (missionId: string) => {
       try {
@@ -309,6 +318,10 @@ function App() {
             hubs={hubs}
             assignedMission={assignedByOrder.get(selectedOrder.id)}
             onStartMission={startAssignedMission}
+            onCancelled={refreshAfterCancel}
+            flight={flights.find((candidate) => candidate.orderId === selectedOrder.id)}
+            workerStale={workerStale}
+            activityRefreshKey={activityTick}
           />
         )}
         {managementOpen && (
@@ -321,8 +334,13 @@ function App() {
                 content: (
                   <div className="flex flex-col gap-4">
                     <OrderSimulationPanel onGenerated={refreshOrders} />
-                    <SimulationEventsPanel />
+                    <SimulationEventsPanel
+                      selectedOrder={selectedOrder ?? null}
+                      onOrderCancelled={refreshAfterCancel}
+                    />
                     <OrdersManager
+                      selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+                      onSelectOrder={selectOrder}
                       orders={orders}
                       hubs={hubs}
                       missions={missions}

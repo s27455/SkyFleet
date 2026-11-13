@@ -21,6 +21,7 @@ export const OUTBOUND_FLIGHT: FlightResponse = {
   landing_target_hub_id: 'hub-galeria-baltycka',
   started_at: '2026-11-12T10:00:00Z',
   delivered_at: null,
+  recalled_at: null,
   updated_at: '2026-11-12T10:00:09Z',
   emergency: null,
 }

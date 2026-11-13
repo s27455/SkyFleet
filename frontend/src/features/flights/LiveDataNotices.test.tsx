@@ -21,6 +21,7 @@ const baseFlight: Flight = {
   landingTargetHubId: 'hub-a',
   startedAt: '2026-11-12T10:00:00Z',
   deliveredAt: '2026-11-12T10:00:03Z',
+  recalledAt: null,
   updatedAt: '2026-11-12T10:00:09Z',
   snapshotAgeS: 0,
   emergency: {

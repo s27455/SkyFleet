@@ -24,6 +24,7 @@ class LegKind(StrEnum):
     DELIVERY = "DELIVERY"
     RETURN = "RETURN"
     DIVERSION = "DIVERSION"
+    RECALL = "RECALL"  # Feature 018B: back to a Hub with the parcel still on board (loaded)
 
 
 _PHASE_OF_LEG = {
@@ -31,6 +32,8 @@ _PHASE_OF_LEG = {
     LegKind.DELIVERY: FlightPhase.DELIVERING,
     LegKind.RETURN: FlightPhase.RETURNING,
     LegKind.DIVERSION: FlightPhase.DIVERTING,
+    # A recalled drone is returning to a Hub; `MissionFlight.recalled_at` tells it apart.
+    LegKind.RECALL: FlightPhase.RETURNING,
 }
 
 
@@ -250,7 +253,25 @@ def truncate_leg(leg: Leg, at_s: float, point: Point) -> Leg:
     )
 
 
-def diversion_leg(from_point: Point, hub: Point, at_s: float, pace_s_per_km: float) -> Leg:
-    """An empty leg from `from_point` to another Hub, flown at the original pace."""
+def diversion_leg(
+    from_point: Point, hub: Point, at_s: float, pace_s_per_km: float, *, loaded: bool = False
+) -> Leg:
+    """A leg from `from_point` to another Hub, flown at the original pace.
+
+    Empty by default; a recalled flight still carries its parcel, so its diversion is `loaded`.
+    """
     km = distance_km(from_point, hub)
-    return Leg(LegKind.DIVERSION, at_s, km * pace_s_per_km, from_point, hub, km, loaded=False)
+    return Leg(LegKind.DIVERSION, at_s, km * pace_s_per_km, from_point, hub, km, loaded=loaded)
+
+
+def recall_legs(
+    legs: list[Leg], at_s: float, point: Point, hub: Point, pace_s_per_km: float
+) -> list[Leg]:
+    """The schedule after a recall at `at_s`, when the drone is at `point` with the parcel.
+
+    The leg flown at `at_s` is cut short at `point`, every later leg (rest of the delivery and the
+    empty return) is dropped, and one loaded RECALL leg to `hub` is appended at the original pace.
+    """
+    km = distance_km(point, hub)
+    recall = Leg(LegKind.RECALL, at_s, km * pace_s_per_km, point, hub, km, loaded=True)
+    return [*stop_legs(legs, at_s, point), recall]

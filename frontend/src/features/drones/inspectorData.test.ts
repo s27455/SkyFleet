@@ -20,6 +20,7 @@ const FLIGHT: Flight = {
   landingTargetHubId: 'hub-a',
   startedAt: '2026-11-12T10:00:00Z',
   deliveredAt: null,
+  recalledAt: null,
   updatedAt: '2026-11-12T10:00:01Z',
   snapshotAgeS: 1,
   emergency: null,
@@ -43,6 +44,7 @@ const ORDER: Order = {
   packageWeightKg: 1.8,
   status: 'OUT_FOR_DELIVERY',
   deliveredAt: null,
+  cancelledAt: null,
   createdAt: '2026-11-12T09:00:00Z',
   updatedAt: '2026-11-12T10:00:00Z',
 }

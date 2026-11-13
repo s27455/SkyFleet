@@ -6,9 +6,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
+from app.api.routes.missions import SettingsDep
 from app.config import get_settings
 from app.db.session import get_session
-from app.orders import generator, repository, service
+from app.orders import cancellation, generator, repository, service
 from app.orders.models import DeliveryOrder
 from app.orders.schemas import OrderCreateRequest, OrderResponse, OrderUpdateRequest
 from app.simulation import clock
@@ -31,6 +32,10 @@ def _http_error(error: service.OrderManagementError) -> HTTPException:
     codes: dict[type[service.OrderManagementError], str] = {
         service.OrderHasMissionsError: "ORDER_HAS_MISSIONS",
         service.OrderNotEditableError: "ORDER_NOT_EDITABLE",
+        cancellation.OrderAlreadyDeliveredError: "ORDER_ALREADY_DELIVERED",
+        cancellation.OrderNotCancellableError: "ORDER_NOT_CANCELLABLE",
+        cancellation.DroneNotRecallableError: "DRONE_NOT_RECALLABLE",
+        cancellation.RecallNotPossibleError: "RECALL_NOT_POSSIBLE",
     }
     code = codes.get(type(error))
     if code is None:
@@ -72,6 +77,20 @@ def get_order(order_id: str, session: SessionDep) -> DeliveryOrder:
 def create_order(body: OrderCreateRequest, session: SessionDep) -> DeliveryOrder:
     try:
         return service.create_order(session, body)
+    except service.OrderManagementError as error:
+        raise _http_error(error) from error
+
+
+@router.post("/{order_id}/cancel", response_model=OrderResponse)
+def cancel_order(order_id: str, session: SessionDep, settings: SettingsDep) -> DeliveryOrder:
+    """Cancel an order (a business transition, not deletion). Idempotent: an already cancelled
+    order is returned as it is, with no second event.
+
+    A flying drone that has not yet handed over the parcel is recalled to the nearest reachable
+    Hub with the parcel on board; a delivered order is rejected (409). MVP/demo control.
+    """
+    try:
+        return cancellation.cancel_order(session, order_id, clock.utcnow(), settings)
     except service.OrderManagementError as error:
         raise _http_error(error) from error
 

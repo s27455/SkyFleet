@@ -30,6 +30,7 @@ export function toOrder(item: unknown): Order {
     package_weight_kg: weight,
     status,
     delivered_at: deliveredAt = null,
+    cancelled_at: cancelledAt = null,
     created_at: createdAt,
     updated_at: updatedAt,
   } = raw
@@ -45,6 +46,7 @@ export function toOrder(item: unknown): Order {
     invalid(`unknown status for ${id}`)
   }
   if (deliveredAt !== null && !isTimestamp(deliveredAt)) invalid(`bad delivered_at for ${id}`)
+  if (cancelledAt !== null && !isTimestamp(cancelledAt)) invalid(`bad cancelled_at for ${id}`)
   if (!isTimestamp(createdAt)) invalid(`bad created_at for ${id}`)
   if (!isTimestamp(updatedAt)) invalid(`bad updated_at for ${id}`)
 
@@ -56,6 +58,7 @@ export function toOrder(item: unknown): Order {
     packageWeightKg: weight,
     status: status as Order['status'],
     deliveredAt,
+    cancelledAt,
     createdAt,
     updatedAt,
   }
@@ -123,6 +126,15 @@ export async function updateOrder(orderId: string, changes: Partial<OrderInput>)
   return toOrder(
     await apiSend<unknown>('PATCH', `/api/orders/${encodeURIComponent(orderId)}`, body),
   )
+}
+
+/**
+ * Cancels an order (`POST /api/orders/{id}/cancel`, no body). The backend decides: a flying drone
+ * that has not handed over the parcel is recalled with it; a delivered order is refused (409).
+ * Cancelling an already cancelled order is harmless and returns it unchanged.
+ */
+export async function cancelOrder(orderId: string): Promise<Order> {
+  return toOrder(await apiPost<unknown>(`/api/orders/${encodeURIComponent(orderId)}/cancel`))
 }
 
 /** Physically deletes an order; the backend refuses it when any mission references the order. */

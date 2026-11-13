@@ -82,6 +82,10 @@ class MissionFlight(Base):
     target_longitude: Mapped[float | None] = mapped_column(Float, default=None)
     target_latitude: Mapped[float | None] = mapped_column(Float, default=None)
     target_eta_s: Mapped[float | None] = mapped_column(Float, default=None)
+    # Feature 018B: set when the order was cancelled in flight and the drone was recalled. The
+    # drone then flies back loaded (the parcel is still on board) to the Hub in
+    # `landing_target_hub_id`; the flight never reaches the delivery milestone.
+    recalled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     emergency_reason: Mapped[str | None] = mapped_column(String(24), default=None)
     emergency_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     updated_at: Mapped[datetime] = mapped_column(

@@ -30,8 +30,15 @@ def list_active_orders(
     statement = (
         select(DeliveryOrder)
         .where(
-            (DeliveryOrder.status != OrderStatus.DELIVERED.value)
-            | (DeliveryOrder.delivered_at > cutoff)
+            DeliveryOrder.status.not_in([OrderStatus.DELIVERED.value, OrderStatus.CANCELLED.value])
+            | (
+                (DeliveryOrder.status == OrderStatus.DELIVERED.value)
+                & (DeliveryOrder.delivered_at > cutoff)
+            )
+            | (
+                (DeliveryOrder.status == OrderStatus.CANCELLED.value)
+                & (DeliveryOrder.cancelled_at > cutoff)
+            )
         )
         .order_by(DeliveryOrder.created_at, DeliveryOrder.id)
     )

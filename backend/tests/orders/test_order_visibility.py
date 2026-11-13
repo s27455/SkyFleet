@@ -34,10 +34,23 @@ def test_a_delivered_order_without_a_delivery_time_is_hidden() -> None:
     assert is_order_active(DELIVERED, None, NOW, WINDOW) is False
 
 
-@pytest.mark.parametrize("status", [s.value for s in OrderStatus if s != OrderStatus.DELIVERED])
+@pytest.mark.parametrize(
+    "status",
+    [s.value for s in OrderStatus if s not in (OrderStatus.DELIVERED, OrderStatus.CANCELLED)],
+)
 def test_every_other_status_stays_visible_whatever_its_timestamp(status: str) -> None:
     assert is_order_active(status, None, NOW, WINDOW) is True
     assert is_order_active(status, NOW - timedelta(days=9), NOW, WINDOW) is True
+
+
+def test_a_cancelled_order_is_visible_for_the_window_after_cancellation() -> None:
+    cancelled = OrderStatus.CANCELLED.value
+    inside = NOW - timedelta(seconds=WINDOW - 1)
+    edge = NOW - timedelta(seconds=WINDOW)
+
+    assert is_order_active(cancelled, None, NOW, WINDOW, cancelled_at=inside) is True
+    assert is_order_active(cancelled, None, NOW, WINDOW, cancelled_at=edge) is False
+    assert is_order_active(cancelled, None, NOW, WINDOW, cancelled_at=None) is False
 
 
 def _prepare(session: Session) -> dict[str, DeliveryOrder]:

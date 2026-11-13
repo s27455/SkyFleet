@@ -42,6 +42,8 @@ class FlightResponse(BaseModel):
     landing_target_hub_id: str
     started_at: datetime
     delivered_at: datetime | None
+    # Set when the order was cancelled in flight: the drone returns to a Hub with the parcel.
+    recalled_at: datetime | None
     updated_at: datetime
     emergency: FlightEmergency | None
 

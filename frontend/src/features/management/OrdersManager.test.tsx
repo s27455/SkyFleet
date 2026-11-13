@@ -77,6 +77,34 @@ describe('OrdersManager', () => {
     expect(screen.getByRole('button', { name: 'Edit order ORD-006' })).toBeDisabled()
   })
 
+  it('selects an order from the table so the Cancel order shortcut can act on it', () => {
+    const onSelectOrder = vi.fn()
+    render(
+      <OrdersManager
+        orders={ORDERS}
+        hubs={HUBS}
+        missions={MISSIONS}
+        onChanged={vi.fn()}
+        selectedOrderId="ORD-005"
+        onSelectOrder={onSelectOrder}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select order ORD-004' }))
+
+    expect(onSelectOrder).toHaveBeenCalledWith('ORD-004')
+    expect(screen.getByRole('button', { name: 'Select order ORD-005' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+  })
+
+  it('shows a cancelled order with its status in words', () => {
+    renderManager([toOrder({ ...ORDER_RESPONSES[3], status: 'CANCELLED' })])
+
+    expect(screen.getByText('Cancelled')).toBeInTheDocument()
+  })
+
   it('shows an empty state for the active view', () => {
     renderManager([])
 

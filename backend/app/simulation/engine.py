@@ -6,7 +6,9 @@ milestone exactly once and in order. Each step runs in its own transaction under
 
 Milestones:
 
-* delivery stop finished -> the order becomes DELIVERED (the mission stays IN_FLIGHT);
+* delivery stop finished -> the order becomes DELIVERED (the mission stays IN_FLIGHT); a recalled
+  flight (Feature 018B, order cancelled in flight) never reaches this milestone: it flies back
+  loaded to a Hub, and the landing decision below applies to it, with the loaded consumption rate;
 * landing decision, `sim_landing_approach_m` before the target Hub -> under that Hub's row lock the
   engine counts the drones physically docked there. With a free place the drone docks atomically
   (mission COMPLETED, drone IDLE at the Hub). If the Hub is full it diverts to the nearest other
@@ -147,9 +149,13 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                 loaded_rate=loaded,
             )
 
+        # A recalled flight is carrying its parcel back: no delivery, and the loaded rate applies.
+        recalled = flight.recalled_at is not None
+        return_rate = loaded if recalled else empty
+
         # Milestone 1: the parcel is handed over at the destination.
-        delivery_end = legs[1].end_s
-        if flight.delivered_at is None and elapsed >= delivery_end:
+        delivery_end = legs[1].end_s if not recalled else 0.0
+        if not recalled and flight.delivered_at is None and elapsed >= delivery_end:
             order.status = OrderStatus.DELIVERED.value
             flight.delivered_at = started + timedelta(seconds=delivery_end)
             # The order's delivery time is the moment this transition is committed, in real UTC
@@ -157,13 +163,13 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
             # worker that was stopped or late would otherwise stamp a time that is already past
             # the visibility window (Feature 017A) and the order would vanish at once.
             order.delivered_at = now
-            _write_snapshot(flight, drone, state_for(elapsed), now)
+            write_snapshot(flight, drone, state_for(elapsed), now)
             session.commit()
             return True
 
         # Milestone 2: the landing decision (capacity recheck, docking, diversion or emergency).
         decision_s, decision_point = landing_decision(legs[-1], settings.sim_landing_approach_m)
-        if flight.delivered_at is not None:
+        if flight.delivered_at is not None or recalled:
             # The battery falling below the critical floor before the landing decision is an
             # emergency at the exact crossing time, however late this tick runs (deterministic).
             crossing = first_time_below(
@@ -172,7 +178,11 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                 start_battery=flight.start_battery_pct,
                 empty_rate=empty,
                 loaded_rate=loaded,
-                after_s=delivery_end,
+                after_s=(
+                    max((as_utc(flight.recalled_at) - started).total_seconds(), 0.0)
+                    if flight.recalled_at is not None
+                    else delivery_end
+                ),
             )
             if crossing is not None and crossing < decision_s and crossing <= elapsed:
                 crossed = state_for(crossing)
@@ -190,7 +200,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                 )
                 session.commit()
                 return False
-        if flight.delivered_at is not None and elapsed >= decision_s:
+        if (flight.delivered_at is not None or recalled) and elapsed >= decision_s:
             return _decide_landing(
                 session,
                 settings,
@@ -202,7 +212,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                 (decision_s, decision_point),
                 started,
                 now,
-                empty,
+                return_rate,
                 state_for,
             )
 
@@ -210,7 +220,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
         if flight.delivered_at is None and state.battery_pct < 0:
             raise FlightInvariantError(f"Flight {mission_id} ran out of battery before delivery")
 
-        _write_snapshot(flight, drone, state, now)
+        write_snapshot(flight, drone, state, now)
         session.commit()
         return False
     except BaseException:
@@ -218,7 +228,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
         raise
 
 
-def _write_snapshot(flight: MissionFlight, drone: Drone, state: FlightState, now: datetime) -> None:
+def write_snapshot(flight: MissionFlight, drone: Drone, state: FlightState, now: datetime) -> None:
     flight.phase = state.phase.value
     flight.longitude, flight.latitude = state.position
     flight.battery_pct = state.battery_pct
@@ -242,7 +252,7 @@ def _decide_landing(
     decision: tuple[float, Point],
     started: datetime,
     now: datetime,
-    empty_rate: float,
+    rate_pct_per_km: float,
     state_for: StateFor,
 ) -> bool:
     decision_s, decision_point = decision
@@ -297,7 +307,7 @@ def _decide_landing(
     reachable = [
         (hub, km)
         for hub, km in candidates
-        if battery_here - empty_rate * km >= settings.sim_critical_battery_pct
+        if battery_here - rate_pct_per_km * km >= settings.sim_critical_battery_pct
     ]
     with_room = [(hub, km) for hub, km in reachable if occupancy[hub.id] < hub.drone_capacity]
 
@@ -306,13 +316,19 @@ def _decide_landing(
         new_legs = [
             *legs[:-1],
             truncate_leg(final, decision_s, decision_point),
-            diversion_leg(decision_point, hub_point(chosen), decision_s, flight.pace_s_per_km),
+            diversion_leg(
+                decision_point,
+                hub_point(chosen),
+                decision_s,
+                flight.pace_s_per_km,
+                loaded=flight.recalled_at is not None,  # a recalled drone still carries the parcel
+            ),
         ]
         flight.legs = [leg_to_dict(leg) for leg in new_legs]
         flight.tried_hub_ids = tried
         flight.landing_target_hub_id = chosen.id
         elapsed = max((now - started).total_seconds(), 0.0)
-        _write_snapshot(flight, drone, state_for(elapsed, new_legs), now)
+        write_snapshot(flight, drone, state_for(elapsed, new_legs), now)
         session.commit()
         return True  # the diversion leg may already be due (catch-up); try the next Hub
 
@@ -357,7 +373,7 @@ def _end_in_emergency(
     occupancy rule never counts as docked. The order stays DELIVERED (the parcel was handed over
     before the return), which is why an emergency before delivery cannot be represented.
     """
-    if flight.delivered_at is None:
+    if flight.delivered_at is None and flight.recalled_at is None:
         raise FlightInvariantError("An emergency before the delivery is not supported")
     stopped = stop_legs(legs, at_s, point)
     flight.legs = [leg_to_dict(leg) for leg in stopped]

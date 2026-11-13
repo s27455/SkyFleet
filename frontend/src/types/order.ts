@@ -1,10 +1,11 @@
-/** Order states the backend currently allows: the initial states plus the two delivery states. */
+/** Order states the backend currently allows: initial, delivery and cancelled. */
 export const ORDER_STATUSES = [
   'CREATED',
   'AWAITING_HANDOVER',
   'READY_FOR_PICKUP',
   'OUT_FOR_DELIVERY',
   'DELIVERED',
+  'CANCELLED',
 ] as const
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number]
@@ -20,6 +21,8 @@ export interface OrderResponse {
   status: OrderStatus
   /** When the parcel was handed over; null if not delivered, or a legacy order without a time. */
   delivered_at: string | null
+  /** When the order was cancelled (Feature 018B); null otherwise. */
+  cancelled_at: string | null
   created_at: string
   updated_at: string
 }
@@ -35,6 +38,7 @@ export interface Order {
   status: OrderStatus
   /** ISO 8601 timestamps as sent by the backend (validated to parse). */
   deliveredAt: string | null
+  cancelledAt: string | null
   createdAt: string
   updatedAt: string
 }

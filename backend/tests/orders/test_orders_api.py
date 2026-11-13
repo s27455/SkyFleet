@@ -13,6 +13,7 @@ ORDER_FIELDS = {
     "package_weight_kg",
     "status",
     "delivered_at",
+    "cancelled_at",
     "created_at",
     "updated_at",
 }

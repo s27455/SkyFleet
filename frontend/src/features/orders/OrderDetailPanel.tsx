@@ -2,11 +2,14 @@ import { type ReactNode, useEffect } from 'react'
 
 import { DETAIL_PANEL_CLASS } from '../../components/ui/detailPanel'
 import { StatusIndicator } from '../../components/ui/StatusIndicator'
+import type { Flight } from '../../types/flight'
 import type { Hub } from '../../types/hub'
 import type { Mission } from '../../types/mission'
 import type { Order } from '../../types/order'
 import { EventTimeline } from '../events/EventTimeline'
+import { FlightSection } from '../flights/FlightSection'
 import { StartMissionControl } from '../missions/StartMissionControl'
+import { CancelOrderAction } from './CancelOrderAction'
 import { ORDER_STATUS_DISPLAY, formatUtcTimestamp } from './orderStatus'
 
 interface OrderDetailPanelProps {
@@ -21,6 +24,13 @@ interface OrderDetailPanelProps {
   /** The Hubs, to name the mission's planned return Hub. */
   hubs?: readonly Hub[]
   onStartMission?: (missionId: string) => Promise<void>
+  /** Shows the Cancel order action; called after every answer so the views are re-read. */
+  onCancelled?: () => void
+  /** The order's active flight, if any: shown once the order was cancelled and the drone recalled. */
+  flight?: Flight
+  workerStale?: boolean
+  /** Changes after a cancellation so the Activity timeline is re-read at once. */
+  activityRefreshKey?: number
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -40,6 +50,10 @@ export function OrderDetailPanel({
   assignedMission,
   hubs = [],
   onStartMission,
+  onCancelled,
+  flight,
+  workerStale = false,
+  activityRefreshKey = 0,
 }: OrderDetailPanelProps) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -85,7 +99,26 @@ export function OrderDetailPanel({
         </Row>
         <Row label="Created">{formatUtcTimestamp(order.createdAt)}</Row>
         <Row label="Updated">{formatUtcTimestamp(order.updatedAt)}</Row>
+        {order.cancelledAt && <Row label="Cancelled">{formatUtcTimestamp(order.cancelledAt)}</Row>}
       </dl>
+
+      {onCancelled && <CancelOrderAction order={order} onCancelled={onCancelled} />}
+
+      {order.status === 'CANCELLED' && (
+        <p
+          role="status"
+          className="mt-3 rounded border border-status-critical p-2 text-xs text-status-critical"
+        >
+          This order was cancelled
+          {order.cancelledAt ? ` at ${formatUtcTimestamp(order.cancelledAt)}` : ''}.
+          {flight?.recalledAt
+            ? ' The drone was recalled and is returning with the parcel.'
+            : ' No flight is active for it.'}
+        </p>
+      )}
+      {order.status === 'CANCELLED' && flight?.recalledAt && (
+        <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
+      )}
 
       {assignedMission && onStartMission && (
         <StartMissionControl
@@ -97,7 +130,7 @@ export function OrderDetailPanel({
         />
       )}
 
-      <EventTimeline orderId={order.id} />
+      <EventTimeline orderId={order.id} refreshKey={activityRefreshKey} />
 
       <p className="mt-3 border-t border-line pt-3 text-xs text-fg-muted">
         Simulation data: the destination is illustrative, not a verified customer address.

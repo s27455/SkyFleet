@@ -1,4 +1,10 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
+
+import { cancelOrder } from '../../api/orders'
+import type { Order } from '../../types/order'
+import { useAction } from '../management/useAction'
+import { CancelConfirmation } from '../orders/CancelOrderAction'
+import { ORDER_STATUS_DISPLAY, isCancellable } from '../orders/orderStatus'
 
 interface Scenario {
   id: string
@@ -32,20 +38,16 @@ const BOX = (
   </>
 )
 
-/** The four future incident scenarios. None is implemented yet, so every control is disabled. */
+const CANCEL_ICON = (
+  <Icon>
+    {BOX}
+    <path d="m17 17 4 4" />
+    <path d="m21 17-4 4" />
+  </Icon>
+)
+
+/** The three future incident scenarios. None is implemented yet, so each control is disabled. */
 const SCENARIOS: Scenario[] = [
-  {
-    id: 'cancel-order',
-    label: 'Cancel order',
-    availableIn: '018B',
-    icon: (
-      <Icon>
-        {BOX}
-        <path d="m17 17 4 4" />
-        <path d="m21 17-4 4" />
-      </Icon>
-    ),
-  },
   {
     id: 'drone-failure',
     label: 'Drone failure',
@@ -88,19 +90,73 @@ const SCENARIOS: Scenario[] = [
   },
 ]
 
+interface SimulationEventsPanelProps {
+  /** The order the operator has selected on the map or in the list, if any. */
+  selectedOrder?: Order | null
+  /** Called after a successful cancellation so the operational views are re-read at once. */
+  onOrderCancelled?: () => void
+}
+
 /**
- * Simulation Events controls (Feature 018A): an MVP/demo-only shell. The four scenarios are
- * visible but disabled until Features 018B to 018E implement real backend behavior; nothing here
- * calls the backend or holds local state. The Random incidents switch is disabled for the same
- * reason and does not claim that incidents are being produced.
+ * Simulation Events controls: an MVP/demo-only cluster. "Cancel order" (Feature 018B) acts on the
+ * selected order after an explicit confirmation and shows what the backend answers; the other
+ * three scenarios stay visible but disabled until Features 018C to 018E implement real backend
+ * behavior. The Random incidents switch is disabled for the same reason and does not claim that
+ * incidents are being produced.
  */
-export function SimulationEventsPanel() {
+export function SimulationEventsPanel({
+  selectedOrder = null,
+  onOrderCancelled,
+}: SimulationEventsPanelProps) {
+  const cancellation = useAction()
+  const [confirmingId, setConfirmingId] = useState<string | null>(null)
+  const [cancelled, setCancelled] = useState<string | null>(null)
+
+  const eligible = selectedOrder !== null && isCancellable(selectedOrder)
+  const confirming = eligible && confirmingId === selectedOrder.id
+
+  let hint = 'Select an order (map, Orders list or table)'
+  if (selectedOrder && eligible) hint = `Cancel ${selectedOrder.id}`
+  if (selectedOrder && !eligible) {
+    hint = `Not available: ${ORDER_STATUS_DISPLAY[selectedOrder.status].label.toLowerCase()}`
+  }
+
+  const confirm = async () => {
+    if (!selectedOrder) return
+    const id = selectedOrder.id
+    const ok = await cancellation.run(() => cancelOrder(id))
+    if (ok) {
+      setConfirmingId(null)
+      setCancelled(id)
+    }
+    // Whatever the answer was, the state may have changed (for example the parcel was just
+    // delivered): show the backend's truth now instead of waiting for the next poll.
+    onOrderCancelled?.()
+  }
+
   return (
     <section aria-label="Simulation events" className="rounded border border-line p-3">
       <h3 className="text-sm font-semibold">
         Simulation events <span className="font-normal text-fg-muted">(demo only)</span>
       </h3>
       <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <li>
+          <button
+            type="button"
+            disabled={!eligible || cancellation.busy}
+            title={hint}
+            onClick={() => {
+              cancellation.clearError()
+              setCancelled(null)
+              if (selectedOrder) setConfirmingId(selectedOrder.id)
+            }}
+            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+          >
+            {CANCEL_ICON}
+            <span>Cancel order</span>
+            <span className="text-[11px] text-fg-muted">{hint}</span>
+          </button>
+        </li>
         {SCENARIOS.map((scenario) => (
           <li key={scenario.id}>
             <button
@@ -116,6 +172,24 @@ export function SimulationEventsPanel() {
           </li>
         ))}
       </ul>
+      {confirming && (
+        <CancelConfirmation
+          order={selectedOrder}
+          busy={cancellation.busy}
+          onConfirm={confirm}
+          onKeep={() => setConfirmingId(null)}
+        />
+      )}
+      {cancellation.error && (
+        <p role="alert" className="mt-2 text-xs text-status-critical">
+          {cancellation.error}
+        </p>
+      )}
+      {cancelled && selectedOrder?.id === cancelled && (
+        <p role="status" className="mt-2 text-xs text-fg-muted">
+          Order {cancelled} cancelled.
+        </p>
+      )}
       <div className="mt-3 flex items-start gap-2 text-xs text-fg-muted">
         <button
           type="button"

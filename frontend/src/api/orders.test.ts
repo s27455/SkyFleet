@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test/hubFixtures'
 import { ORDER_RESPONSES } from '../test/orderFixtures'
 import { ApiError } from './client'
-import { generateOrder, getActiveOrders, getOrders } from './orders'
+import { cancelOrder, generateOrder, getActiveOrders, getOrders } from './orders'
 
 function stubFetch(response: () => Promise<Response>) {
   const fetchMock = vi.fn((_url: string) => response())
@@ -35,6 +35,7 @@ describe('getOrders', () => {
       packageWeightKg: 0.8,
       status: 'READY_FOR_PICKUP',
       deliveredAt: null,
+      cancelledAt: null,
       createdAt: '2026-11-11T21:53:08.077240Z',
       updatedAt: '2026-11-11T21:53:08.077240Z',
     })
@@ -151,5 +152,54 @@ describe('generateOrder', () => {
 
     stubFetch(() => Promise.resolve(jsonResponse({ detail: 'oops' }, 500)))
     await expect(generateOrder()).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('cancelOrder (Feature 018B)', () => {
+  it('posts to the cancel endpoint without a body and maps the cancelled order', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(
+        jsonResponse({
+          ...ORDER_RESPONSES[0],
+          status: 'CANCELLED',
+          cancelled_at: '2026-11-13T12:00:00Z',
+        }),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const order = await cancelOrder('ORD-001')
+
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders\/ORD-001\/cancel$/)
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined()
+    expect(order.status).toBe('CANCELLED')
+    expect(order.cancelledAt).toBe('2026-11-13T12:00:00Z')
+  })
+
+  it('rejects a conflict and a zone-less cancellation time', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({ detail: { code: 'ORDER_ALREADY_DELIVERED', message: 'delivered' } }, 409),
+        ),
+      ),
+    )
+    await expect(cancelOrder('ORD-001')).rejects.toBeInstanceOf(ApiError)
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({
+            ...ORDER_RESPONSES[0],
+            status: 'CANCELLED',
+            cancelled_at: '2026-11-13T12:00:00',
+          }),
+        ),
+      ),
+    )
+    await expect(cancelOrder('ORD-001')).rejects.toBeInstanceOf(ApiError)
   })
 })

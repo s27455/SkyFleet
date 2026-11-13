@@ -1,7 +1,7 @@
 import type { OrderStatus } from '../../types/order'
 
 /** What a destination marker tells the operator. Styling lives apart, in `ORDER_MARKER_STATES`. */
-export type OrderMarkerState = 'pending' | 'in_progress' | 'delivered' | 'other'
+export type OrderMarkerState = 'pending' | 'in_progress' | 'delivered' | 'cancelled' | 'other'
 
 /**
  * Backend order status to marker state, written out for every status (Feature 017B). Only the
@@ -14,6 +14,7 @@ const STATE_BY_STATUS: Record<OrderStatus, OrderMarkerState> = {
   READY_FOR_PICKUP: 'pending',
   OUT_FOR_DELIVERY: 'in_progress',
   DELIVERED: 'delivered',
+  CANCELLED: 'cancelled',
 }
 
 /** A status this build does not know (a newer backend) is shown neutrally, never guessed. */
@@ -45,6 +46,11 @@ export const ORDER_MARKER_STATES: Record<OrderMarkerState, OrderMarkerStyle> = {
     label: 'Delivered',
     diamondClasses: ['bg-status-ok', 'border-fg'],
     swatchClass: 'bg-status-ok',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    diamondClasses: ['bg-status-critical', 'border-fg'],
+    swatchClass: 'bg-status-critical',
   },
   other: {
     label: 'Other',

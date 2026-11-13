@@ -34,6 +34,8 @@ export interface FlightResponse {
   landing_target_hub_id: string
   started_at: string
   delivered_at: string | null
+  /** Set when the order was cancelled in flight and the drone is recalled with its parcel. */
+  recalled_at: string | null
   updated_at: string
   emergency: { reason: EmergencyReason; at: string; position: [number, number] } | null
 }
@@ -73,6 +75,8 @@ export interface Flight {
   landingTargetHubId: string
   startedAt: string
   deliveredAt: string | null
+  /** Set when the order was cancelled in flight: the drone returns with the parcel on board. */
+  recalledAt: string | null
   updatedAt: string
   /** Seconds between the snapshot and the response, both on the backend's clock. */
   snapshotAgeS: number

@@ -8,7 +8,19 @@ export const ORDER_STATUS_DISPLAY: Record<OrderStatus, { tone: StatusTone; label
   READY_FOR_PICKUP: { tone: 'ok', label: 'Ready for pickup' },
   OUT_FOR_DELIVERY: { tone: 'warning', label: 'Out for delivery' },
   DELIVERED: { tone: 'neutral', label: 'Delivered' },
+  CANCELLED: { tone: 'critical', label: 'Cancelled' },
 }
+
+/** Order states the operator may try to cancel; the backend makes the final decision. */
+export const CANCELLABLE_STATUSES: readonly OrderStatus[] = [
+  'CREATED',
+  'AWAITING_HANDOVER',
+  'READY_FOR_PICKUP',
+  'OUT_FOR_DELIVERY',
+]
+
+export const isCancellable = (order: { status: OrderStatus }) =>
+  CANCELLABLE_STATUSES.includes(order.status)
 
 const UTC_FORMAT = new Intl.DateTimeFormat('en-GB', {
   dateStyle: 'medium',

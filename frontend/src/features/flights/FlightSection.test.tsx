@@ -37,6 +37,7 @@ const FLIGHT: Flight = {
   landingTargetHubId: 'hub-galeria-baltycka',
   startedAt: '2026-11-12T10:00:00Z',
   deliveredAt: '2026-11-12T10:00:19Z',
+  recalledAt: null,
   updatedAt: '2026-11-12T10:00:25Z',
   snapshotAgeS: 2,
   emergency: null,
@@ -88,6 +89,37 @@ describe('FlightSection', () => {
     render(<FlightSection flight={FLIGHT} hubs={HUBS} workerStale />)
 
     expect(screen.getByRole('status')).toHaveTextContent(/stopped updating this flight/)
+  })
+
+  it('says that a recalled drone is returning with its parcel and where to', () => {
+    const recalled: Flight = {
+      ...FLIGHT,
+      deliveredAt: null,
+      recalledAt: '2026-11-12T10:00:08Z',
+      landingTargetHubId: 'hub-forum-gdansk',
+    }
+
+    render(<FlightSection flight={recalled} hubs={HUBS} workerStale={false} />)
+
+    const section = screen.getByRole('region', { name: 'Flight' })
+    expect(within(section).getByText('Recalled')).toBeInTheDocument()
+    expect(section).toHaveTextContent('Returning with the parcel to Forum Gdańsk')
+    expect(within(section).queryByText('Now heading to')).not.toBeInTheDocument()
+  })
+
+  it('labels the phase of a recalled flight as a recall, not as an ordinary return', () => {
+    const recalled: Flight = { ...FLIGHT, deliveredAt: null, recalledAt: '2026-11-12T10:00:08Z' }
+
+    render(<FlightSection flight={recalled} hubs={HUBS} workerStale={false} />)
+
+    expect(screen.getByText('Recalled: returning with the parcel')).toBeInTheDocument()
+    expect(screen.queryByText('Returning to a Hub')).not.toBeInTheDocument()
+  })
+
+  it('keeps the ordinary phase text for a flight that was not recalled', () => {
+    render(<FlightSection flight={FLIGHT} hubs={HUBS} workerStale={false} />)
+
+    expect(screen.getByText('Returning to a Hub')).toBeInTheDocument()
   })
 
   it('shows a simulated emergency, labelled as not a real landing site', () => {

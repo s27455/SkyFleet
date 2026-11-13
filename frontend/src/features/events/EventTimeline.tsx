@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+
 import { formatUtcTimestamp } from '../orders/orderStatus'
 import type { EventOrigin, EventType } from '../../types/event'
 import { SECONDARY_BUTTON_CLASS } from '../management/formStyles'
@@ -21,8 +23,19 @@ const ORIGIN_LABELS: Record<EventOrigin, string> = {
  * Chronological Activity timeline of one order, from the persisted backend events. It shows only
  * what the backend recorded: an order that predates event recording simply has no events.
  */
-export function EventTimeline({ orderId }: { orderId: string }) {
-  const { state, stale, retry } = useOrderEvents(orderId)
+export function EventTimeline({
+  orderId,
+  refreshKey = 0,
+}: {
+  orderId: string
+  /** Changes when something happened to the order (a cancellation): read the events again now. */
+  refreshKey?: number
+}) {
+  const { state, stale, retry, refresh } = useOrderEvents(orderId)
+  const firstKey = useRef(refreshKey)
+  useEffect(() => {
+    if (refreshKey !== firstKey.current) refresh()
+  }, [refreshKey, refresh])
 
   return (
     <section aria-label="Activity" className="mt-3 border-t border-line pt-3">

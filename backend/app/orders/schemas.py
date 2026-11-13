@@ -24,6 +24,7 @@ class OrderResponse(BaseModel):
     package_weight_kg: float
     status: OrderStatus
     delivered_at: datetime | None
+    cancelled_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

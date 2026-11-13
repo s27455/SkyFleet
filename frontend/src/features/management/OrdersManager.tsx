@@ -18,6 +18,9 @@ interface OrdersManagerProps {
   missions: readonly Mission[]
   /** Called after a successful change so the polled data is re-read at once. */
   onChanged: () => void
+  /** Selecting an order here enables the Cancel order shortcut of Simulation events. */
+  selectedOrderId?: string | null
+  onSelectOrder?: (orderId: string) => void
 }
 
 type Mode =
@@ -85,7 +88,16 @@ function AllOrdersManager(props: ScopedProps) {
  * a hint taken from the polled missions, and the backend still decides, with its message shown when
  * it refuses.
  */
-function OrdersAdmin({ orders, hubs, missions, onChanged, scope, onScopeChange }: ScopedProps) {
+function OrdersAdmin({
+  orders,
+  hubs,
+  missions,
+  onChanged,
+  scope,
+  onScopeChange,
+  selectedOrderId = null,
+  onSelectOrder,
+}: ScopedProps) {
   const [mode, setMode] = useState<Mode>({ kind: 'none' })
   const deletion = useAction()
   const hubNames = useMemo(() => new Map(hubs.map((hub) => [hub.id, hub.name])), [hubs])
@@ -212,8 +224,30 @@ function OrdersAdmin({ orders, hubs, missions, onChanged, scope, onScopeChange }
                   ? 'Has a mission'
                   : 'Only orders ready for pickup can be changed'
                 return (
-                  <tr key={order.id} className="border-t border-line">
-                    <td className="py-1.5 pr-3 font-mono text-xs">{order.id}</td>
+                  <tr
+                    key={order.id}
+                    className={`border-t border-line ${
+                      order.id === selectedOrderId ? 'bg-surface-raised' : ''
+                    }`}
+                  >
+                    <td className="py-1.5 pr-3 font-mono text-xs">
+                      {onSelectOrder ? (
+                        <button
+                          type="button"
+                          aria-pressed={order.id === selectedOrderId}
+                          aria-label={`Select order ${order.id}`}
+                          title="Select this order"
+                          className={`${LINK_BUTTON_CLASS} font-mono text-xs ${
+                            order.id === selectedOrderId ? 'font-bold underline' : ''
+                          }`}
+                          onClick={() => onSelectOrder(order.id)}
+                        >
+                          {order.id}
+                        </button>
+                      ) : (
+                        order.id
+                      )}
+                    </td>
                     <td className="py-1.5 pr-3">
                       {hubNames.get(order.originHubId) ?? order.originHubId}
                     </td>

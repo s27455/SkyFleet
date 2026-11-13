@@ -57,6 +57,7 @@ def _as_flight_response(flight: MissionFlight, mission: Mission) -> FlightRespon
             "landing_target_hub_id": flight.landing_target_hub_id,
             "started_at": clock.as_utc(flight.started_at),
             "delivered_at": clock.as_utc(flight.delivered_at) if flight.delivered_at else None,
+            "recalled_at": clock.as_utc(flight.recalled_at) if flight.recalled_at else None,
             "updated_at": clock.as_utc(flight.updated_at),
             "emergency": emergency,
         }

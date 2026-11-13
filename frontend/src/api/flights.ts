@@ -85,6 +85,9 @@ function toFlight(item: unknown, serverTimeMs: number): Flight {
   ) {
     invalid(`bad delivered_at for ${id}`)
   }
+  if (raw.recalled_at !== null && raw.recalled_at !== undefined && !isTimestamp(raw.recalled_at)) {
+    invalid(`bad recalled_at for ${id}`)
+  }
 
   let target: Flight['target'] = null
   if (raw.target !== null && raw.target !== undefined) {
@@ -113,6 +116,7 @@ function toFlight(item: unknown, serverTimeMs: number): Flight {
     landingTargetHubId: raw.landing_target_hub_id as string,
     startedAt: raw.started_at,
     deliveredAt: (raw.delivered_at as string | null | undefined) ?? null,
+    recalledAt: (raw.recalled_at as string | null | undefined) ?? null,
     updatedAt: raw.updated_at,
     snapshotAgeS: Math.max((serverTimeMs - Date.parse(raw.updated_at)) / 1000, 0),
     emergency: toEmergency(raw.emergency, id),

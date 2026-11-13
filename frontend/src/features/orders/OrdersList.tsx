@@ -73,7 +73,13 @@ export function OrdersList({
                 >
                   <span className="flex items-center justify-between gap-3">
                     <span className="font-mono">{order.id}</span>
-                    <span className="text-fg-muted">
+                    <span
+                      className={
+                        order.status === 'CANCELLED'
+                          ? 'font-medium text-status-critical'
+                          : 'text-fg-muted'
+                      }
+                    >
                       {ORDER_STATUS_DISPLAY[order.status].label} · {order.packageWeightKg} kg
                     </span>
                   </span>

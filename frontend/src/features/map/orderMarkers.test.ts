@@ -19,6 +19,7 @@ function order(id: string, coordinates: [number, number]): Order {
     packageWeightKg: 1.5,
     status: 'READY_FOR_PICKUP',
     deliveredAt: null,
+    cancelledAt: null,
     createdAt: '2026-11-11T21:53:08Z',
     updatedAt: '2026-11-11T21:53:08Z',
   }

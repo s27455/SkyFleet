@@ -39,7 +39,12 @@ function Bar({ value, label }: { value: number; label: string }) {
 
 /** The backend-reported flight of a drone: phase, progress, battery and the Hub it is heading to. */
 export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps) {
-  const phase = FLIGHT_PHASE_DISPLAY[flight.phase]
+  const recalled = flight.recalledAt !== null
+  // A recall is a return like any other to the flight model, so say so in words.
+  const phase =
+    recalled && flight.phase !== 'LANDED' && flight.phase !== 'EMERGENCY'
+      ? { tone: 'warning' as const, label: 'Recalled: returning with the parcel' }
+      : FLIGHT_PHASE_DISPLAY[flight.phase]
   const hubName = (id: string) => hubs.find((hub) => hub.id === id)?.name ?? id
   const diverted = flight.landingTargetHubId !== flight.plannedReturnHubId
   const emergency = flight.emergency
@@ -76,7 +81,12 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
           </Row>
         )}
         <Row label="Planned return Hub">{hubName(flight.plannedReturnHubId)}</Row>
-        {diverted && !emergency && (
+        {recalled && !emergency && (
+          <Row label="Recalled">
+            <span>Returning with the parcel to {hubName(flight.landingTargetHubId)}</span>
+          </Row>
+        )}
+        {diverted && !recalled && !emergency && (
           <Row label="Now heading to">{hubName(flight.landingTargetHubId)}</Row>
         )}
       </dl>

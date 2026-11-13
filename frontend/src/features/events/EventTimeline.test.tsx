@@ -91,3 +91,21 @@ describe('EventTimeline', () => {
     expect(await screen.findByText(/Activity unavailable/)).toBeInTheDocument()
   })
 })
+
+describe('EventTimeline refresh key', () => {
+  it('reads the events again when the key changes, without waiting for the next poll', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValue(jsonResponse([{ ...EVENT, id: 9, event_type: 'ORDER_CANCELLED' }]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { rerender } = render(<EventTimeline orderId="ORD-1" refreshKey={0} />)
+    expect(await screen.findByText('No recorded activity for this order.')).toBeInTheDocument()
+
+    rerender(<EventTimeline orderId="ORD-1" refreshKey={1} />)
+
+    expect(await screen.findByText('Order cancelled')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})

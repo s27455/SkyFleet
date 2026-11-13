@@ -1,7 +1,12 @@
 import { ORDER_MARKER_STATES, type OrderMarkerState } from './orderMarkerState'
 
 // The states an operator can meet; "other" (an unknown status) is not worth a legend row.
-const LEGEND_STATES: readonly OrderMarkerState[] = ['pending', 'in_progress', 'delivered']
+const LEGEND_STATES: readonly OrderMarkerState[] = [
+  'pending',
+  'in_progress',
+  'delivered',
+  'cancelled',
+]
 
 interface OrderMarkerLegendProps {
   /** Hidden on narrow screens while a details panel covers the bottom of the map. */

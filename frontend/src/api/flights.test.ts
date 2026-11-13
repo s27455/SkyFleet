@@ -46,10 +46,30 @@ describe('getFlights', () => {
       landingTargetHubId: 'hub-galeria-baltycka',
       startedAt: '2026-11-12T10:00:00Z',
       deliveredAt: null,
+      recalledAt: null,
       updatedAt: '2026-11-12T10:00:09Z',
       snapshotAgeS: 1, // server_time minus updated_at, both on the backend's clock
       emergency: null,
     })
+  })
+
+  it('maps the recall time of a flight whose order was cancelled in flight', async () => {
+    respondWith(
+      flightsResponse([
+        { ...OUTBOUND_FLIGHT, phase: 'RETURNING', recalled_at: '2026-11-12T10:00:08Z' },
+      ]),
+    )
+
+    const [flight] = (await getFlights()).flights
+
+    expect(flight.recalledAt).toBe('2026-11-12T10:00:08Z')
+    expect(flight.deliveredAt).toBeNull()
+  })
+
+  it('rejects a recall time without a zone', async () => {
+    respondWith(flightsResponse([{ ...OUTBOUND_FLIGHT, recalled_at: '2026-11-12T10:00:08' }]))
+
+    await expect(getFlights()).rejects.toThrow(/recalled_at/)
   })
 
   it('maps an emergency flight without a target', async () => {
