@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test/hubFixtures'
 import { ORDER_RESPONSES } from '../test/orderFixtures'
 import { ApiError } from './client'
-import { getOrders } from './orders'
+import { generateOrder, getOrders } from './orders'
 
 function stubFetch(response: () => Promise<Response>) {
   const fetchMock = vi.fn((_url: string) => response())
@@ -94,5 +94,30 @@ describe('getOrders', () => {
 
     stubFetch(() => Promise.reject(new TypeError('Failed to fetch')))
     await expect(getOrders()).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('generateOrder', () => {
+  it('posts to the generate endpoint without a body and maps the created order', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(jsonResponse({ ...ORDER_RESPONSES[0], id: 'ORD-ABC12345' }, 201)),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const order = await generateOrder()
+
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders\/generate$/)
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    expect(fetchMock.mock.calls[0][1]?.body).toBeUndefined()
+    expect(order.id).toBe('ORD-ABC12345')
+    expect(order.status).toBe('READY_FOR_PICKUP')
+  })
+
+  it('rejects an invalid answer and a server error', async () => {
+    stubFetch(() => Promise.resolve(jsonResponse({ id: 'ORD-1' }, 201)))
+    await expect(generateOrder()).rejects.toBeInstanceOf(ApiError)
+
+    stubFetch(() => Promise.resolve(jsonResponse({ detail: 'oops' }, 500)))
+    await expect(generateOrder()).rejects.toBeInstanceOf(ApiError)
   })
 })

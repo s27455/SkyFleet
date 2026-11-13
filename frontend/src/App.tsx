@@ -20,6 +20,7 @@ import { DronesManager } from './features/management/DronesManager'
 import { ManagementPanel } from './features/management/ManagementPanel'
 import { OrdersManager } from './features/management/OrdersManager'
 import { useMissions } from './features/missions/useMissions'
+import { OrderSimulationPanel } from './features/orderSimulation/OrderSimulationPanel'
 import { OrderDetailPanel } from './features/orders/OrderDetailPanel'
 import { OrdersList } from './features/orders/OrdersList'
 import { useOrders } from './features/orders/useOrders'
@@ -273,15 +274,18 @@ function App() {
                 id: 'orders',
                 label: 'Orders',
                 content: (
-                  <OrdersManager
-                    orders={orders}
-                    hubs={hubs}
-                    missions={missions}
-                    onChanged={() => {
-                      refreshOrders()
-                      refreshMissions()
-                    }}
-                  />
+                  <div className="flex flex-col gap-4">
+                    <OrderSimulationPanel onGenerated={refreshOrders} />
+                    <OrdersManager
+                      orders={orders}
+                      hubs={hubs}
+                      missions={missions}
+                      onChanged={() => {
+                        refreshOrders()
+                        refreshMissions()
+                      }}
+                    />
+                  </div>
                 ),
               },
               {

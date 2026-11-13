@@ -131,6 +131,21 @@ function stubBackend(
           }),
         )
       }
+      if (url.endsWith('/api/orders/simulation/status')) {
+        return Promise.resolve(
+          jsonResponse({
+            enabled: false,
+            worker_running: true,
+            last_check_at: null,
+            last_outcome: null,
+            outstanding_orders: 3,
+            max_outstanding_orders: 20,
+          }),
+        )
+      }
+      if (url.endsWith('/api/orders/generate')) {
+        return Promise.resolve(jsonResponse({ ...ORDER_RESPONSES[0], id: 'ORD-NEW00001' }, 201))
+      }
       if (url.endsWith('/start')) return startCalls()
       if (url.endsWith('/api/orders')) return ordersCalls()
       if (url.endsWith('/api/flights')) return flightsCalls()
@@ -1127,5 +1142,26 @@ describe('App management area', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog', { name: 'Management' })).not.toBeInTheDocument()
+  })
+
+  it('shows the Order Simulation controls and refreshes the orders after Generate One Order', async () => {
+    const { ordersCalls } = stubBackend()
+    render(<App />)
+    await waitFor(() => expect(hubMarkers()).toHaveLength(4))
+    fireEvent.click(screen.getByRole('button', { name: 'Management' }))
+    const dialog = screen.getByRole('dialog', { name: 'Management' })
+
+    const panel = await within(dialog).findByRole('region', { name: 'Order simulation' })
+    expect(await within(panel).findByText('3 / 20')).toBeInTheDocument()
+    const readsBefore = ordersCalls.mock.calls.length
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Generate One Order' }))
+
+    expect(await within(panel).findByText('Created order ORD-NEW00001.')).toBeInTheDocument()
+    await waitFor(() => expect(ordersCalls.mock.calls.length).toBeGreaterThan(readsBefore))
+    const generateCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) => String(url).endsWith('/api/orders/generate'))
+    expect(generateCalls).toHaveLength(1)
   })
 })

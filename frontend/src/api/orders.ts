@@ -1,5 +1,5 @@
 import { ORDER_STATUSES, type Order, type OrderResponse } from '../types/order'
-import { ApiError, apiDelete, apiGet, apiSend } from './client'
+import { ApiError, apiDelete, apiGet, apiPost, apiSend } from './client'
 import { isFiniteNumberInRange, isNonEmptyString, isPositiveFiniteNumber } from './validation'
 
 function invalid(reason: string): never {
@@ -89,6 +89,14 @@ const toOrderBody = (input: Partial<OrderInput>) => ({
 /** Creates an order; the backend assigns the id and the READY_FOR_PICKUP status. */
 export async function createOrder(input: OrderInput): Promise<Order> {
   return toOrder(await apiSend<unknown>('POST', '/api/orders', toOrderBody(input)))
+}
+
+/**
+ * Asks the backend to generate exactly one simulated order (`POST /api/orders/generate`, no body).
+ * The route and weight are chosen by the backend; it works whatever the automatic mode is.
+ */
+export async function generateOrder(): Promise<Order> {
+  return toOrder(await apiPost<unknown>('/api/orders/generate'))
 }
 
 /** Updates only the given fields (`PATCH`); the backend rejects ineligible orders with 409. */
