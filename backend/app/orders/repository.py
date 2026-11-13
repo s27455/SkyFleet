@@ -2,11 +2,11 @@
 
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.missions.models import Mission
-from app.orders.models import DeliveryOrder
+from app.orders.models import DeliveryOrder, OrderStatus
 
 
 def list_orders(session: Session) -> Sequence[DeliveryOrder]:
@@ -34,3 +34,16 @@ def has_missions(session: Session, order_id: str) -> bool:
     """Whether any mission, in any status, references the order."""
     statement = select(Mission.id).where(Mission.order_id == order_id).limit(1)
     return session.scalars(statement).first() is not None
+
+
+def count_ready_orders(session: Session) -> int:
+    """Outstanding orders: every `READY_FOR_PICKUP` order, however it was created.
+
+    An order stays `READY_FOR_PICKUP` while its mission is only ASSIGNED, until takeoff.
+    """
+    statement = (
+        select(func.count())
+        .select_from(DeliveryOrder)
+        .where(DeliveryOrder.status == OrderStatus.READY_FOR_PICKUP.value)
+    )
+    return session.scalar(statement) or 0

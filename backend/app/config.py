@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     # Seconds between automatic-dispatch passes in the worker (only used while the mode is ON).
     dispatch_auto_interval_seconds: float = Field(default=3.0, gt=0)
 
+    # Automatic order generation (Feature 015B), used only while Order Simulation is ON: a random
+    # pause between the min and max seconds before each new order, and a cap on outstanding
+    # (READY_FOR_PICKUP) orders above which generation pauses.
+    order_sim_min_interval_seconds: float = Field(default=15.0, gt=0)
+    order_sim_max_interval_seconds: float = Field(default=30.0, gt=0)
+    order_sim_max_outstanding_orders: int = Field(default=20, ge=1)
+
     # Mission planning (simulation assumptions, not certified performance). Extra energy per km
     # when carrying the full rated payload, as a fraction of the empty rate (0.5 = +50%).
     mission_payload_energy_factor: float = Field(default=0.5, ge=0)
@@ -64,6 +71,10 @@ class Settings(BaseSettings):
             raise ValueError("SIM_DELIVERY_DWELL_SECONDS must be below SIM_FLIGHT_MIN_SECONDS")
         if self.sim_landing_approach_m <= self.hub_dock_proximity_m:
             raise ValueError("SIM_LANDING_APPROACH_M must exceed HUB_DOCK_PROXIMITY_M")
+        if self.order_sim_max_interval_seconds < self.order_sim_min_interval_seconds:
+            raise ValueError(
+                "ORDER_SIM_MAX_INTERVAL_SECONDS must not be below ORDER_SIM_MIN_INTERVAL_SECONDS"
+            )
         return self
 
     @field_validator("cors_origins", mode="before")

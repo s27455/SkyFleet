@@ -9,7 +9,7 @@ future Mission entity. Destination coordinates are simulation inputs, not verifi
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -75,3 +75,23 @@ class DeliveryOrder(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utc_now, server_default=func.now(), onupdate=_utc_now
     )
+
+
+ORDER_SIMULATION = "order-simulation"
+
+
+class OrderSimulationState(Base):
+    """Persisted Order Simulation mode (Feature 015B), shared by the API (toggle) and the worker.
+
+    The single row `order-simulation`; a missing row means OFF. It is independent of the Automatic
+    Dispatch mode and is reset to OFF whenever the simulation worker starts.
+    """
+
+    __tablename__ = "order_simulation_state"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # The time and short summary of the last generation attempt, not a log.
+    last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_outcome: Mapped[str | None] = mapped_column(String(255), default=None)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

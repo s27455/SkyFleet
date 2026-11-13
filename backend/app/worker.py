@@ -9,6 +9,10 @@ The worker also owns the automatic dispatch loop (Feature 014C): it resets the m
 starts, and while the operator has switched it ON it runs a dispatch pass every
 `DISPATCH_AUTO_INTERVAL_SECONDS`. API and browser are not involved in dispatching. Each tick it
 also charges docked drones below 100% (Feature 014D), whatever the dispatch mode is.
+
+It owns the automatic order generation loop too (Feature 015B), switched by its own Order Simulation
+mode: reset to OFF at startup, and while ON one order is created after each random pause. It is
+independent of the dispatch mode and of charging and flights.
 """
 
 import logging
@@ -19,6 +23,7 @@ from sqlalchemy.orm import sessionmaker
 from app.config import Settings, get_settings
 from app.db.session import get_engine
 from app.dispatch import auto
+from app.orders import simulation as order_simulation
 from app.simulation import clock, engine
 from app.simulation.charging import ChargingState, charge_step
 
@@ -36,6 +41,8 @@ def run_forever(settings: Settings) -> None:
     charging = ChargingState()
     mode_reset = False  # no automatic dispatch until the mode has been reset to OFF
     next_dispatch_at = 0.0
+    orders_reset = False  # no order generation until the mode has been reset to OFF
+    order_schedule = order_simulation.GenerationSchedule(settings)
     while True:
         tick_number += 1
         run_tick(tick_number)
@@ -60,6 +67,17 @@ def run_forever(settings: Settings) -> None:
                 auto.run_dispatch_pass(factory, settings, clock.utcnow())
         except Exception:  # the dispatcher must never take the worker down
             logger.exception("Automatic dispatch pass failed")
+
+        try:  # automatic order generation: its own mode, schedule and failure handling
+            if not orders_reset:
+                with factory() as session:
+                    order_simulation.reset_to_off(session, clock.utcnow())
+                orders_reset = True
+                logger.info("Order simulation is OFF")
+            elif order_schedule.poll(order_simulation.is_enabled(factory), time.monotonic()):
+                order_simulation.run_generation_step(factory, settings, clock.utcnow())
+        except Exception:  # order generation must never take the worker down
+            logger.exception("Order generation step failed")
         time.sleep(settings.sim_tick_seconds)
 
 

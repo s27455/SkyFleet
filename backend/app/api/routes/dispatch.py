@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.errors import worker_unavailable
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
 from app.dispatch import auto, service
@@ -22,19 +23,6 @@ from app.simulation import service as simulation_service
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
-
-
-def _worker_unavailable(error: simulation_service.WorkerUnavailableError) -> HTTPException:
-    last = error.last_heartbeat_at
-    return HTTPException(
-        status_code=503,
-        detail={
-            "code": "SIMULATION_WORKER_UNAVAILABLE",
-            "message": str(error),
-            "last_heartbeat_at": last.isoformat() if last else None,
-            "max_age_seconds": error.max_age_seconds,
-        },
-    )
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)
@@ -95,7 +83,7 @@ def execute_dispatch(
             },
         ) from error
     except simulation_service.WorkerUnavailableError as error:
-        raise _worker_unavailable(error) from error
+        raise worker_unavailable(error) from error
     except service.DispatchStartFailedError as error:
         raise HTTPException(
             status_code=409,
@@ -121,7 +109,7 @@ def enable_auto(session: SessionDep, settings: SettingsDep) -> AutoDispatchStatu
     try:
         return auto.enable(session, clock.utcnow(), settings)
     except simulation_service.WorkerUnavailableError as error:
-        raise _worker_unavailable(error) from error
+        raise worker_unavailable(error) from error
 
 
 @router.post("/auto/disable", response_model=AutoDispatchStatus)

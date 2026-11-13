@@ -57,3 +57,17 @@ class OrderUpdateRequest(BaseModel):
         if any(getattr(self, name) is None for name in self.model_fields_set):
             raise ValueError("Fields cannot be null")
         return self
+
+
+class OrderSimulationStatus(BaseModel):
+    """What the server is actually doing, never a client-side assumption."""
+
+    # True only while the mode is ON and the simulation worker (the loop's owner) is alive.
+    enabled: bool
+    worker_running: bool
+    # The last generation attempt and a short summary of it (an order created, or why not).
+    last_check_at: datetime | None
+    last_outcome: str | None
+    # Every READY_FOR_PICKUP order counts; generation pauses at the limit.
+    outstanding_orders: int
+    max_outstanding_orders: int
