@@ -53,6 +53,16 @@ def test_a_cancelled_order_is_visible_for_the_window_after_cancellation() -> Non
     assert is_order_active(cancelled, None, NOW, WINDOW, cancelled_at=None) is False
 
 
+def test_an_interrupted_undelivered_order_is_visible_for_the_window_after_the_landing() -> None:
+    status = OrderStatus.OUT_FOR_DELIVERY.value
+    inside = NOW - timedelta(seconds=WINDOW - 1)
+    edge = NOW - timedelta(seconds=WINDOW)
+
+    assert is_order_active(status, None, NOW, WINDOW, interrupted_at=inside) is True
+    assert is_order_active(status, None, NOW, WINDOW, interrupted_at=edge) is False
+    assert is_order_active(status, None, NOW, WINDOW, interrupted_at=None) is True  # still flying
+
+
 def _prepare(session: Session) -> dict[str, DeliveryOrder]:
     """Seeded orders; four are made DELIVERED at 119 s, 120 s, 121 s and unknown time ago."""
     seed_hubs(session)

@@ -64,6 +64,11 @@ export function OrderDetailPanel({
   }, [onClose])
 
   const status = ORDER_STATUS_DISPLAY[order.status]
+  // A drone failure (Feature 018C) interrupts an undelivered delivery without changing the order
+  // status, so the interruption comes from the order's flight.
+  const failed = flight?.failedAt != null
+  const interrupted = failed && flight?.deliveredAt === null && order.status === 'OUT_FOR_DELIVERY'
+  const grounded = flight?.phase === 'EMERGENCY'
   const [longitude, latitude] = order.coordinates
 
   return (
@@ -102,7 +107,7 @@ export function OrderDetailPanel({
         {order.cancelledAt && <Row label="Cancelled">{formatUtcTimestamp(order.cancelledAt)}</Row>}
       </dl>
 
-      {onCancelled && <CancelOrderAction order={order} onCancelled={onCancelled} />}
+      {onCancelled && !interrupted && <CancelOrderAction order={order} onCancelled={onCancelled} />}
 
       {order.status === 'CANCELLED' && (
         <p
@@ -111,13 +116,31 @@ export function OrderDetailPanel({
         >
           This order was cancelled
           {order.cancelledAt ? ` at ${formatUtcTimestamp(order.cancelledAt)}` : ''}.
-          {flight?.recalledAt
-            ? ' The drone was recalled and is returning with the parcel.'
-            : ' No flight is active for it.'}
+          {failed
+            ? ' The recalled drone then failed; the cancellation did not repair it.'
+            : flight?.recalledAt
+              ? ' The drone was recalled and is returning with the parcel.'
+              : ' No flight is active for it.'}
         </p>
       )}
-      {order.status === 'CANCELLED' && flight?.recalledAt && (
+      {order.status === 'CANCELLED' && (flight?.recalledAt || failed) && flight && (
         <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
+      )}
+      {interrupted && flight && (
+        <>
+          <p
+            role="status"
+            className="mt-3 rounded border border-status-critical p-2 text-xs text-status-critical"
+          >
+            Delivery interrupted by drone failure. Drone {flight.droneId}{' '}
+            {grounded ? 'is grounded, requiring service' : 'is making an emergency landing'}; the
+            parcel was not delivered.
+          </p>
+          <p className="mt-2 text-xs text-fg-muted">
+            Cancelling is not available for this order: it would not repair or recall the drone.
+          </p>
+          <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
+        </>
       )}
 
       {assignedMission && onStartMission && (

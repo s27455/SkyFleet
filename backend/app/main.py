@@ -10,6 +10,7 @@ from app.api.routes import (
     flights,
     health,
     hubs,
+    incidents,
     missions,
     order_simulation,
     orders,
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(flights.router, prefix="/api")
     app.include_router(dispatch.router, prefix="/api")
     app.include_router(events.router, prefix="/api")
+    app.include_router(incidents.router, prefix="/api")
     return app
 
 

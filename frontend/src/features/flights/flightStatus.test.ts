@@ -19,6 +19,7 @@ const flight = (overrides: Partial<Flight> = {}): Flight => ({
   startedAt: '2026-11-12T10:00:00Z',
   deliveredAt: null,
   recalledAt: null,
+  failedAt: null,
   updatedAt: '2026-11-12T10:00:01Z',
   snapshotAgeS: 0,
   emergency: null,

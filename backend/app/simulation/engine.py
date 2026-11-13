@@ -149,6 +149,12 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                 loaded_rate=loaded,
             )
 
+        # A failed flight (Feature 018C) only flies its emergency approach and is then grounded.
+        if flight.failed_at is not None:
+            return _advance_failed(
+                session, flight, mission, drone, legs, started, elapsed, now, state_for
+            )
+
         # A recalled flight is carrying its parcel back: no delivery, and the loaded rate applies.
         recalled = flight.recalled_at is not None
         return_rate = loaded if recalled else empty
@@ -226,6 +232,51 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
     except BaseException:
         session.rollback()
         raise
+
+
+def _advance_failed(
+    session: Session,
+    flight: MissionFlight,
+    mission: Mission,
+    drone: Drone,
+    legs: list[Leg],
+    started: datetime,
+    elapsed: float,
+    now: datetime,
+    state_for: StateFor,
+) -> bool:
+    """Feature 018C: fly the emergency approach, then ground the drone where it lands.
+
+    No delivery milestone and no landing decision apply: the original mission never resumes. At
+    the end of the approach the flight becomes EMERGENCY (reason DRONE_FAILURE), the mission
+    EMERGENCY and the drone MAINTENANCE at the landing point (never counted as docked). The order
+    is left as it is: an undelivered order is not DELIVERED, a delivered or cancelled one stays so.
+    Idempotent: a finished flight is terminal and the engine no longer selects it.
+    """
+    end_s = legs[-1].end_s
+    if elapsed < end_s:
+        write_snapshot(flight, drone, state_for(elapsed), now)
+        session.commit()
+        return False
+    landing = state_for(end_s)
+    point = legs[-1].target
+    flight.phase = FlightPhase.EMERGENCY.value
+    flight.emergency_reason = EmergencyReason.DRONE_FAILURE.value
+    # The real UTC time the grounding is committed, not the scheduled instant: the 120 s window in
+    # which an interrupted delivery stays in the active views starts when it really ends.
+    flight.emergency_at = now
+    flight.ended_at = now
+    flight.battery_pct = landing.battery_pct
+    flight.longitude, flight.latitude = point
+    flight.progress = 1.0
+    flight.target_longitude = flight.target_latitude = flight.target_eta_s = None
+    flight.updated_at = now
+    drone.status = DroneStatus.MAINTENANCE.value
+    drone.longitude, drone.latitude = point
+    drone.battery_pct = rounded_pct(landing.battery_pct)
+    mission.status = MissionStatus.EMERGENCY.value
+    session.commit()
+    return False
 
 
 def write_snapshot(flight: MissionFlight, drone: Drone, state: FlightState, now: datetime) -> None:

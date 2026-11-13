@@ -4,6 +4,7 @@ export const FLIGHT_PHASES = [
   'RETURNING',
   'DIVERTING',
   'LANDED',
+  'EMERGENCY_APPROACH',
   'EMERGENCY',
 ] as const
 
@@ -13,6 +14,7 @@ export const EMERGENCY_REASONS = [
   'NO_HUB_WITH_CAPACITY',
   'BATTERY_INSUFFICIENT',
   'BATTERY_CRITICAL',
+  'DRONE_FAILURE',
 ] as const
 
 export type EmergencyReason = (typeof EMERGENCY_REASONS)[number]
@@ -36,6 +38,8 @@ export interface FlightResponse {
   delivered_at: string | null
   /** Set when the order was cancelled in flight and the drone is recalled with its parcel. */
   recalled_at: string | null
+  /** Set when a drone failure interrupted the flight (Feature 018C). */
+  failed_at: string | null
   updated_at: string
   emergency: { reason: EmergencyReason; at: string; position: [number, number] } | null
 }
@@ -77,6 +81,8 @@ export interface Flight {
   deliveredAt: string | null
   /** Set when the order was cancelled in flight: the drone returns with the parcel on board. */
   recalledAt: string | null
+  /** Set when a drone failure interrupted the flight: it flies an emergency approach and lands. */
+  failedAt: string | null
   updatedAt: string
   /** Seconds between the snapshot and the response, both on the backend's clock. */
   snapshotAgeS: number

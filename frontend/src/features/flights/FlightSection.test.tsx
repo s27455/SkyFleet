@@ -38,6 +38,7 @@ const FLIGHT: Flight = {
   startedAt: '2026-11-12T10:00:00Z',
   deliveredAt: '2026-11-12T10:00:19Z',
   recalledAt: null,
+  failedAt: null,
   updatedAt: '2026-11-12T10:00:25Z',
   snapshotAgeS: 2,
   emergency: null,
@@ -120,6 +121,48 @@ describe('FlightSection', () => {
     render(<FlightSection flight={FLIGHT} hubs={HUBS} workerStale={false} />)
 
     expect(screen.getByText('Returning to a Hub')).toBeInTheDocument()
+  })
+
+  it('shows the emergency approach of a failed drone with its landing point', () => {
+    const approaching: Flight = {
+      ...FLIGHT,
+      phase: 'EMERGENCY_APPROACH',
+      deliveredAt: null,
+      failedAt: '2026-11-12T10:00:08Z',
+      recalledAt: '2026-11-12T10:00:05Z', // failing while recalled: the failure wins
+      target: { position: [18.6012, 54.3821], etaS: 6 },
+    }
+
+    render(<FlightSection flight={approaching} hubs={HUBS} workerStale={false} />)
+
+    const section = screen.getByRole('region', { name: 'Flight' })
+    expect(section).toHaveTextContent('Emergency landing: drone failure')
+    expect(section).toHaveTextContent('Emergency landing point')
+    expect(section).toHaveTextContent('54.38210, 18.60120')
+    expect(section).toHaveTextContent('no longer follows its delivery or recall route')
+    expect(within(section).queryByText('Recalled')).not.toBeInTheDocument()
+    expect(within(section).queryByText('Planned return Hub')).not.toBeInTheDocument()
+  })
+
+  it('shows a grounded failed drone as requiring service', () => {
+    const grounded: Flight = {
+      ...FLIGHT,
+      phase: 'EMERGENCY',
+      target: null,
+      failedAt: '2026-11-12T10:00:08Z',
+      emergency: {
+        reason: 'DRONE_FAILURE',
+        at: '2026-11-12T10:00:15Z',
+        position: [18.6012, 54.3821],
+      },
+    }
+
+    render(<FlightSection flight={grounded} hubs={HUBS} workerStale={false} />)
+
+    const section = screen.getByRole('region', { name: 'Flight' })
+    expect(section).toHaveTextContent('Grounded after drone failure: requires service')
+    expect(section).toHaveTextContent('grounded, requiring service')
+    expect(section).toHaveTextContent('Its mission does not resume')
   })
 
   it('shows a simulated emergency, labelled as not a real landing site', () => {

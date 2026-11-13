@@ -36,6 +36,7 @@ def _http_error(error: service.OrderManagementError) -> HTTPException:
         cancellation.OrderNotCancellableError: "ORDER_NOT_CANCELLABLE",
         cancellation.DroneNotRecallableError: "DRONE_NOT_RECALLABLE",
         cancellation.RecallNotPossibleError: "RECALL_NOT_POSSIBLE",
+        cancellation.DroneFailedError: "DRONE_FAILED",
     }
     code = codes.get(type(error))
     if code is None:

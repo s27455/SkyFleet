@@ -11,6 +11,7 @@ number of seconds, scaled by route length, and positions are straight-line inter
 speeds in the drone model are not changed.
 """
 
+import math
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
@@ -25,6 +26,7 @@ class LegKind(StrEnum):
     RETURN = "RETURN"
     DIVERSION = "DIVERSION"
     RECALL = "RECALL"  # Feature 018B: back to a Hub with the parcel still on board (loaded)
+    EMERGENCY = "EMERGENCY"  # Feature 018C: the approach to the emergency landing point
 
 
 _PHASE_OF_LEG = {
@@ -34,6 +36,7 @@ _PHASE_OF_LEG = {
     LegKind.DIVERSION: FlightPhase.DIVERTING,
     # A recalled drone is returning to a Hub; `MissionFlight.recalled_at` tells it apart.
     LegKind.RECALL: FlightPhase.RETURNING,
+    LegKind.EMERGENCY: FlightPhase.EMERGENCY_APPROACH,
 }
 
 
@@ -275,3 +278,56 @@ def recall_legs(
     km = distance_km(point, hub)
     recall = Leg(LegKind.RECALL, at_s, km * pace_s_per_km, point, hub, km, loaded=True)
     return [*stop_legs(legs, at_s, point), recall]
+
+
+METRES_PER_DEGREE_LATITUDE = 111_320.0
+
+
+def emergency_landing_point(
+    legs: list[Leg], at_s: float, position: Point, distance_m: float
+) -> Point:
+    """The simulated emergency landing point: `distance_m` along the current heading.
+
+    A deterministic MVP rule (no terrain, obstacle or airspace model). The heading is that of the
+    leg being flown at `at_s`; while the drone is stationary (the delivery stop) it is the heading
+    of the last leg that moved. With no moving leg at all the point lies due north. The drone flies
+    the full distance even past the leg's end: a failure does not follow the plan.
+    """
+    heading: tuple[float, float] | None = None
+    for leg in legs:
+        if leg.start_s > at_s and heading is not None:
+            break
+        if leg.distance_km > 0:
+            heading = (leg.target[0] - leg.origin[0], leg.target[1] - leg.origin[1])
+    latitude_scale = math.cos(math.radians(position[1]))
+    # Heading in metres (east, north); longitude degrees shrink with the cosine of the latitude.
+    east = heading[0] * latitude_scale if heading else 0.0
+    north = heading[1] if heading else 1.0
+    norm = math.hypot(east, north)
+    if norm == 0:
+        east, north, norm = 0.0, 1.0, 1.0
+    east, north = east / norm, north / norm
+    return (
+        position[0] + east * distance_m / (METRES_PER_DEGREE_LATITUDE * latitude_scale),
+        position[1] + north * distance_m / METRES_PER_DEGREE_LATITUDE,
+    )
+
+
+def emergency_legs(
+    legs: list[Leg],
+    at_s: float,
+    position: Point,
+    landing: Point,
+    pace_s_per_km: float,
+    *,
+    loaded: bool,
+) -> list[Leg]:
+    """The schedule after a failure at `at_s`: the leg flown is cut at `position` and one EMERGENCY
+    leg to the landing point follows, at the original pace. `loaded` is true while the parcel is
+    still on board (it was not delivered).
+    """
+    km = distance_km(position, landing)
+    approach = Leg(
+        LegKind.EMERGENCY, at_s, km * pace_s_per_km, position, landing, km, loaded=loaded
+    )
+    return [*stop_legs(legs, at_s, position), approach]

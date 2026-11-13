@@ -3,12 +3,13 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session
 
 from app.missions.models import Mission
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.visibility import visibility_cutoff
+from app.simulation.models import FlightPhase, MissionFlight
 
 
 def list_orders(session: Session) -> Sequence[DeliveryOrder]:
@@ -27,10 +28,20 @@ def list_active_orders(
     SQL mirrors `visibility.is_order_active`; both are tested against the same boundaries.
     """
     cutoff = visibility_cutoff(now, window_seconds)
+    # A drone failure (Feature 018C) ends the delivery without changing the order status: the
+    # order leaves the active views the window after the emergency landing completed.
+    interrupted_expired = exists().where(
+        Mission.order_id == DeliveryOrder.id,
+        MissionFlight.mission_id == Mission.id,
+        MissionFlight.failed_at.is_not(None),
+        MissionFlight.phase == FlightPhase.EMERGENCY.value,
+        MissionFlight.ended_at <= cutoff,
+    )
     statement = (
         select(DeliveryOrder)
         .where(
             DeliveryOrder.status.not_in([OrderStatus.DELIVERED.value, OrderStatus.CANCELLED.value])
+            & ~interrupted_expired
             | (
                 (DeliveryOrder.status == OrderStatus.DELIVERED.value)
                 & (DeliveryOrder.delivered_at > cutoff)

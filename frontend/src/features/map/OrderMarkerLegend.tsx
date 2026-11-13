@@ -6,15 +6,21 @@ const LEGEND_STATES: readonly OrderMarkerState[] = [
   'in_progress',
   'delivered',
   'cancelled',
+  'interrupted',
 ]
 
 interface OrderMarkerLegendProps {
+  /** Adds the emergency landing marker to the key while one is on the map (Feature 018C). */
+  showEmergency?: boolean
   /** Hidden on narrow screens while a details panel covers the bottom of the map. */
   hideOnNarrow?: boolean
 }
 
 /** Compact key for the delivery-address diamonds: a swatch and a word per state. */
-export function OrderMarkerLegend({ hideOnNarrow = false }: OrderMarkerLegendProps) {
+export function OrderMarkerLegend({
+  hideOnNarrow = false,
+  showEmergency = false,
+}: OrderMarkerLegendProps) {
   return (
     <section
       aria-label="Delivery marker legend"
@@ -33,6 +39,17 @@ export function OrderMarkerLegend({ hideOnNarrow = false }: OrderMarkerLegendPro
             {ORDER_MARKER_STATES[state].label}
           </li>
         ))}
+        {showEmergency && (
+          <li className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="flex size-3 items-center justify-center rounded-full border border-fg bg-status-critical text-[8px] leading-none font-bold text-canvas"
+            >
+              ✕
+            </span>
+            Emergency landing
+          </li>
+        )}
       </ul>
     </section>
   )

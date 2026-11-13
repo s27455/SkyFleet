@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react'
 
+import { isNoEligibleTarget, triggerDroneFailure } from '../../api/incidents'
 import { cancelOrder } from '../../api/orders'
 import type { Order } from '../../types/order'
 import { useAction } from '../management/useAction'
@@ -46,20 +47,16 @@ const CANCEL_ICON = (
   </Icon>
 )
 
-/** The three future incident scenarios. None is implemented yet, so each control is disabled. */
+const DRONE_FAILURE_ICON = (
+  <Icon>
+    <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+    <path d="M12 9v4" />
+    <path d="M12 17h.01" />
+  </Icon>
+)
+
+/** The two future incident scenarios. Neither is implemented yet, so each control is disabled. */
 const SCENARIOS: Scenario[] = [
-  {
-    id: 'drone-failure',
-    label: 'Drone failure',
-    availableIn: '018C',
-    icon: (
-      <Icon>
-        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-        <path d="M12 9v4" />
-        <path d="M12 17h.01" />
-      </Icon>
-    ),
-  },
   {
     id: 'recipient-unavailable',
     label: 'Recipient unavailable',
@@ -95,20 +92,31 @@ interface SimulationEventsPanelProps {
   selectedOrder?: Order | null
   /** Called after a successful cancellation so the operational views are re-read at once. */
   onOrderCancelled?: () => void
+  /** Whether the flights show a drone a failure could interrupt (the backend decides). */
+  canFailDrone?: boolean
+  /** Called after a Drone failure request (whatever the answer) so the views are re-read. */
+  onDroneFailed?: () => void
 }
 
 /**
  * Simulation Events controls: an MVP/demo-only cluster. "Cancel order" (Feature 018B) acts on the
- * selected order after an explicit confirmation and shows what the backend answers; the other
- * three scenarios stay visible but disabled until Features 018C to 018E implement real backend
+ * selected order after an explicit confirmation and shows what the backend answers. "Drone failure"
+ * (Feature 018C) asks the backend to fail one eligible flying drone; the backend chooses it. The
+ * other two scenarios stay visible but disabled until Features 018D and 018E implement real backend
  * behavior. The Random incidents switch is disabled for the same reason and does not claim that
  * incidents are being produced.
  */
 export function SimulationEventsPanel({
   selectedOrder = null,
   onOrderCancelled,
+  canFailDrone = false,
+  onDroneFailed,
 }: SimulationEventsPanelProps) {
   const cancellation = useAction()
+  const failure = useAction()
+  const [failureNote, setFailureNote] = useState<{ kind: 'done' | 'none'; text: string } | null>(
+    null,
+  )
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
   const [cancelled, setCancelled] = useState<string | null>(null)
 
@@ -119,6 +127,27 @@ export function SimulationEventsPanel({
   if (selectedOrder && eligible) hint = `Cancel ${selectedOrder.id}`
   if (selectedOrder && !eligible) {
     hint = `Not available: ${ORDER_STATUS_DISPLAY[selectedOrder.status].label.toLowerCase()}`
+  }
+
+  const failDrone = async () => {
+    setFailureNote(null)
+    await failure.run(async () => {
+      try {
+        const result = await triggerDroneFailure()
+        setFailureNote({
+          kind: 'done',
+          text: `Drone ${result.droneId} failed: emergency landing in progress.`,
+        })
+      } catch (error) {
+        // Nothing eligible is a clear answer, not a fault: no incident was created.
+        if (!isNoEligibleTarget(error)) throw error
+        setFailureNote({
+          kind: 'none',
+          text: 'No drone is flying a mission that a failure could interrupt.',
+        })
+      }
+    })
+    onDroneFailed?.() // the state may have changed whatever the answer was
   }
 
   const confirm = async () => {
@@ -157,6 +186,25 @@ export function SimulationEventsPanel({
             <span className="text-[11px] text-fg-muted">{hint}</span>
           </button>
         </li>
+        <li>
+          <button
+            type="button"
+            disabled={!canFailDrone || failure.busy}
+            title={canFailDrone ? 'Fail one flying drone' : 'No drone is flying'}
+            onClick={failDrone}
+            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+          >
+            {DRONE_FAILURE_ICON}
+            <span>Drone failure</span>
+            <span className="text-[11px] text-fg-muted">
+              {failure.busy
+                ? 'Triggering…'
+                : canFailDrone
+                  ? 'Fail a flying drone'
+                  : 'No drone is flying'}
+            </span>
+          </button>
+        </li>
         {SCENARIOS.map((scenario) => (
           <li key={scenario.id}>
             <button
@@ -179,6 +227,16 @@ export function SimulationEventsPanel({
           onConfirm={confirm}
           onKeep={() => setConfirmingId(null)}
         />
+      )}
+      {failure.error && (
+        <p role="alert" className="mt-2 text-xs text-status-critical">
+          {failure.error}
+        </p>
+      )}
+      {failureNote && (
+        <p role="status" className="mt-2 text-xs text-fg-muted">
+          {failureNote.text}
+        </p>
       )}
       {cancellation.error && (
         <p role="alert" className="mt-2 text-xs text-status-critical">

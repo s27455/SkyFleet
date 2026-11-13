@@ -125,6 +125,7 @@ describe('OrderDetailPanel', () => {
       startedAt: '2026-11-13T11:59:50Z',
       deliveredAt: null,
       recalledAt: '2026-11-13T12:00:00Z',
+      failedAt: null,
       updatedAt: '2026-11-13T12:00:02Z',
       snapshotAgeS: 1,
       emergency: null,
@@ -149,6 +150,65 @@ describe('OrderDetailPanel', () => {
     expect(section).toHaveTextContent('Recalled: returning with the parcel')
     expect(section).toHaveTextContent('Returning with the parcel to Forum Gdańsk')
     expect(section).toHaveTextContent('MIS-AAAA0001')
+  })
+
+  it('says the delivery was interrupted by a drone failure and offers no cancellation', () => {
+    const interrupted: Order = { ...ORDER, status: 'OUT_FOR_DELIVERY' }
+    const flight: Flight = {
+      missionId: 'MIS-AAAA0001',
+      orderId: 'ORD-004',
+      droneId: 'DRN-010',
+      missionStatus: 'EMERGENCY',
+      phase: 'EMERGENCY',
+      progress: 1,
+      position: [18.6, 54.37],
+      batteryPct: 90,
+      target: null,
+      originHubId: 'hub-forum-gdansk',
+      plannedReturnHubId: 'hub-forum-gdansk',
+      landingTargetHubId: 'hub-forum-gdansk',
+      startedAt: '2026-11-13T11:59:50Z',
+      deliveredAt: null,
+      recalledAt: null,
+      failedAt: '2026-11-13T12:00:00Z',
+      updatedAt: '2026-11-13T12:00:10Z',
+      snapshotAgeS: 1,
+      emergency: { reason: 'DRONE_FAILURE', at: '2026-11-13T12:00:09Z', position: [18.6, 54.37] },
+    }
+
+    render(
+      <OrderDetailPanel
+        order={interrupted}
+        hub={HUB}
+        hubs={[HUB]}
+        flight={flight}
+        markerSpread={false}
+        onClose={() => {}}
+        onCancelled={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/Delivery interrupted by drone failure/)).toHaveTextContent(
+      'DRN-010 is grounded, requiring service; the parcel was not delivered',
+    )
+    expect(screen.getByText(/Cancelling is not available for this order/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Flight' })).toHaveTextContent('requires service')
+  })
+
+  it('still offers Cancel order for an order whose drone has not failed', () => {
+    render(
+      <OrderDetailPanel
+        order={{ ...ORDER, status: 'OUT_FOR_DELIVERY' }}
+        hub={HUB}
+        markerSpread={false}
+        onClose={() => {}}
+        onCancelled={() => {}}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Cancel order' })).toBeInTheDocument()
+    expect(screen.queryByText(/Delivery interrupted/)).not.toBeInTheDocument()
   })
 
   it('falls back to the Hub id when the Hub is not available', () => {

@@ -25,11 +25,10 @@ const cancelButton = () => screen.getByRole('button', { name: /Cancel order/ })
 const confirmation = () => screen.getByRole('group', { name: 'Confirm cancellation' })
 
 describe('SimulationEventsPanel', () => {
-  it('shows the three future scenarios as named, disabled controls with their feature', () => {
+  it('shows the two future scenarios as named, disabled controls with their feature', () => {
     render(<SimulationEventsPanel />)
 
     const expected: [string, string][] = [
-      ['Drone failure', '018C'],
       ['Recipient unavailable', '018D'],
       ['LPR transit', '018E'],
     ]
@@ -92,6 +91,95 @@ describe('SimulationEventsPanel', () => {
     rerender(<SimulationEventsPanel selectedOrder={order('READY_FOR_PICKUP')} />)
     fireEvent.click(cancelButton())
     expect(confirmation()).not.toHaveTextContent('reachable Hub')
+  })
+
+  it('keeps Drone failure disabled, and calls nothing, while no drone is flying', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<SimulationEventsPanel />)
+
+    const button = screen.getByRole('button', { name: /Drone failure/ })
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('No drone is flying')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('fails one drone on click, shows pending and the result, and refreshes the views', async () => {
+    let release: (response: Response) => void = () => {}
+    const fetchMock = vi.fn(
+      (_url: string, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          release = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const onDroneFailed = vi.fn()
+    render(<SimulationEventsPanel canFailDrone onDroneFailed={onDroneFailed} />)
+
+    const button = screen.getByRole('button', { name: /Drone failure/ })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+    fireEvent.click(button) // a second click while pending must not send a second request
+
+    expect(await screen.findByText('Triggering…')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/incidents\/drone-failure$/)
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+
+    release(
+      jsonResponse({
+        drone_id: 'DRN-010',
+        mission_id: 'MIS-AAAA0001',
+        order_id: 'ORD-001',
+        stage: 'BEFORE_DELIVERY',
+        landing_position: [18.6, 54.38],
+      }),
+    )
+
+    expect(
+      await screen.findByText('Drone DRN-010 failed: emergency landing in progress.'),
+    ).toBeInTheDocument()
+    expect(onDroneFailed).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('shows "no eligible target" as information, not as an error or a success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse(
+            { detail: { code: 'NO_ELIGIBLE_TARGET', message: 'No drone is flying' } },
+            409,
+          ),
+        ),
+      ),
+    )
+    const onDroneFailed = vi.fn()
+    render(<SimulationEventsPanel canFailDrone onDroneFailed={onDroneFailed} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Drone failure/ }))
+
+    expect(
+      await screen.findByText('No drone is flying a mission that a failure could interrupt.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/failed: emergency landing/)).not.toBeInTheDocument()
+    await waitFor(() => expect(onDroneFailed).toHaveBeenCalledTimes(1))
+  })
+
+  it('shows any other failure of the request as an error, never as a success', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+    )
+    render(<SimulationEventsPanel canFailDrone />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Drone failure/ }))
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByText(/failed: emergency landing/)).not.toBeInTheDocument()
   })
 
   it('keeps the order when the operator backs out', () => {

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     sim_landing_approach_m: float = Field(default=60.0, gt=0)
     # A diversion may use the battery reserve but must arrive with at least this much battery.
     sim_critical_battery_pct: float = Field(default=5.0, ge=0, le=100)
+    # Feature 018C: a failed drone flies this far (metres) along its current heading to a simulated
+    # emergency landing point. A deterministic MVP rule, not a terrain or safety assessment.
+    sim_emergency_landing_distance_m: float = Field(default=250.0, gt=0)
     # A mission can only be started if the worker's last heartbeat is at most this old.
     sim_heartbeat_stale_seconds: float = Field(default=10.0, gt=0)
 

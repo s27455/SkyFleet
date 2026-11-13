@@ -15,13 +15,17 @@ export function computeOrderOffsets(
 }
 
 /** The status text comes first and the marker state follows, so the colour is also in words. */
-export function orderMarkerLabel(order: Order) {
-  const state = ORDER_MARKER_STATES[orderMarkerState(order.status)].label
+export function orderMarkerLabel(order: Order, interrupted = false) {
+  const state = ORDER_MARKER_STATES[orderMarkerState(order.status, interrupted)].label
   // An unknown status (a newer backend) is shown as the raw text instead of failing.
   const statusText = Object.hasOwn(ORDER_STATUS_DISPLAY, order.status)
     ? ORDER_STATUS_DISPLAY[order.status].label
     : order.status
-  return `Order ${order.id} destination, ${statusText} (${state}), ${order.packageWeightKg} kg`
+  const reason =
+    interrupted && order.status === 'OUT_FOR_DELIVERY'
+      ? ', delivery interrupted by drone failure'
+      : ''
+  return `Order ${order.id} destination, ${statusText} (${state})${reason}, ${order.packageWeightKg} kg`
 }
 
 // The button is a transparent 24px target with a visible focus ring; the diamond inside is the mark.
@@ -57,13 +61,13 @@ export function createOrderMarkerElement(order: Order, onClick: () => void) {
  * accessible name. The element itself is kept, so keyboard focus and the click handler survive a
  * status change.
  */
-export function updateOrderMarkerElement(element: HTMLElement, order: Order) {
-  const state = orderMarkerState(order.status)
+export function updateOrderMarkerElement(element: HTMLElement, order: Order, interrupted = false) {
+  const state = orderMarkerState(order.status, interrupted)
   const diamond = element.querySelector<HTMLElement>('[data-order-diamond]')
   diamond?.classList.remove(...ALL_STATE_CLASSES)
   diamond?.classList.add(...ORDER_MARKER_STATES[state].diamondClasses)
   element.dataset.orderState = state
-  element.setAttribute('aria-label', orderMarkerLabel(order))
+  element.setAttribute('aria-label', orderMarkerLabel(order, interrupted))
 }
 
 /** Updates the existing element in place so keyboard focus survives a selection change. */

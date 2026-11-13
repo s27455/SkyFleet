@@ -44,6 +44,8 @@ class FlightResponse(BaseModel):
     delivered_at: datetime | None
     # Set when the order was cancelled in flight: the drone returns to a Hub with the parcel.
     recalled_at: datetime | None
+    # Set when a drone failure was triggered: the drone makes an emergency landing (Feature 018C).
+    failed_at: datetime | None
     updated_at: datetime
     emergency: FlightEmergency | None
 
@@ -57,3 +59,13 @@ class FlightsResponse(BaseModel):
     worker_heartbeat_at: datetime | None
     worker_stale: bool
     flights: list[FlightResponse]
+
+
+class DroneFailureResponse(BaseModel):
+    """What a manual Drone failure trigger did (Feature 018C)."""
+
+    drone_id: str
+    mission_id: str
+    order_id: str
+    stage: str  # BEFORE_DELIVERY, RECALL or AFTER_DELIVERY
+    landing_position: tuple[float, float]  # [longitude, latitude], a simulated point

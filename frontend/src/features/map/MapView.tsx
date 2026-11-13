@@ -5,13 +5,16 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
 import type { Order } from '../../types/order'
+import type { EmergencyLevel, EmergencyPoint } from '../flights/emergencyPoints'
 import { type FlightVisual, interpolatePosition } from '../flights/interpolation'
 import {
   type PixelOffset,
   createDroneMarkerElement,
   droneMarkerLabel,
+  setDroneMarkerEmergency,
   setDroneMarkerSelected,
 } from './droneMarkers'
+import { createEmergencyMarkerElement } from './emergencyMarkers'
 import {
   createOrderMarkerElement,
   setOrderMarkerSelected,
@@ -36,6 +39,9 @@ const NO_HUBS: readonly Hub[] = []
 const NO_DRONES: readonly Drone[] = []
 const NO_ORDERS: readonly Order[] = []
 const NO_FLIGHTS: readonly FlightVisual[] = []
+const NO_EMERGENCY_POINTS: readonly EmergencyPoint[] = []
+const NO_DRONE_EMERGENCIES: ReadonlyMap<string, EmergencyLevel> = new Map()
+const NO_ORDER_IDS: ReadonlySet<string> = new Set()
 const NO_COUNTS: ReadonlyMap<string, number> = new Map()
 const NO_OFFSETS: ReadonlyMap<string, PixelOffset> = new Map()
 const NO_PIXEL_OFFSET: PixelOffset = [0, 0]
@@ -104,6 +110,12 @@ interface MapViewProps {
    * `animate` is set, glide toward the backend's target between snapshots.
    */
   flights?: readonly FlightVisual[]
+  /** Emergency landing points of failed drones (Feature 018C): a red marker each. */
+  emergencyPoints?: readonly EmergencyPoint[]
+  /** Failed drones by id, for the red warning on their own markers. */
+  droneEmergencies?: ReadonlyMap<string, EmergencyLevel>
+  /** Orders whose delivery was interrupted by a drone failure (their marker says so). */
+  interruptedOrderIds?: ReadonlySet<string>
 }
 
 /**
@@ -126,6 +138,9 @@ export function MapView({
   onSelectOrder,
   orderOffsets = NO_OFFSETS,
   flights = NO_FLIGHTS,
+  emergencyPoints = NO_EMERGENCY_POINTS,
+  droneEmergencies = NO_DRONE_EMERGENCIES,
+  interruptedOrderIds = NO_ORDER_IDS,
 }: MapViewProps) {
   const token = getMapboxToken()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -248,11 +263,13 @@ export function MapView({
       const element = droneElementsRef.current.get(drone.id)
       const marker = droneMarkersRef.current.get(drone.id)
       if (!element || !marker) continue
-      element.setAttribute('aria-label', droneMarkerLabel(drone))
+      const emergency = droneEmergencies.get(drone.id)
+      element.setAttribute('aria-label', droneMarkerLabel(drone, emergency))
+      setDroneMarkerEmergency(element, emergency)
       const visual = visuals.get(drone.id)
       marker.setLngLat(visual ? [...visual.motion.position] : drone.coordinates)
     }
-  }, [drones, flights, status, droneKey])
+  }, [drones, flights, droneEmergencies, status, droneKey])
 
   // Smooth motion between two snapshots: only the picture, never the mission. Each frame moves
   // the marker from the snapshot toward the backend's target, never past it; the next snapshot
@@ -346,10 +363,10 @@ export function MapView({
     for (const order of orders) {
       const element = orderElementsRef.current.get(order.id)
       if (!element) continue
-      updateOrderMarkerElement(element, order)
+      updateOrderMarkerElement(element, order, interruptedOrderIds.has(order.id))
       orderMarkersRef.current.get(order.id)?.setLngLat(order.coordinates)
     }
-  }, [orders, status, orderKey])
+  }, [orders, interruptedOrderIds, status, orderKey])
 
   // Display only: shifts the marker on screen; the marker's coordinates stay the real ones.
   useEffect(() => {
@@ -363,6 +380,31 @@ export function MapView({
       setOrderMarkerSelected(element, orderId === selectedOrderId),
     )
   }, [orders, status, selectedOrderId, orderKey])
+
+  // Emergency landing markers (Feature 018C): one per failed drone, keyed on what they show, so a
+  // new flight snapshot never rebuilds them. Selecting one selects its drone.
+  const emergencyKey = emergencyPoints
+    .map((point) => `${point.droneId}:${point.level}:${point.position.join(',')}`)
+    .join('|')
+  const emergencyPointsRef = useRef(emergencyPoints)
+  useEffect(() => {
+    emergencyPointsRef.current = emergencyPoints
+  }, [emergencyPoints])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (status !== 'ready' || !map) return
+    const markers = emergencyPointsRef.current.map((point) =>
+      new mapboxgl.Marker({
+        element: createEmergencyMarkerElement(point, () =>
+          onSelectDroneRef.current?.(point.droneId),
+        ),
+      })
+        .setLngLat([...point.position])
+        .addTo(map),
+    )
+    return () => markers.forEach((marker) => marker.remove())
+  }, [emergencyKey, status])
 
   useEffect(() => {
     const container = containerRef.current

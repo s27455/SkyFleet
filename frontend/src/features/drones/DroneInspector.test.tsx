@@ -84,6 +84,7 @@ const FLIGHT: Flight = {
   startedAt: '2026-11-12T10:00:00Z',
   deliveredAt: null,
   recalledAt: null,
+  failedAt: null,
   updatedAt: '2026-11-12T10:00:01Z',
   snapshotAgeS: 1,
   emergency: null,

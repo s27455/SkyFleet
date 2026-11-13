@@ -71,6 +71,22 @@ class DroneNotRecallableError(OrderManagementError):
         )
 
 
+class DroneFailedError(OrderManagementError):
+    """The order's drone failed (Feature 018C): cancelling must not touch it."""
+
+    def __init__(self, order_id: str, drone_id: str, grounded: bool) -> None:
+        state = (
+            "has failed and is grounded, requiring service"
+            if grounded
+            else "has failed and is making an emergency landing"
+        )
+        super().__init__(
+            f"Order '{order_id}' cannot be cancelled: the delivery was interrupted because drone "
+            f"'{drone_id}' {state}. Cancelling would not repair or recall it, so nothing was "
+            "changed."
+        )
+
+
 class RecallNotPossibleError(OrderManagementError):
     """Defensive only: planned missions keep a reserve, so a reachable Hub is expected."""
 
@@ -136,6 +152,9 @@ def _cancel_once(
         if mission is None:
             if _active_mission_id(session, order_id) is not None:
                 raise _RetryError  # a mission was created after the first look
+            failed = _failed_flight_of(session, order_id)
+            if failed is not None:
+                raise DroneFailedError(order_id, failed[1], grounded=True)
             if order.status not in _PRE_FLIGHT:
                 raise OrderNotCancellableError(order_id, order.status)
             _cancel_order(session, order, now)
@@ -177,12 +196,26 @@ def _cancel_once(
             raise OrderNotCancellableError(order_id, order.status)
         if flight is None:
             raise _RetryError  # takeoff committed between the first look and the locks
+        if flight.failed_at is not None:
+            raise DroneFailedError(order_id, drone.id, grounded=False)
         _recall(session, settings, order, mission, flight, drone, now)
         session.commit()
         return order
     except BaseException:
         session.rollback()
         raise
+
+
+def _failed_flight_of(session: Session, order_id: str) -> tuple[str, str] | None:
+    """(mission id, drone id) of a flight of the order that ended in a drone failure, if any."""
+    statement = (
+        select(Mission.id, Mission.drone_id)
+        .join(MissionFlight, MissionFlight.mission_id == Mission.id)
+        .where(Mission.order_id == order_id, MissionFlight.failed_at.is_not(None))
+        .limit(1)
+    )
+    row = session.execute(statement).first()
+    return (row[0], row[1]) if row else None
 
 
 def _cancel_order(session: Session, order: DeliveryOrder, now: datetime) -> None:

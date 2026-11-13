@@ -7,6 +7,7 @@ export const FLIGHT_PHASE_DISPLAY: Record<FlightPhase, { tone: StatusTone; label
   RETURNING: { tone: 'ok', label: 'Returning to a Hub' },
   DIVERTING: { tone: 'warning', label: 'Diverting to another Hub' },
   LANDED: { tone: 'neutral', label: 'Landed' },
+  EMERGENCY_APPROACH: { tone: 'critical', label: 'Emergency landing: drone failure' },
   EMERGENCY: { tone: 'critical', label: 'Emergency' },
 }
 
@@ -14,10 +15,25 @@ export const EMERGENCY_REASON_TEXT: Record<EmergencyReason, string> = {
   NO_HUB_WITH_CAPACITY: 'every Hub it could reach was full',
   BATTERY_INSUFFICIENT: 'no other Hub was within reach of its battery',
   BATTERY_CRITICAL: 'its battery fell below the critical level',
+  DRONE_FAILURE: 'a simulated drone failure',
 }
 
 /** Phases in which the drone is moving and a marker can be animated. */
-const MOVING_PHASES: readonly string[] = ['OUTBOUND', 'DELIVERING', 'RETURNING', 'DIVERTING']
+const MOVING_PHASES: readonly string[] = [
+  'OUTBOUND',
+  'DELIVERING',
+  'RETURNING',
+  'DIVERTING',
+  'EMERGENCY_APPROACH',
+]
+
+/** Flights a drone failure can still interrupt (the backend decides; this only enables the control). */
+const FAILABLE_PHASES: readonly string[] = ['OUTBOUND', 'DELIVERING', 'RETURNING', 'DIVERTING']
+
+export const isFailable = (flight: Flight) =>
+  flight.failedAt === null &&
+  flight.missionStatus === 'IN_FLIGHT' &&
+  FAILABLE_PHASES.includes(flight.phase)
 
 export const isActiveFlight = (flight: Flight) => MOVING_PHASES.includes(flight.phase)
 

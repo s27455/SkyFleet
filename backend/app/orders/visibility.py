@@ -2,8 +2,10 @@
 
 A `DELIVERED` order stays in the active operational views for a fixed window after its persisted
 delivery time, and a `CANCELLED` order (Feature 018B) for the same window after its persisted
-cancellation time; then it drops out of them. The row is never deleted. Feature 017B reuses this
-rule for the delivery-address markers: the map draws exactly the orders the active list returns.
+cancellation time. An undelivered order whose drone failed (Feature 018C) keeps its status and
+stays for the same window after the emergency landing completed. Then it drops out of them; the
+row is never deleted. Feature 017B reuses this rule for the delivery-address markers: the map
+draws exactly the orders the active list returns.
 """
 
 from datetime import datetime, timedelta
@@ -22,6 +24,7 @@ def is_order_active(
     now: datetime,
     window_seconds: float,
     cancelled_at: datetime | None = None,
+    interrupted_at: datetime | None = None,
 ) -> bool:
     """Whether an order belongs in the active views at `now`.
 
@@ -33,6 +36,8 @@ def is_order_active(
         moment = delivered_at
     elif status == OrderStatus.CANCELLED.value:
         moment = cancelled_at
+    elif interrupted_at is not None:
+        moment = interrupted_at  # the delivery was interrupted by a drone failure
     else:
         return True
     if moment is None:

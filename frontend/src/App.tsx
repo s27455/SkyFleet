@@ -7,7 +7,17 @@ import { DroneDetailPanel } from './features/drones/DroneDetailPanel'
 import { DroneInspector } from './features/drones/DroneInspector'
 import { resolveInspectorData } from './features/drones/inspectorData'
 import { useDrones } from './features/drones/useDrones'
-import { canAnimateFlights, flightsByDrone, isActiveFlight } from './features/flights/flightStatus'
+import {
+  droneEmergencies as deriveDroneEmergencies,
+  emergencyPoints as deriveEmergencyPoints,
+  interruptedOrderIds as deriveInterruptedOrderIds,
+} from './features/flights/emergencyPoints'
+import {
+  canAnimateFlights,
+  flightsByDrone,
+  isActiveFlight,
+  isFailable,
+} from './features/flights/flightStatus'
 import type { FlightVisual } from './features/flights/interpolation'
 import { LiveDataNotices } from './features/flights/LiveDataNotices'
 import { useFlights } from './features/flights/useFlights'
@@ -137,6 +147,11 @@ function App() {
   // Flights: the backend's snapshots. The map only glides between them (and not at all for reduced
   // motion or a worker that stopped updating); phase, battery and landing come from the backend.
   const flightByDrone = useMemo(() => flightsByDrone(flights), [flights])
+  // Drone failures (Feature 018C), all derived from the backend's flights and drones.
+  const emergencyPoints = useMemo(() => deriveEmergencyPoints(flights, drones), [flights, drones])
+  const droneEmergencies = useMemo(() => deriveDroneEmergencies(emergencyPoints), [emergencyPoints])
+  const interruptedOrderIds = useMemo(() => deriveInterruptedOrderIds(flights), [flights])
+  const canFailDrone = useMemo(() => flights.some(isFailable), [flights])
   const receivedAt = flightsResource.receivedAt
   const flightsStale = flightsResource.stale
   const flightVisuals = useMemo<FlightVisual[]>(
@@ -183,7 +198,7 @@ function App() {
   const refreshFlights = flightsResource.refresh
   const refreshMissions = missionsResource.refresh
   const [activityTick, setActivityTick] = useState(0)
-  const refreshAfterCancel = useCallback(() => {
+  const refreshAfterIncident = useCallback(() => {
     setActivityTick((tick) => tick + 1) // the Activity timeline re-reads at once
     // A cancellation can recall a flying drone and cancel an assigned mission.
     refreshOrders()
@@ -265,8 +280,14 @@ function App() {
           selectedOrderId={selection?.kind === 'order' ? selection.id : null}
           onSelectOrder={selectOrder}
           orderOffsets={orderOffsets}
+          emergencyPoints={emergencyPoints}
+          droneEmergencies={droneEmergencies}
+          interruptedOrderIds={interruptedOrderIds}
         />
-        <OrderMarkerLegend hideOnNarrow={selection !== null} />
+        <OrderMarkerLegend
+          hideOnNarrow={selection !== null}
+          showEmergency={emergencyPoints.length > 0}
+        />
         <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80">
           <ResourceStatusBanner
             resource="hub"
@@ -318,7 +339,7 @@ function App() {
             hubs={hubs}
             assignedMission={assignedByOrder.get(selectedOrder.id)}
             onStartMission={startAssignedMission}
-            onCancelled={refreshAfterCancel}
+            onCancelled={refreshAfterIncident}
             flight={flights.find((candidate) => candidate.orderId === selectedOrder.id)}
             workerStale={workerStale}
             activityRefreshKey={activityTick}
@@ -336,7 +357,9 @@ function App() {
                     <OrderSimulationPanel onGenerated={refreshOrders} />
                     <SimulationEventsPanel
                       selectedOrder={selectedOrder ?? null}
-                      onOrderCancelled={refreshAfterCancel}
+                      onOrderCancelled={refreshAfterIncident}
+                      canFailDrone={canFailDrone}
+                      onDroneFailed={refreshAfterIncident}
                     />
                     <OrdersManager
                       selectedOrderId={selection?.kind === 'order' ? selection.id : null}

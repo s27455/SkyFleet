@@ -15,6 +15,15 @@ describe('orderMarkerState', () => {
     expect(orderMarkerState(status)).toBe(state)
   })
 
+  it('shows an undelivered order of a failed flight as interrupted, and nothing else', () => {
+    expect(orderMarkerState('OUT_FOR_DELIVERY', true)).toBe('interrupted')
+    expect(orderMarkerState('OUT_FOR_DELIVERY', false)).toBe('in_progress')
+    expect(orderMarkerState('DELIVERED', true)).toBe('delivered') // a delivery stays delivered
+    expect(orderMarkerState('CANCELLED', true)).toBe('cancelled') // a cancellation stays visible
+    expect(ORDER_MARKER_STATES.interrupted.label).toBe('Interrupted')
+    expect(ORDER_MARKER_STATES.interrupted.diamondClasses).not.toContain('bg-status-ok')
+  })
+
   it('covers every status the frontend knows', () => {
     for (const status of ORDER_STATUSES) expect(orderMarkerState(status)).not.toBe('other')
   })

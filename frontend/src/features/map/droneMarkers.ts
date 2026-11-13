@@ -1,6 +1,7 @@
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
 import { DRONE_STATUS_DISPLAY } from '../drones/droneStatus'
+import type { EmergencyLevel } from '../flights/emergencyPoints'
 
 export type PixelOffset = [x: number, y: number]
 
@@ -110,9 +111,26 @@ function createRotorGlyph() {
 /** Individual markers are for IN_FLIGHT drones; any other status here is a drone away from a Hub. */
 const isAwayFromHub = (drone: Drone) => drone.status !== 'IN_FLIGHT'
 
-export function droneMarkerLabel(drone: Drone) {
+const EMERGENCY_LABELS: Record<EmergencyLevel, string> = {
+  approach: ', drone failure, emergency landing in progress',
+  grounded: ', grounded after a drone failure, requires service',
+}
+
+export function droneMarkerLabel(drone: Drone, emergency?: EmergencyLevel) {
   const base = `Drone ${drone.id}, ${DRONE_STATUS_DISPLAY[drone.status].label}, battery ${drone.batteryPct}%`
-  return isAwayFromHub(drone) ? `${base}, not at a Hub` : base
+  const placed = isAwayFromHub(drone) ? `${base}, not at a Hub` : base
+  return emergency ? `${placed}${EMERGENCY_LABELS[emergency]}` : placed
+}
+
+// A failed drone gets a red outline (a second cue next to the label and the emergency marker).
+const DRONE_MARKER_EMERGENCY_CLASSES = ['border-status-critical!', 'ring-2', 'ring-status-critical']
+
+/** Marks (or clears) the failure warning in place, so keyboard focus survives the change. */
+export function setDroneMarkerEmergency(element: HTMLElement, emergency?: EmergencyLevel) {
+  if (emergency) element.classList.add(...DRONE_MARKER_EMERGENCY_CLASSES)
+  else element.classList.remove(...DRONE_MARKER_EMERGENCY_CLASSES)
+  if (emergency) element.dataset.emergency = emergency
+  else delete element.dataset.emergency
 }
 
 export function createDroneMarkerElement(drone: Drone, onClick: () => void) {

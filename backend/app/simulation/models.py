@@ -22,6 +22,9 @@ class FlightPhase(StrEnum):
     RETURNING = "RETURNING"  # flying back, empty, to the planned Hub
     DIVERTING = "DIVERTING"  # flying to another Hub because the planned one was full
     LANDED = "LANDED"  # terminal: docked at a Hub
+    # Feature 018C: a drone failure was triggered; the drone flies a short approach to a simulated
+    # emergency landing point (not terminal: the engine finishes it as EMERGENCY).
+    EMERGENCY_APPROACH = "EMERGENCY_APPROACH"
     EMERGENCY = "EMERGENCY"  # terminal: simulated emergency, no safe Hub landing was possible
 
 
@@ -32,6 +35,7 @@ class EmergencyReason(StrEnum):
     NO_HUB_WITH_CAPACITY = "NO_HUB_WITH_CAPACITY"  # every reachable Hub was full
     BATTERY_INSUFFICIENT = "BATTERY_INSUFFICIENT"  # no other Hub was reachable with the battery
     BATTERY_CRITICAL = "BATTERY_CRITICAL"  # the battery fell below the critical floor in flight
+    DRONE_FAILURE = "DRONE_FAILURE"  # Feature 018C: a simulated drone malfunction
 
 
 _PHASES = ", ".join(f"'{phase.value}'" for phase in FlightPhase)
@@ -57,7 +61,8 @@ class MissionFlight(Base):
     mission_id: Mapped[str] = mapped_column(
         ForeignKey("missions.id", ondelete="RESTRICT"), primary_key=True
     )
-    phase: Mapped[str] = mapped_column(String(16))
+    # 24 characters since Feature 018C: `EMERGENCY_APPROACH` does not fit in 16.
+    phase: Mapped[str] = mapped_column(String(24))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
@@ -86,6 +91,9 @@ class MissionFlight(Base):
     # drone then flies back loaded (the parcel is still on board) to the Hub in
     # `landing_target_hub_id`; the flight never reaches the delivery milestone.
     recalled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    # Feature 018C: set when a drone failure was triggered. From then on the flight only flies the
+    # emergency approach: no delivery milestone, no landing decision, no resumption.
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     emergency_reason: Mapped[str | None] = mapped_column(String(24), default=None)
     emergency_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     updated_at: Mapped[datetime] = mapped_column(

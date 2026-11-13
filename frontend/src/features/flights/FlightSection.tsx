@@ -39,15 +39,20 @@ function Bar({ value, label }: { value: number; label: string }) {
 
 /** The backend-reported flight of a drone: phase, progress, battery and the Hub it is heading to. */
 export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps) {
-  const recalled = flight.recalledAt !== null
-  // A recall is a return like any other to the flight model, so say so in words.
-  const phase =
-    recalled && flight.phase !== 'LANDED' && flight.phase !== 'EMERGENCY'
-      ? { tone: 'warning' as const, label: 'Recalled: returning with the parcel' }
-      : FLIGHT_PHASE_DISPLAY[flight.phase]
+  const failed = flight.failedAt !== null
+  const recalled = flight.recalledAt !== null && !failed
+  // A recall is a return like any other to the flight model, and a failure ends in the generic
+  // EMERGENCY phase, so both are said in words here.
+  let phase = FLIGHT_PHASE_DISPLAY[flight.phase]
+  if (failed && flight.phase === 'EMERGENCY') {
+    phase = { tone: 'critical', label: 'Grounded after drone failure: requires service' }
+  } else if (recalled && flight.phase !== 'LANDED' && flight.phase !== 'EMERGENCY') {
+    phase = { tone: 'warning', label: 'Recalled: returning with the parcel' }
+  }
   const hubName = (id: string) => hubs.find((hub) => hub.id === id)?.name ?? id
   const diverted = flight.landingTargetHubId !== flight.plannedReturnHubId
   const emergency = flight.emergency
+  const approaching = failed && flight.phase === 'EMERGENCY_APPROACH'
 
   return (
     <section aria-label="Flight" className="mt-4 border-t border-line pt-3">
@@ -80,13 +85,20 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
             </span>
           </Row>
         )}
-        <Row label="Planned return Hub">{hubName(flight.plannedReturnHubId)}</Row>
+        {approaching && flight.target && (
+          <Row label="Emergency landing point">
+            <span className="font-mono text-xs tabular-nums">
+              {flight.target.position[1].toFixed(5)}, {flight.target.position[0].toFixed(5)}
+            </span>
+          </Row>
+        )}
+        {!failed && <Row label="Planned return Hub">{hubName(flight.plannedReturnHubId)}</Row>}
         {recalled && !emergency && (
           <Row label="Recalled">
             <span>Returning with the parcel to {hubName(flight.landingTargetHubId)}</span>
           </Row>
         )}
-        {diverted && !recalled && !emergency && (
+        {diverted && !recalled && !failed && !emergency && (
           <Row label="Now heading to">{hubName(flight.landingTargetHubId)}</Row>
         )}
       </dl>
@@ -96,7 +108,23 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
           known ones.
         </p>
       )}
-      {emergency && (
+      {approaching && (
+        <p
+          role="status"
+          className="mt-2 rounded-md border border-status-critical p-2 text-xs text-status-critical"
+        >
+          A simulated drone failure interrupted this flight. The drone no longer follows its
+          delivery or recall route and is making an emergency landing.
+        </p>
+      )}
+      {emergency && failed && (
+        <p className="mt-2 rounded-md border border-status-critical p-2 text-xs">
+          Drone failure: the drone made an emergency landing at {emergency.position[1].toFixed(5)},{' '}
+          {emergency.position[0].toFixed(5)} and is grounded, requiring service. Its mission does
+          not resume. This is a simulation outcome, not a computed safe landing site.
+        </p>
+      )}
+      {emergency && !failed && (
         <p className="mt-2 rounded-md border border-line bg-canvas p-2 text-xs">
           Simulated emergency: {EMERGENCY_REASON_TEXT[emergency.reason]}. The flight ended at{' '}
           {emergency.position[1].toFixed(5)}, {emergency.position[0].toFixed(5)} and the drone is
