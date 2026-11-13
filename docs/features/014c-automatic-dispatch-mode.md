@@ -1,6 +1,6 @@
 # Feature 014C — Automatic Dispatch Mode
 
-**Status:** Implemented (backend and frontend) and verified by automated tests, including concurrency tests on PostgreSQL; the full loop was not run end to end by the implementer and QA and code-review agents were not run. Not committed.
+**Status:** Implemented (backend and frontend) and verified by automated tests, including concurrency tests on PostgreSQL; the full loop was not run end to end by the implementer and QA and code-review agents were not run. Committed in `5556be1`.
 
 ## Implementation notes (verified)
 - Loop owner: the Simulation Worker. The API (toggle) and the worker (loop) are separate processes, so the mode is stored in the database: new table `dispatch_auto_state` (migration 0006, one row `auto-dispatch`; no row means OFF). Code: `backend/app/dispatch/{auto,models}.py`, `backend/app/worker.py`, `backend/app/config.py`, `backend/app/dispatch/schemas.py`, `backend/app/api/routes/dispatch.py`.

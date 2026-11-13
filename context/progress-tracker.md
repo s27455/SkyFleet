@@ -180,13 +180,14 @@ The backend provides a coherent operational domain that can support dispatching,
 ## Phase 6 — Deterministic Dispatch & Mission Management
 
 **Priority:** High  
-**Status:** In progress — Features 014A (read-only recommender), 014B (explicit dispatch execution) and 014C (automatic dispatch mode) done; charging and rebalancing not started
+**Status:** In progress — Features 014A (read-only recommender), 014B (explicit dispatch execution), 014C (automatic dispatch mode) and 014D (automatic charging) done; fleet rebalancing not started
 
 ### Objectives
 
 - [x] Dispatch decision, read-only (feature 014A, `docs/features/014a-dispatch-decision.md`): `GET /api/dispatch/recommendations` proposes order–drone pairs per Hub FIFO queue using the existing planner unchanged; creates, reserves and writes nothing. Verified by backend tests, ruff and mypy; no QA or code-review agent run. Only drones at exactly 100% battery are eligible and nothing recharges drones yet, so recommendations dry up after flights until charging exists. Planned follow-ups: 014B assignment and execution, 014C automatic scheduling (default off), 014D charging, 014E rebalancing.
 - [x] Dispatch execution (feature 014B, `docs/features/014b-dispatch-execution.md`): `POST /api/dispatch/execute` creates and starts a mission for one chosen order–drone pair through the existing mission services, revalidated under locks with an extra 100% battery rule; a failed start leaves the mission `ASSIGNED` and reported. Verified by backend tests including concurrency tests on PostgreSQL, ruff and mypy; no QA or code-review agent run; not exercised on the development database. Still open: 014C automatic scheduling (default off), 014D charging, 014E rebalancing.
 - [x] Automatic dispatch mode (feature 014C, `docs/features/014c-automatic-dispatch-mode.md`): an operator-controlled loop owned by the simulation worker, OFF by default and reset to OFF when the worker starts; mode stored in the database (migration 0006, table `dispatch_auto_state`); `GET /api/dispatch/auto/status`, `POST /api/dispatch/auto/enable` and `/disable`; header switch in the frontend. Verified by backend tests (including PostgreSQL concurrency tests), frontend tests and quality checks; no QA or code-review agent run; the full loop was not run end to end by the implementer. Still open: 014D charging, 014E rebalancing.
+- [x] Automatic drone charging (feature 014D, `docs/features/014d-automatic-charging.md`): the simulation worker moves docked, mission-free drones below 100% to `CHARGING`, raises their battery at `SIM_CHARGE_RATE_PCT_PER_MINUTE` (default 20, demo-accelerated) and returns them to `IDLE` at exactly 100%, whatever the Automatic Dispatch mode is; no migration. Verified by backend tests (including PostgreSQL), ruff and mypy; no QA or code-review agent run; not run live on the development database. Operators cannot edit a charging drone through Feature 011 (follow-up). Still open: 014E rebalancing.
 - [ ] Implement a deterministic Dispatch Engine.
 - [ ] Identify eligible drones for an order.
 - [ ] Filter candidates using basic operational constraints.

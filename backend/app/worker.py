@@ -7,7 +7,8 @@ restart neither resets nor invents progress.
 
 The worker also owns the automatic dispatch loop (Feature 014C): it resets the mode to OFF when it
 starts, and while the operator has switched it ON it runs a dispatch pass every
-`DISPATCH_AUTO_INTERVAL_SECONDS`. API and browser are not involved in dispatching.
+`DISPATCH_AUTO_INTERVAL_SECONDS`. API and browser are not involved in dispatching. Each tick it
+also charges docked drones below 100% (Feature 014D), whatever the dispatch mode is.
 """
 
 import logging
@@ -19,6 +20,7 @@ from app.config import Settings, get_settings
 from app.db.session import get_engine
 from app.dispatch import auto
 from app.simulation import clock, engine
+from app.simulation.charging import ChargingState, charge_step
 
 logger = logging.getLogger("skyfleet.worker")
 
@@ -31,6 +33,7 @@ def run_tick(tick_number: int) -> None:
 def run_forever(settings: Settings) -> None:
     factory = sessionmaker(bind=get_engine(), expire_on_commit=False)
     tick_number = 0
+    charging = ChargingState()
     mode_reset = False  # no automatic dispatch until the mode has been reset to OFF
     next_dispatch_at = 0.0
     while True:
@@ -40,6 +43,11 @@ def run_forever(settings: Settings) -> None:
             engine.run_step(factory, settings, clock.utcnow())
         except Exception:  # a failed tick must not stop the worker; the next one retries
             logger.exception("Simulation step failed")
+
+        try:  # docked drones below 100% charge, whatever the dispatch mode is
+            charge_step(factory, settings, clock.utcnow(), charging)
+        except Exception:
+            logger.exception("Charging step failed")
 
         try:
             if not mode_reset:

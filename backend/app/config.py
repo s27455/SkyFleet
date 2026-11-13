@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # A mission can only be started if the worker's last heartbeat is at most this old.
     sim_heartbeat_stale_seconds: float = Field(default=10.0, gt=0)
 
+    # Charging speed of a docked drone, in battery percent per minute. A demo-friendly value: the
+    # SF-1 model's real figure (80% in 45 minutes, about 1.8 per minute) would be far too slow to
+    # watch. One number for every drone; there are no charger slots.
+    sim_charge_rate_pct_per_minute: float = Field(default=20.0, gt=0)
+
     # Seconds between automatic-dispatch passes in the worker (only used while the mode is ON).
     dispatch_auto_interval_seconds: float = Field(default=3.0, gt=0)
 
