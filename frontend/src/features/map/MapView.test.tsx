@@ -1,9 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { act } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
+import type { LprScenario } from '../../types/lpr'
 import type { Order } from '../../types/order'
 import type { FlightVisual } from '../flights/interpolation'
 import { MapView } from './MapView'
@@ -23,7 +24,9 @@ const fake = vi.hoisted(() => {
     offset?: [number, number]
     remove: () => void
   }[] = []
-  return { instances, markers }
+  const sources = new Map<string, { data: unknown; setData: (data: unknown) => void }>()
+  const layers: string[] = []
+  return { instances, markers, sources, layers }
 })
 
 vi.mock('mapbox-gl', () => {
@@ -60,6 +63,30 @@ vi.mock('mapbox-gl', () => {
     on(event: string, handler: Handler) {
       this.handlers[event] = handler
     }
+    addSource(id: string, spec: { data: unknown }) {
+      const source = {
+        data: spec.data,
+        setData: vi.fn((data: unknown) => {
+          source.data = data
+        }),
+      }
+      fake.sources.set(id, source)
+    }
+    getSource(id: string) {
+      return fake.sources.get(id)
+    }
+    removeSource(id: string) {
+      fake.sources.delete(id)
+    }
+    addLayer(spec: { id: string }) {
+      fake.layers.push(spec.id)
+    }
+    getLayer(id: string) {
+      return fake.layers.includes(id) ? {} : undefined
+    }
+    removeLayer(id: string) {
+      fake.layers.splice(fake.layers.indexOf(id), 1)
+    }
   }
   return { default: { Map: FakeMap, Marker: FakeMarker } }
 })
@@ -85,6 +112,8 @@ describe('MapView', () => {
   beforeEach(() => {
     fake.instances.length = 0
     fake.markers.length = 0
+    fake.sources.clear()
+    fake.layers.length = 0
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -256,6 +285,8 @@ describe('MapView drone markers', () => {
   beforeEach(() => {
     fake.instances.length = 0
     fake.markers.length = 0
+    fake.sources.clear()
+    fake.layers.length = 0
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -449,6 +480,8 @@ describe('MapView Hub drone badges and away markers', () => {
   beforeEach(() => {
     fake.instances.length = 0
     fake.markers.length = 0
+    fake.sources.clear()
+    fake.layers.length = 0
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -569,6 +602,8 @@ describe('MapView order destination markers', () => {
   beforeEach(() => {
     fake.instances.length = 0
     fake.markers.length = 0
+    fake.sources.clear()
+    fake.layers.length = 0
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -816,6 +851,8 @@ describe('MapView flying drone markers', () => {
   beforeEach(() => {
     fake.instances.length = 0
     fake.markers.length = 0
+    fake.sources.clear()
+    fake.layers.length = 0
     frames = []
     now = 1000
     vi.stubGlobal(
@@ -937,5 +974,129 @@ describe('MapView flying drone markers', () => {
 
     expect(marker.remove).toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /DRN-010/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('MapView LPR helicopter (Feature 018E)', () => {
+  beforeEach(() => {
+    fake.instances.length = 0
+    fake.markers.length = 0
+    fake.sources.clear()
+    fake.layers.length = 0
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test')
+  })
+  afterEach(() => vi.useRealTimers())
+
+  const SCENARIO: LprScenario = {
+    id: 'LPR-1',
+    startedAt: '2026-11-13T12:00:00Z',
+    endsAt: '2026-11-13T12:03:00Z',
+    position: [18.5, 54.3925],
+    routeStart: [18.46, 54.3925],
+    routeEnd: [18.67, 54.3925],
+    speedMs: 80,
+    radiusM: 500,
+    holdMarginM: 250,
+  }
+  const view = (overrides: Partial<LprScenario> = {}, animate = false) => ({
+    scenario: { ...SCENARIO, ...overrides },
+    receivedAt: performance.now(),
+    animate,
+  })
+  const loadMap = () => act(() => fake.instances[0].handlers.load())
+  const helicopter = () =>
+    fake.markers.find((m) => m.element.dataset.markerKind === 'lpr-helicopter')
+
+  it('draws nothing until the map has loaded, and nothing without a scenario', () => {
+    const { rerender } = render(<MapView lpr={view()} />)
+    expect(helicopter()).toBeUndefined()
+    expect(fake.layers).toEqual([])
+
+    rerender(<MapView lpr={null} />)
+    loadMap()
+    expect(helicopter()).toBeUndefined()
+    expect(fake.sources.size).toBe(0)
+  })
+
+  it('shows the helicopter and a translucent zone around it at its position', () => {
+    render(<MapView lpr={view()} />)
+    loadMap()
+
+    expect(screen.getByRole('img', { name: /LPR helicopter in transit/ })).toBeInTheDocument()
+    expect(helicopter()?.lngLat).toEqual([18.5, 54.3925])
+    expect(fake.layers).toEqual(['lpr-zone-fill', 'lpr-zone-line'])
+    expect(fake.sources.has('lpr-zone')).toBe(true)
+  })
+
+  it('removes the helicopter, the zone and its source when the scenario ends', () => {
+    const { rerender } = render(<MapView lpr={view()} />)
+    loadMap()
+    const marker = helicopter()
+
+    rerender(<MapView lpr={null} />)
+
+    expect(marker?.remove).toHaveBeenCalled()
+    expect(fake.layers).toEqual([])
+    expect(fake.sources.size).toBe(0)
+  })
+
+  it('follows each new answer without rebuilding the marker or the layers', () => {
+    const { rerender } = render(<MapView lpr={view()} />)
+    loadMap()
+    const marker = helicopter()
+
+    rerender(<MapView lpr={view({ position: [18.52, 54.3925] })} />)
+
+    expect(helicopter()).toBe(marker)
+    expect(marker?.lngLat).toEqual([18.52, 54.3925])
+    expect(marker?.remove).not.toHaveBeenCalled()
+    expect(fake.layers).toEqual(['lpr-zone-fill', 'lpr-zone-line'])
+    expect(fake.sources.get('lpr-zone')?.setData).toHaveBeenCalled()
+  })
+
+  it('glides along the route between answers when animation is allowed', () => {
+    vi.useFakeTimers()
+    render(<MapView lpr={view({}, true)} />)
+    loadMap()
+
+    act(() => vi.advanceTimersByTime(2000))
+
+    expect(helicopter()?.lngLat?.[0]).toBeGreaterThan(18.5)
+  })
+
+  it('stays at the answered position when animation is not allowed', () => {
+    vi.useFakeTimers()
+    render(<MapView lpr={view({}, false)} />)
+    loadMap()
+
+    act(() => vi.advanceTimersByTime(2000))
+
+    expect(helicopter()?.lngLat).toEqual([18.5, 54.3925])
+  })
+
+  it('outlines a drone that waits for the helicopter and names it in words', () => {
+    const drone = {
+      id: 'DRN-010',
+      status: 'IN_FLIGHT',
+      batteryPct: 98,
+      coordinates: [18.6, 54.4],
+    } as Drone
+    const { rerender } = render(
+      <MapView drones={[drone]} yieldingDroneIds={new Set(['DRN-010'])} />,
+    )
+    loadMap()
+
+    const waiting = screen.getByRole('button', { name: /waiting for the LPR helicopter to pass/ })
+    expect(waiting.dataset.yielding).toBe('lpr')
+
+    rerender(<MapView drones={[drone]} yieldingDroneIds={new Set()} />)
+    expect(screen.getByRole('button', { name: /DRN-010/ }).dataset.yielding).toBeUndefined()
   })
 })

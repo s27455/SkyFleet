@@ -1,5 +1,6 @@
 """Read-only flight endpoint for REST polling."""
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
 from app.missions.models import Mission
-from app.simulation import clock, heartbeat
+from app.simulation import clock, heartbeat, lpr
 from app.simulation.engine import rounded_pct
 from app.simulation.models import FlightPhase, MissionFlight
 from app.simulation.schemas import (
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/flights", tags=["flights"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
-def _as_flight_response(flight: MissionFlight, mission: Mission) -> FlightResponse:
+def _as_flight_response(flight: MissionFlight, mission: Mission, now: datetime) -> FlightResponse:
     target = None
     if flight.target_longitude is not None and flight.target_latitude is not None:
         target = FlightTarget(
@@ -67,6 +68,7 @@ def _as_flight_response(flight: MissionFlight, mission: Mission) -> FlightRespon
             "handover_failed_at": (
                 clock.as_utc(flight.handover_failed_at) if flight.handover_failed_at else None
             ),
+            "yielding_to_lpr": lpr.is_yielding(flight.legs, flight.started_at, now),
             "updated_at": clock.as_utc(flight.updated_at),
             "emergency": emergency,
         }
@@ -88,5 +90,5 @@ def list_flights(session: SessionDep, settings: SettingsDep) -> FlightsResponse:
         server_time=now,
         worker_heartbeat_at=beat,
         worker_stale=not heartbeat.is_fresh(beat, now, settings.sim_heartbeat_stale_seconds),
-        flights=[_as_flight_response(flight, mission) for flight, mission in rows],
+        flights=[_as_flight_response(flight, mission, now) for flight, mission in rows],
     )

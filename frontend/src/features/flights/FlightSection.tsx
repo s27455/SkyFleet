@@ -45,6 +45,9 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
   // way and the failure is pending until it reaches the recipient.
   const handoverFailed = flight.handoverFailedAt !== null && !failed
   const pending = isRecipientPending(flight)
+  // Feature 018E: standing still outside the LPR helicopter's zone. It is its own state, neither an
+  // emergency nor maintenance, and the mission carries on afterwards.
+  const yielding = flight.yieldingToLpr && !failed
   // A recall is a return like any other to the flight model, and a failure ends in the generic
   // EMERGENCY phase, so both are said in words here.
   let phase = FLIGHT_PHASE_DISPLAY[flight.phase]
@@ -55,6 +58,7 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
   } else if (handoverFailed && flight.phase !== 'LANDED' && flight.phase !== 'EMERGENCY') {
     phase = { tone: 'warning', label: 'Delivery failed: returning with the parcel' }
   }
+  if (yielding) phase = { tone: 'warning', label: 'Yielding to LPR helicopter' }
   const hubName = (id: string) => hubs.find((hub) => hub.id === id)?.name ?? id
   const diverted = flight.landingTargetHubId !== flight.plannedReturnHubId
   const emergency = flight.emergency
@@ -124,6 +128,12 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
         <p role="status" className="mt-2 text-xs text-fg-muted">
           The simulation worker has stopped updating this flight; the figures above are the last
           known ones.
+        </p>
+      )}
+      {yielding && (
+        <p role="status" className="mt-2 rounded-md border border-status-warning p-2 text-xs">
+          The drone is waiting outside the LPR helicopter's safety zone (a simulated priority rule)
+          and resumes its mission when the helicopter has passed. Waiting uses battery like flying.
         </p>
       )}
       {pending && (

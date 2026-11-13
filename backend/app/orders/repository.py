@@ -35,12 +35,13 @@ def list_active_orders(
     SQL mirrors `visibility.is_order_active`; both are tested against the same boundaries.
     """
     cutoff = visibility_cutoff(now, window_seconds)
-    # A drone failure (Feature 018C) ends the delivery without changing the order status: the
-    # order leaves the active views the window after the emergency landing completed.
+    # An emergency before the handover (a drone failure, Feature 018C, or a battery emergency)
+    # ends the delivery without changing the order status: the order leaves the active views the
+    # window after the emergency landing completed.
     interrupted_expired = exists().where(
         Mission.order_id == DeliveryOrder.id,
         MissionFlight.mission_id == Mission.id,
-        MissionFlight.failed_at.is_not(None),
+        MissionFlight.delivered_at.is_(None),
         MissionFlight.phase == FlightPhase.EMERGENCY.value,
         MissionFlight.ended_at <= cutoff,
     )

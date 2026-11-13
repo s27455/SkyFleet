@@ -1,4 +1,6 @@
-import { ApiError, apiPost } from './client'
+import type { LprScenario, LprStatus } from '../types/lpr'
+import { ApiError, apiGet, apiPost } from './client'
+import { isFiniteNumberInRange, isNonEmptyString, isPositiveFiniteNumber } from './validation'
 
 /** What a manual Drone failure did (`POST /api/incidents/drone-failure`). */
 export interface DroneFailureResult {
@@ -84,4 +86,70 @@ export async function triggerRecipientUnavailable(): Promise<RecipientUnavailabl
     invalid('bad attempt_at')
   }
   return { droneId, missionId, orderId, attemptAt }
+}
+
+function toPosition(value: unknown, what: string): [number, number] {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    !isFiniteNumberInRange(value[0], -180, 180) ||
+    !isFiniteNumberInRange(value[1], -90, 90)
+  ) {
+    invalid(`bad ${what}`)
+  }
+  return [value[0] as number, value[1] as number]
+}
+
+const isTimestamp = (value: unknown): value is string =>
+  typeof value === 'string' && /(Z|[+-]\d\d:?\d\d)$/.test(value) && !Number.isNaN(Date.parse(value))
+
+function toLprScenario(payload: unknown): LprScenario {
+  if (typeof payload !== 'object' || payload === null) invalid('LPR scenario is not an object')
+  const raw = payload as Record<string, unknown>
+  if (!isNonEmptyString(raw.id)) invalid('missing LPR scenario id')
+  if (!isTimestamp(raw.started_at)) invalid('bad started_at')
+  if (!isTimestamp(raw.ends_at)) invalid('bad ends_at')
+  if (!isPositiveFiniteNumber(raw.speed_ms)) invalid('bad speed_ms')
+  if (!isPositiveFiniteNumber(raw.radius_m)) invalid('bad radius_m')
+  if (!isFiniteNumberInRange(raw.hold_margin_m, 0, Number.MAX_SAFE_INTEGER)) {
+    invalid('bad hold_margin_m')
+  }
+  return {
+    id: raw.id,
+    startedAt: raw.started_at,
+    endsAt: raw.ends_at,
+    position: toPosition(raw.position, 'LPR position'),
+    routeStart: toPosition(raw.route_start, 'LPR route_start'),
+    routeEnd: toPosition(raw.route_end, 'LPR route_end'),
+    speedMs: raw.speed_ms,
+    radiusM: raw.radius_m,
+    holdMarginM: raw.hold_margin_m,
+  }
+}
+
+/**
+ * Starts the LPR helicopter pass (`POST /api/incidents/lpr-helicopter`). Only one scenario runs at
+ * a time: a second trigger answers 409 `LPR_ALREADY_ACTIVE` (see `isLprAlreadyActive`).
+ */
+export async function triggerLprHelicopter(): Promise<LprScenario> {
+  return toLprScenario(await apiPost<unknown>('/api/incidents/lpr-helicopter'))
+}
+
+/** The running LPR scenario, or `{ scenario: null }` (`GET /api/incidents/lpr`). */
+export async function getLprStatus(signal?: AbortSignal): Promise<LprStatus> {
+  const payload = await apiGet<unknown>('/api/incidents/lpr', signal)
+  if (typeof payload !== 'object' || payload === null) invalid('LPR status is not an object')
+  const { scenario } = payload as { scenario?: unknown }
+  return { scenario: scenario === null || scenario === undefined ? null : toLprScenario(scenario) }
+}
+
+/** True for the backend's clear "a helicopter is already crossing" answer, not a failed request. */
+export function isLprAlreadyActive(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 409) return false
+  const { detail } = error
+  return (
+    typeof detail === 'object' &&
+    detail !== null &&
+    (detail as { code?: unknown }).code === 'LPR_ALREADY_ACTIVE'
+  )
 }

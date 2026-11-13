@@ -1,8 +1,10 @@
 import { type ReactNode, useState } from 'react'
 
 import {
+  isLprAlreadyActive,
   isNoEligibleTarget,
   triggerDroneFailure,
+  triggerLprHelicopter,
   triggerRecipientUnavailable,
 } from '../../api/incidents'
 import { cancelOrder } from '../../api/orders'
@@ -10,13 +12,6 @@ import type { Order } from '../../types/order'
 import { useAction } from '../management/useAction'
 import { CancelConfirmation } from '../orders/CancelOrderAction'
 import { ORDER_STATUS_DISPLAY, isCancellable } from '../orders/orderStatus'
-
-interface Scenario {
-  id: string
-  label: string
-  availableIn: string
-  icon: ReactNode
-}
 
 function Icon({ children }: { children: ReactNode }) {
   return (
@@ -67,25 +62,17 @@ const RECIPIENT_ICON = (
   </Icon>
 )
 
-/** The future incident scenario. It is not implemented yet, so its control is disabled. */
-const SCENARIOS: Scenario[] = [
-  {
-    id: 'lpr-transit',
-    label: 'LPR transit',
-    availableIn: '018E',
-    icon: (
-      <Icon>
-        <path d="M4 5h16" />
-        <path d="M12 5v3" />
-        <path d="M7 12a5 4 0 0 1 5-4h1a4 4 0 0 1 4 4v1a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" />
-        <path d="M17 11h5" />
-        <path d="M6 19h12" />
-        <path d="M9 15v4" />
-        <path d="M15 15v4" />
-      </Icon>
-    ),
-  },
-]
+const LPR_ICON = (
+  <Icon>
+    <path d="M4 5h16" />
+    <path d="M12 5v3" />
+    <path d="M7 12a5 4 0 0 1 5-4h1a4 4 0 0 1 4 4v1a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z" />
+    <path d="M17 11h5" />
+    <path d="M6 19h12" />
+    <path d="M9 15v4" />
+    <path d="M15 15v4" />
+  </Icon>
+)
 
 interface SimulationEventsPanelProps {
   /** The order the operator has selected on the map or in the list, if any. */
@@ -100,6 +87,10 @@ interface SimulationEventsPanelProps {
   canMarkRecipient?: boolean
   /** Called after a Recipient unavailable request (whatever the answer) so the views refresh. */
   onRecipientMarked?: () => void
+  /** Whether the LPR helicopter is crossing the area now (the backend allows only one at a time). */
+  lprActive?: boolean
+  /** Called after an LPR helicopter request (whatever the answer) so the views refresh. */
+  onLprTriggered?: () => void
 }
 
 /**
@@ -107,8 +98,8 @@ interface SimulationEventsPanelProps {
  * selected order after an explicit confirmation and shows what the backend answers. "Drone failure"
  * (Feature 018C) asks the backend to fail one eligible flying drone; the backend chooses it.
  * "Recipient unavailable" (Feature 018D) marks one delivery on its way; the failure is pending until
- * the drone reaches the destination. LPR transit stays visible but disabled until Feature 018E
- * implements real backend behavior. The Random incidents switch is disabled for the same reason and does not claim that
+ * the drone reaches the destination. "LPR helicopter" (Feature 018E) starts one helicopter pass
+ * with a moving safety zone; only one runs at a time. The Random incidents switch is disabled for the same reason and does not claim that
  * incidents are being produced.
  */
 export function SimulationEventsPanel({
@@ -118,8 +109,12 @@ export function SimulationEventsPanel({
   onDroneFailed,
   canMarkRecipient = false,
   onRecipientMarked,
+  lprActive = false,
+  onLprTriggered,
 }: SimulationEventsPanelProps) {
   const cancellation = useAction()
+  const lprAction = useAction()
+  const [lprNote, setLprNote] = useState<string | null>(null)
   const failure = useAction()
   const recipient = useAction()
   const [recipientNote, setRecipientNote] = useState<{
@@ -160,6 +155,23 @@ export function SimulationEventsPanel({
       }
     })
     onDroneFailed?.() // the state may have changed whatever the answer was
+  }
+
+  const startLpr = async () => {
+    setLprNote(null)
+    await lprAction.run(async () => {
+      try {
+        await triggerLprHelicopter()
+        setLprNote(
+          'LPR helicopter started. A safety zone moves with it; drones in its way wait until it has passed.',
+        )
+      } catch (error) {
+        // A second helicopter is refused clearly: nothing was started, and that is not a fault.
+        if (!isLprAlreadyActive(error)) throw error
+        setLprNote('An LPR helicopter is already crossing the area.')
+      }
+    })
+    onLprTriggered?.() // the state may have changed whatever the answer was
   }
 
   const markRecipient = async () => {
@@ -261,20 +273,29 @@ export function SimulationEventsPanel({
             </span>
           </button>
         </li>
-        {SCENARIOS.map((scenario) => (
-          <li key={scenario.id}>
-            <button
-              type="button"
-              disabled
-              title={`${scenario.label}: coming in ${scenario.availableIn}`}
-              className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg-muted opacity-60 disabled:cursor-not-allowed"
-            >
-              {scenario.icon}
-              <span>{scenario.label}</span>
-              <span className="text-[11px]">Coming in {scenario.availableIn}</span>
-            </button>
-          </li>
-        ))}
+        <li>
+          <button
+            type="button"
+            disabled={lprActive || lprAction.busy}
+            title={
+              lprActive
+                ? 'An LPR helicopter is already crossing the area'
+                : 'Start the LPR helicopter'
+            }
+            onClick={startLpr}
+            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+          >
+            {LPR_ICON}
+            <span>LPR helicopter</span>
+            <span className="text-[11px] text-fg-muted">
+              {lprAction.busy
+                ? 'Triggering…'
+                : lprActive
+                  ? 'Helicopter in transit'
+                  : 'Cross the area'}
+            </span>
+          </button>
+        </li>
       </ul>
       {confirming && (
         <CancelConfirmation
@@ -287,6 +308,16 @@ export function SimulationEventsPanel({
       {failure.error && (
         <p role="alert" className="mt-2 text-xs text-status-critical">
           {failure.error}
+        </p>
+      )}
+      {lprAction.error && (
+        <p role="alert" className="mt-2 text-xs text-status-critical">
+          {lprAction.error}
+        </p>
+      )}
+      {lprNote && (
+        <p role="status" className="mt-2 text-xs text-fg-muted">
+          {lprNote}
         </p>
       )}
       {recipient.error && (

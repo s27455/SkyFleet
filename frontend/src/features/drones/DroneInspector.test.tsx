@@ -87,6 +87,7 @@ const FLIGHT: Flight = {
   failedAt: null,
   recipientUnavailableAt: null,
   handoverFailedAt: null,
+  yieldingToLpr: false,
   updatedAt: '2026-11-12T10:00:01Z',
   snapshotAgeS: 1,
   emergency: null,

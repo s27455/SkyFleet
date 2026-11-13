@@ -128,6 +128,7 @@ function toFlight(item: unknown, serverTimeMs: number): Flight {
     failedAt: (raw.failed_at as string | null | undefined) ?? null,
     recipientUnavailableAt: (raw.recipient_unavailable_at as string | null | undefined) ?? null,
     handoverFailedAt: (raw.handover_failed_at as string | null | undefined) ?? null,
+    yieldingToLpr: raw.yielding_to_lpr === true,
     updatedAt: raw.updated_at,
     snapshotAgeS: Math.max((serverTimeMs - Date.parse(raw.updated_at)) / 1000, 0),
     emergency: toEmergency(raw.emergency, id),

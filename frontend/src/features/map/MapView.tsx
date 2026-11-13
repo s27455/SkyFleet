@@ -4,15 +4,19 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 
 import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
+import type { LprScenario } from '../../types/lpr'
 import type { Order } from '../../types/order'
 import type { EmergencyLevel, EmergencyPoint } from '../flights/emergencyPoints'
 import { type FlightVisual, interpolatePosition } from '../flights/interpolation'
+import { helicopterPosition, zoneFeature } from '../lpr/helicopter'
+import { LPR_ZONE_COLOR, createHelicopterMarkerElement } from '../lpr/lprMarkers'
 import {
   type PixelOffset,
   createDroneMarkerElement,
   droneMarkerLabel,
   setDroneMarkerEmergency,
   setDroneMarkerSelected,
+  setDroneMarkerYielding,
 } from './droneMarkers'
 import { createEmergencyMarkerElement } from './emergencyMarkers'
 import {
@@ -42,6 +46,19 @@ const NO_FLIGHTS: readonly FlightVisual[] = []
 const NO_EMERGENCY_POINTS: readonly EmergencyPoint[] = []
 const NO_DRONE_EMERGENCIES: ReadonlyMap<string, EmergencyLevel> = new Map()
 const NO_ORDER_IDS: ReadonlySet<string> = new Set()
+
+const LPR_ZONE_SOURCE = 'lpr-zone'
+const LPR_ZONE_FILL = 'lpr-zone-fill'
+const LPR_ZONE_LINE = 'lpr-zone-line'
+
+/** The LPR helicopter scenario as the map draws it (Feature 018E). */
+export interface LprView {
+  scenario: LprScenario
+  /** `performance.now()` when the scenario arrived. */
+  receivedAt: number
+  /** False for reduced motion or a failed refresh: the helicopter stays at the answered position. */
+  animate: boolean
+}
 const NO_COUNTS: ReadonlyMap<string, number> = new Map()
 const NO_OFFSETS: ReadonlyMap<string, PixelOffset> = new Map()
 const NO_PIXEL_OFFSET: PixelOffset = [0, 0]
@@ -116,6 +133,10 @@ interface MapViewProps {
   droneEmergencies?: ReadonlyMap<string, EmergencyLevel>
   /** Orders whose delivery was interrupted by a drone failure (their marker says so). */
   interruptedOrderIds?: ReadonlySet<string>
+  /** The running LPR helicopter pass: its marker and the translucent circle around it. */
+  lpr?: LprView | null
+  /** Drones standing still outside the helicopter's zone (an amber outline and a label). */
+  yieldingDroneIds?: ReadonlySet<string>
 }
 
 /**
@@ -141,6 +162,8 @@ export function MapView({
   emergencyPoints = NO_EMERGENCY_POINTS,
   droneEmergencies = NO_DRONE_EMERGENCIES,
   interruptedOrderIds = NO_ORDER_IDS,
+  lpr = null,
+  yieldingDroneIds = NO_ORDER_IDS,
 }: MapViewProps) {
   const token = getMapboxToken()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -264,12 +287,14 @@ export function MapView({
       const marker = droneMarkersRef.current.get(drone.id)
       if (!element || !marker) continue
       const emergency = droneEmergencies.get(drone.id)
-      element.setAttribute('aria-label', droneMarkerLabel(drone, emergency))
+      const yielding = yieldingDroneIds.has(drone.id)
+      element.setAttribute('aria-label', droneMarkerLabel(drone, emergency, yielding))
       setDroneMarkerEmergency(element, emergency)
+      setDroneMarkerYielding(element, yielding && !emergency)
       const visual = visuals.get(drone.id)
       marker.setLngLat(visual ? [...visual.motion.position] : drone.coordinates)
     }
-  }, [drones, flights, droneEmergencies, status, droneKey])
+  }, [drones, flights, droneEmergencies, yieldingDroneIds, status, droneKey])
 
   // Smooth motion between two snapshots: only the picture, never the mission. Each frame moves
   // the marker from the snapshot toward the backend's target, never past it; the next snapshot
@@ -405,6 +430,70 @@ export function MapView({
     )
     return () => markers.forEach((marker) => marker.remove())
   }, [emergencyKey, status])
+
+  // The LPR helicopter (Feature 018E): a marker and a translucent circle, created when a scenario
+  // appears and removed when it ends. The circle is a GeoJSON layer, so it keeps its real size in
+  // metres whatever the zoom. Both follow the helicopter in place (below), never rebuilt per poll.
+  const lprRef = useRef(lpr)
+  const lprMarkerRef = useRef<mapboxgl.Marker | null>(null)
+  useEffect(() => {
+    lprRef.current = lpr
+  }, [lpr])
+  const lprId = lpr?.scenario.id ?? null
+
+  useEffect(() => {
+    const map = mapRef.current
+    const first = lprRef.current
+    if (status !== 'ready' || !map || first === null) return
+    const { scenario } = first
+    const marker = new mapboxgl.Marker({ element: createHelicopterMarkerElement(scenario) })
+      .setLngLat(scenario.position)
+      .addTo(map)
+    lprMarkerRef.current = marker
+    map.addSource(LPR_ZONE_SOURCE, {
+      type: 'geojson',
+      data: zoneFeature(scenario.position, scenario.radiusM),
+    })
+    map.addLayer({
+      id: LPR_ZONE_FILL,
+      type: 'fill',
+      source: LPR_ZONE_SOURCE,
+      paint: { 'fill-color': LPR_ZONE_COLOR, 'fill-opacity': 0.15 },
+    })
+    map.addLayer({
+      id: LPR_ZONE_LINE,
+      type: 'line',
+      source: LPR_ZONE_SOURCE,
+      paint: { 'line-color': LPR_ZONE_COLOR, 'line-width': 2, 'line-opacity': 0.9 },
+    })
+    return () => {
+      marker.remove()
+      lprMarkerRef.current = null
+      if (map.getLayer(LPR_ZONE_LINE)) map.removeLayer(LPR_ZONE_LINE)
+      if (map.getLayer(LPR_ZONE_FILL)) map.removeLayer(LPR_ZONE_FILL)
+      if (map.getSource(LPR_ZONE_SOURCE)) map.removeSource(LPR_ZONE_SOURCE)
+    }
+  }, [lprId, status])
+
+  // The latest answer moves the helicopter and its zone; between answers they glide along the
+  // route at the scenario's speed (only the picture: the backend decides who yields).
+  useEffect(() => {
+    const map = mapRef.current
+    if (status !== 'ready' || !map || lpr === null) return
+    const { scenario } = lpr
+    const draw = (position: [number, number]) => {
+      lprMarkerRef.current?.setLngLat(position)
+      const source = map.getSource(LPR_ZONE_SOURCE) as mapboxgl.GeoJSONSource | undefined
+      source?.setData(zoneFeature(position, scenario.radiusM))
+    }
+    draw(scenario.position)
+    if (!lpr.animate) return
+    const timer = setInterval(
+      () => draw(helicopterPosition(scenario, (performance.now() - lpr.receivedAt) / 1000)),
+      100,
+    )
+    return () => clearInterval(timer)
+  }, [lpr, lprId, status])
 
   useEffect(() => {
     const container = containerRef.current

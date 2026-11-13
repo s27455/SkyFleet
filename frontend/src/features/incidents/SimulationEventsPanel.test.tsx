@@ -26,15 +26,13 @@ const cancelButton = () => screen.getByRole('button', { name: /Cancel order/ })
 const confirmation = () => screen.getByRole('group', { name: 'Confirm cancellation' })
 
 describe('SimulationEventsPanel', () => {
-  it('shows LPR transit as a named, disabled control with its feature', () => {
+  it('has an enabled LPR helicopter control and no placeholder left', () => {
     render(<SimulationEventsPanel />)
 
-    const expected: [string, string][] = [['LPR transit', '018E']]
-    for (const [label, feature] of expected) {
-      const button = screen.getByRole('button', { name: new RegExp(label) })
-      expect(button).toBeDisabled()
-      expect(button).toHaveTextContent(`Coming in ${feature}`)
-    }
+    const button = screen.getByRole('button', { name: /LPR helicopter/ })
+    expect(button).toBeEnabled()
+    expect(button).toHaveTextContent('Cross the area')
+    expect(screen.queryByText(/Coming in/)).not.toBeInTheDocument()
   })
 
   it('shows Random incidents off, disabled and honestly explained', () => {
@@ -263,6 +261,96 @@ describe('SimulationEventsPanel', () => {
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     expect(screen.queryByText(/reported for/)).not.toBeInTheDocument()
+  })
+
+  it('starts the helicopter on click, shows pending and the result, and refreshes the views', async () => {
+    let release: (response: Response) => void = () => {}
+    const fetchMock = vi.fn(
+      (_url: string, _init?: RequestInit) =>
+        new Promise<Response>((resolve) => {
+          release = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const onLprTriggered = vi.fn()
+    render(<SimulationEventsPanel onLprTriggered={onLprTriggered} />)
+
+    const button = screen.getByRole('button', { name: /LPR helicopter/ })
+    fireEvent.click(button)
+    fireEvent.click(button) // a second click while pending must not send a second request
+
+    expect(await screen.findByText('Triggering…')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/incidents\/lpr-helicopter$/)
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+
+    release(
+      jsonResponse({
+        id: 'LPR-ABCD1234',
+        status: 'ACTIVE',
+        origin: 'MANUAL',
+        started_at: '2026-11-13T12:00:00Z',
+        ends_at: '2026-11-13T12:03:00Z',
+        position: [18.46, 54.3925],
+        route_start: [18.46, 54.3925],
+        route_end: [18.67, 54.3925],
+        speed_ms: 80,
+        radius_m: 500,
+        hold_margin_m: 250,
+      }),
+    )
+
+    expect(await screen.findByText(/LPR helicopter started/)).toHaveTextContent(
+      'drones in its way wait until it has passed',
+    )
+    expect(onLprTriggered).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('disables the control while a helicopter is crossing, so none is started twice', () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    render(<SimulationEventsPanel lprActive />)
+
+    const button = screen.getByRole('button', { name: /LPR helicopter/ })
+
+    expect(button).toBeDisabled()
+    expect(button).toHaveTextContent('Helicopter in transit')
+    fireEvent.click(button)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('shows "already active" as information, not as an error or a new start', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse({ detail: { code: 'LPR_ALREADY_ACTIVE', message: 'Already active' } }, 409),
+        ),
+      ),
+    )
+    const onLprTriggered = vi.fn()
+    render(<SimulationEventsPanel onLprTriggered={onLprTriggered} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /LPR helicopter/ }))
+
+    expect(await screen.findByText('An LPR helicopter is already crossing the area.')).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/LPR helicopter started/)).not.toBeInTheDocument()
+    await waitFor(() => expect(onLprTriggered).toHaveBeenCalledTimes(1))
+  })
+
+  it('shows any other failure of the LPR request as an error, never as a start', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
+    )
+    render(<SimulationEventsPanel />)
+
+    fireEvent.click(screen.getByRole('button', { name: /LPR helicopter/ }))
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.queryByText(/LPR helicopter started/)).not.toBeInTheDocument()
   })
 
   it('keeps the order when the operator backs out', () => {

@@ -35,6 +35,7 @@ from app.missions.models import Mission, MissionStatus
 from app.simulation.clock import as_utc
 from app.simulation.engine import write_snapshot
 from app.simulation.flight import (
+    delivery_leg,
     emergency_landing_point,
     emergency_legs,
     landing_decision,
@@ -150,7 +151,8 @@ def _fail_flight(
         handover_failed = flight.handover_failed_at is not None
         returning = recalled or handover_failed
         # The worker has not applied the next milestone yet; leave this flight to it.
-        if not delivered and not returning and elapsed >= legs[1].end_s:
+        stop = delivery_leg(legs)
+        if not delivered and not returning and stop is not None and elapsed >= stop.end_s:
             session.rollback()
             return None
         decision_s, _ = landing_decision(legs[-1], settings.sim_landing_approach_m)

@@ -50,6 +50,8 @@ class FlightResponse(BaseModel):
     # `handover_failed_at`); after it the drone returns with the parcel.
     recipient_unavailable_at: datetime | None
     handover_failed_at: datetime | None
+    # Feature 018E: the drone is standing still outside the LPR helicopter's safety zone.
+    yielding_to_lpr: bool
     updated_at: datetime
     emergency: FlightEmergency | None
 
@@ -86,3 +88,28 @@ class DroneFailureResponse(BaseModel):
     order_id: str
     stage: str  # BEFORE_DELIVERY, RECALL, HANDOVER_FAILED or AFTER_DELIVERY
     landing_position: tuple[float, float]  # [longitude, latitude], a simulated point
+
+
+class LprScenarioResponse(BaseModel):
+    """The LPR helicopter scenario with the helicopter's position now (Feature 018E).
+
+    The route, speed and radius are fictional simulation parameters; the frontend may glide the
+    marker between polls but never decides anything.
+    """
+
+    id: str
+    status: str
+    origin: str
+    started_at: datetime
+    ends_at: datetime
+    position: tuple[float, float]  # [longitude, latitude] of the helicopter now
+    route_start: tuple[float, float]
+    route_end: tuple[float, float]
+    speed_ms: float
+    radius_m: float  # the drawn safety zone
+    hold_margin_m: float  # drones stop this far outside it
+
+
+class LprStatusResponse(BaseModel):
+    server_time: datetime
+    scenario: LprScenarioResponse | None

@@ -27,6 +27,9 @@ class LegKind(StrEnum):
     DIVERSION = "DIVERSION"
     RECALL = "RECALL"  # Feature 018B: back to a Hub with the parcel still on board (loaded)
     EMERGENCY = "EMERGENCY"  # Feature 018C: the approach to the emergency landing point
+    # Feature 018E: standing still in the air for a while (yielding to the LPR helicopter's zone).
+    # It keeps the phase of the leg it interrupts and costs battery like cruising (see `hold_legs`).
+    HOLD = "HOLD"
 
 
 _PHASE_OF_LEG = {
@@ -37,6 +40,8 @@ _PHASE_OF_LEG = {
     # A recalled drone is returning to a Hub; `MissionFlight.recalled_at` tells it apart.
     LegKind.RECALL: FlightPhase.RETURNING,
     LegKind.EMERGENCY: FlightPhase.EMERGENCY_APPROACH,
+    # Placeholder only: a hold takes the phase of the leg before it (see `state_at`).
+    LegKind.HOLD: FlightPhase.OUTBOUND,
 }
 
 
@@ -77,6 +82,25 @@ def leg_from_dict(data: dict[str, Any]) -> Leg:
         distance_km=float(data["distance_km"]),
         loaded=bool(data["loaded"]),
     )
+
+
+def delivery_leg_index(legs: list[Leg]) -> int | None:
+    """Index of the delivery stop: the last DELIVERY leg, or None if the schedule has none.
+
+    The stop is not always `legs[1]`: a leg inserted before it (a hold, Feature 018E) shifts it, and
+    a hold in the middle of the stop splits it, so the handover happens at the end of the last part.
+    A schedule cut short by a recall or an emergency may have no delivery stop at all.
+    """
+    for index in range(len(legs) - 1, -1, -1):
+        if legs[index].kind == LegKind.DELIVERY:
+            return index
+    return None
+
+
+def delivery_leg(legs: list[Leg]) -> Leg | None:
+    """The delivery stop (see `delivery_leg_index`), or None."""
+    index = delivery_leg_index(legs)
+    return None if index is None else legs[index]
 
 
 def lerp(a: Point, b: Point, fraction: float) -> Point:
@@ -163,10 +187,16 @@ def state_at(
             flown = 1.0 if t >= leg.start_s else 0.0
         battery -= flown * leg.distance_km * (loaded_rate if leg.loaded else empty_rate)
 
-    current = legs[0]
-    for leg in legs:
+    current, current_index = legs[0], 0
+    for index, leg in enumerate(legs):
         if leg.start_s <= t:
-            current = leg
+            current, current_index = leg, index
+    phase_kind = current.kind
+    if phase_kind == LegKind.HOLD:  # a hold is still the phase of the flight it interrupts
+        phase_kind = next(
+            (leg.kind for leg in reversed(legs[:current_index]) if leg.kind != LegKind.HOLD),
+            LegKind.OUTBOUND,
+        )
     if t >= total_s:
         position = legs[-1].target
         eta = 0.0
@@ -177,7 +207,7 @@ def state_at(
 
     progress = min(t / total_s, 1.0) if total_s > 0 else 1.0
     return FlightState(
-        phase=_PHASE_OF_LEG[current.kind],
+        phase=_PHASE_OF_LEG[phase_kind],
         position=position,
         battery_pct=battery,
         progress=progress,
@@ -248,9 +278,13 @@ def stop_legs(legs: list[Leg], at_s: float, point: Point) -> list[Leg]:
 
 def truncate_leg(leg: Leg, at_s: float, point: Point) -> Leg:
     """The leg cut short at `point`, reached at offset `at_s` (the drone leaves the path there)."""
+    duration = max(at_s - leg.start_s, 0.0)
+    if leg.kind == LegKind.HOLD:  # standing still: the energy cost follows the time, not the path
+        share = duration / leg.duration_s if leg.duration_s > 0 else 0.0
+        return replace(leg, duration_s=duration, target=point, distance_km=leg.distance_km * share)
     return replace(
         leg,
-        duration_s=max(at_s - leg.start_s, 0.0),
+        duration_s=duration,
         target=point,
         distance_km=distance_km(leg.origin, point),
     )
@@ -280,6 +314,68 @@ def recall_legs(
     return [*stop_legs(legs, at_s, point), recall]
 
 
+def position_at(legs: list[Leg], at_s: float) -> Point:
+    """Where the drone is at schedule offset `at_s` (as in `state_at`, without the battery)."""
+    t = max(at_s, 0.0)
+    if t >= legs[-1].end_s:
+        return legs[-1].target
+    current = legs[0]
+    for leg in legs:
+        if leg.start_s <= t:
+            current = leg
+    fraction = (t - current.start_s) / current.duration_s if current.duration_s > 0 else 1.0
+    return lerp(current.origin, current.target, fraction)
+
+
+def hold_legs(
+    legs: list[Leg], at_s: float, point: Point, hold_s: float, pace_s_per_km: float
+) -> list[Leg]:
+    """The schedule with the drone standing still for `hold_s` seconds from offset `at_s`.
+
+    Feature 018E. The leg flown at `at_s` is split at `point` (the drone's position then), a HOLD
+    leg is inserted there and every later part is shifted by `hold_s`. Nothing moves, so there is no
+    teleport, and the route, the delivery stop and the landing stay the same, only later. The hold
+    costs battery like cruising at the flight's original pace: its energy is that of the distance
+    it would have covered in `hold_s` (`hold_s / pace_s_per_km`), at the rate of the leg it
+    interrupts (loaded while the parcel is on board). Raises if `at_s` is not inside the schedule.
+    """
+    out: list[Leg] = []
+    inserted = False
+    for leg in legs:
+        if inserted:
+            out.append(replace(leg, start_s=leg.start_s + hold_s))
+        elif leg.end_s <= at_s:
+            out.append(leg)  # flown before the hold
+        elif leg.start_s >= at_s:  # the hold falls exactly between two legs
+            out.append(_hold_leg(at_s, point, hold_s, pace_s_per_km, leg.loaded))
+            out.append(replace(leg, start_s=leg.start_s + hold_s))
+            inserted = True
+        else:  # the hold splits this leg
+            rest_s = leg.end_s - at_s
+            rest_km = distance_km(point, leg.target)
+            if leg.kind == LegKind.HOLD:
+                rest_km = leg.distance_km * rest_s / leg.duration_s
+            out.append(truncate_leg(leg, at_s, point))
+            out.append(_hold_leg(at_s, point, hold_s, pace_s_per_km, leg.loaded))
+            out.append(
+                replace(
+                    leg,
+                    start_s=at_s + hold_s,
+                    duration_s=rest_s,
+                    origin=point,
+                    distance_km=rest_km,
+                )
+            )
+            inserted = True
+    if not inserted:
+        raise ValueError("A hold must start inside the schedule")
+    return out
+
+
+def _hold_leg(at_s: float, point: Point, hold_s: float, pace_s_per_km: float, loaded: bool) -> Leg:
+    return Leg(LegKind.HOLD, at_s, hold_s, point, point, hold_s / pace_s_per_km, loaded=loaded)
+
+
 def handover_failed_legs(legs: list[Leg], hub: Point, pace_s_per_km: float) -> list[Leg]:
     """The schedule after a failed handover (Feature 018D): the drone is at the destination.
 
@@ -287,10 +383,13 @@ def handover_failed_legs(legs: list[Leg], hub: Point, pace_s_per_km: float) -> l
     return leg to `hub` that starts when the stop ends (position and battery stay continuous),
     flown at the original pace.
     """
-    stop = legs[1]
+    index = delivery_leg_index(legs)
+    if index is None:
+        raise ValueError("A failed handover needs a schedule with a delivery stop")
+    stop = legs[index]
     km = distance_km(stop.target, hub)
     back = Leg(LegKind.RETURN, stop.end_s, km * pace_s_per_km, stop.target, hub, km, loaded=True)
-    return [*legs[:2], back]
+    return [*legs[: index + 1], back]
 
 
 METRES_PER_DEGREE_LATITUDE = 111_320.0
@@ -310,7 +409,9 @@ def emergency_landing_point(
     for leg in legs:
         if leg.start_s > at_s and heading is not None:
             break
-        if leg.distance_km > 0:
+        # A leg that moves has a direction; a stationary one (a stop, a hold) has none, however
+        # much energy it costs.
+        if leg.origin != leg.target:
             heading = (leg.target[0] - leg.origin[0], leg.target[1] - leg.origin[1])
     latitude_scale = math.cos(math.radians(position[1]))
     # Heading in metres (east, north); longitude degrees shrink with the cosine of the latitude.

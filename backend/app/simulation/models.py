@@ -10,7 +10,17 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, Float, ForeignKey, String, func
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -124,3 +134,49 @@ class SimulationHeartbeat(Base):
 
 
 WORKER_HEARTBEAT = "simulation-worker"
+
+
+class LprStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
+
+
+_LPR_STATUSES = ", ".join(f"'{status.value}'" for status in LprStatus)
+
+
+class LprScenario(Base):
+    """One LPR helicopter pass (Feature 018E): the scenario state shared by the API and the worker.
+
+    The helicopter's position is a pure function of this row and the clock (a straight route flown
+    at a constant speed), so nothing is written per tick and a restart loses nothing. The values the
+    scenario started with are stored, so a configuration change never alters one in progress. At
+    most one scenario is ACTIVE: the database enforces it with a partial unique index.
+    """
+
+    __tablename__ = "lpr_scenarios"
+    __table_args__ = (
+        CheckConstraint(f"status IN ({_LPR_STATUSES})", name="ck_lpr_scenarios_status_valid"),
+        CheckConstraint("speed_ms > 0 AND radius_m > 0", name="ck_lpr_scenarios_positive"),
+        Index(
+            "uq_lpr_scenarios_one_active",
+            "status",
+            unique=True,
+            postgresql_where=text("status = 'ACTIVE'"),
+            sqlite_where=text("status = 'ACTIVE'"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16))
+    origin: Mapped[str] = mapped_column(String(16))  # an `EventOrigin` value
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    start_longitude: Mapped[float] = mapped_column(Float)
+    start_latitude: Mapped[float] = mapped_column(Float)
+    end_longitude: Mapped[float] = mapped_column(Float)
+    end_latitude: Mapped[float] = mapped_column(Float)
+    speed_ms: Mapped[float] = mapped_column(Float)
+    radius_m: Mapped[float] = mapped_column(Float)
+    margin_m: Mapped[float] = mapped_column(Float)
+    clear_extra_m: Mapped[float] = mapped_column(Float)

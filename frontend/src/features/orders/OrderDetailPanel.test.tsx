@@ -129,6 +129,7 @@ describe('OrderDetailPanel', () => {
       failedAt: null,
       recipientUnavailableAt: null,
       handoverFailedAt: null,
+      yieldingToLpr: false,
       updatedAt: '2026-11-13T12:00:02Z',
       snapshotAgeS: 1,
       emergency: null,
@@ -176,6 +177,7 @@ describe('OrderDetailPanel', () => {
       failedAt: '2026-11-13T12:00:00Z',
       recipientUnavailableAt: null,
       handoverFailedAt: null,
+      yieldingToLpr: false,
       updatedAt: '2026-11-13T12:00:10Z',
       snapshotAgeS: 1,
       emergency: { reason: 'DRONE_FAILURE', at: '2026-11-13T12:00:09Z', position: [18.6, 54.37] },
@@ -220,6 +222,7 @@ describe('OrderDetailPanel', () => {
     failedAt: null,
     recipientUnavailableAt: null,
     handoverFailedAt: null,
+    yieldingToLpr: false,
     updatedAt: '2026-11-13T12:00:10Z',
     snapshotAgeS: 1,
     emergency: null,
@@ -293,6 +296,38 @@ describe('OrderDetailPanel', () => {
 
     expect(screen.getByText(/brought back to a Hub/)).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Flight' })).not.toBeInTheDocument()
+  })
+
+  it('says a battery emergency before the handover is not a drone failure', () => {
+    const grounded: Flight = {
+      ...ON_ITS_WAY,
+      missionStatus: 'EMERGENCY',
+      phase: 'EMERGENCY',
+      target: null,
+      emergency: {
+        reason: 'BATTERY_CRITICAL',
+        at: '2026-11-13T12:00:09Z',
+        position: [18.6, 54.37],
+      },
+    }
+
+    render(
+      <OrderDetailPanel
+        order={{ ...ORDER, status: 'OUT_FOR_DELIVERY' }}
+        hub={HUB}
+        hubs={[HUB]}
+        flight={grounded}
+        markerSpread={false}
+        onClose={() => {}}
+        onCancelled={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(/Delivery interrupted: drone DRN-010/)).toHaveTextContent(
+      'because its battery would have fallen below the critical level',
+    )
+    expect(screen.queryByText(/interrupted by drone failure/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument()
   })
 
   it('still offers Cancel order for an order whose drone has not failed', () => {

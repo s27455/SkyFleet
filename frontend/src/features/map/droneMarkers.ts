@@ -116,10 +116,22 @@ const EMERGENCY_LABELS: Record<EmergencyLevel, string> = {
   grounded: ', grounded after a drone failure, requires service',
 }
 
-export function droneMarkerLabel(drone: Drone, emergency?: EmergencyLevel) {
+export function droneMarkerLabel(drone: Drone, emergency?: EmergencyLevel, yielding = false) {
   const base = `Drone ${drone.id}, ${DRONE_STATUS_DISPLAY[drone.status].label}, battery ${drone.batteryPct}%`
   const placed = isAwayFromHub(drone) ? `${base}, not at a Hub` : base
-  return emergency ? `${placed}${EMERGENCY_LABELS[emergency]}` : placed
+  if (emergency) return `${placed}${EMERGENCY_LABELS[emergency]}`
+  return yielding ? `${placed}, waiting for the LPR helicopter to pass` : placed
+}
+
+// A drone waiting for the LPR helicopter gets an amber outline: a second cue next to its label.
+const DRONE_MARKER_YIELDING_CLASSES = ['border-status-warning!', 'ring-2', 'ring-status-warning']
+
+/** Marks (or clears) the "yielding to LPR" outline in place, so keyboard focus survives. */
+export function setDroneMarkerYielding(element: HTMLElement, yielding: boolean) {
+  if (yielding) element.classList.add(...DRONE_MARKER_YIELDING_CLASSES)
+  else element.classList.remove(...DRONE_MARKER_YIELDING_CLASSES)
+  if (yielding) element.dataset.yielding = 'lpr'
+  else delete element.dataset.yielding
 }
 
 // A failed drone gets a red outline (a second cue next to the label and the emergency marker).

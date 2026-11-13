@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { Drone } from '../../types/drone'
 import type { EmergencyPoint } from '../flights/emergencyPoints'
-import { droneMarkerLabel, setDroneMarkerEmergency } from './droneMarkers'
+import { droneMarkerLabel, setDroneMarkerEmergency, setDroneMarkerYielding } from './droneMarkers'
 import { createEmergencyMarkerElement, emergencyMarkerLabel } from './emergencyMarkers'
 
 const point = (level: EmergencyPoint['level']): EmergencyPoint => ({
@@ -58,5 +58,25 @@ describe('failed drone marker', () => {
     setDroneMarkerEmergency(element, undefined)
     expect(element).not.toHaveClass('ring-status-critical')
     expect(element.dataset.emergency).toBeUndefined()
+  })
+})
+
+describe('drone waiting for the LPR helicopter (Feature 018E)', () => {
+  it('says so in the accessible name, and a failure still wins', () => {
+    expect(droneMarkerLabel(DRONE, undefined, true)).toMatch(/waiting for the LPR helicopter/)
+    expect(droneMarkerLabel(DRONE, undefined, false)).not.toMatch(/LPR/)
+    expect(droneMarkerLabel(DRONE, 'approach', true)).not.toMatch(/LPR/)
+  })
+
+  it('shows and clears the amber outline in place', () => {
+    const element = document.createElement('button')
+
+    setDroneMarkerYielding(element, true)
+    expect(element).toHaveClass('border-status-warning!', 'ring-status-warning')
+    expect(element.dataset.yielding).toBe('lpr')
+
+    setDroneMarkerYielding(element, false)
+    expect(element).not.toHaveClass('ring-status-warning')
+    expect(element.dataset.yielding).toBeUndefined()
   })
 })

@@ -41,6 +41,7 @@ const FLIGHT: Flight = {
   failedAt: null,
   recipientUnavailableAt: null,
   handoverFailedAt: null,
+  yieldingToLpr: false,
   updatedAt: '2026-11-12T10:00:25Z',
   snapshotAgeS: 2,
   emergency: null,
@@ -200,6 +201,46 @@ describe('FlightSection', () => {
     expect(section).toHaveTextContent('the parcel was not delivered')
     expect(within(section).queryByText('Planned return Hub')).not.toBeInTheDocument()
     expect(section).not.toHaveTextContent('fails on arrival') // no longer pending
+  })
+
+  it('says the drone is waiting for the LPR helicopter, apart from an emergency', () => {
+    const waiting: Flight = { ...FLIGHT, phase: 'OUTBOUND', deliveredAt: null, yieldingToLpr: true }
+
+    render(<FlightSection flight={waiting} hubs={HUBS} workerStale={false} />)
+
+    const section = screen.getByRole('region', { name: 'Flight' })
+    expect(section).toHaveTextContent('Yielding to LPR helicopter')
+    expect(section).toHaveTextContent('resumes its mission when the helicopter has passed')
+    expect(section).not.toHaveTextContent('Emergency')
+    expect(section).not.toHaveTextContent('maintenance')
+  })
+
+  it('shows the normal phase again once the drone resumes', () => {
+    render(
+      <FlightSection
+        flight={{ ...FLIGHT, phase: 'OUTBOUND', deliveredAt: null, yieldingToLpr: false }}
+        hubs={HUBS}
+        workerStale={false}
+      />,
+    )
+
+    const section = screen.getByRole('region', { name: 'Flight' })
+    expect(section).toHaveTextContent('Outbound with the parcel')
+    expect(section).not.toHaveTextContent('LPR')
+  })
+
+  it('does not call a failed drone yielding', () => {
+    const failed: Flight = {
+      ...FLIGHT,
+      phase: 'EMERGENCY_APPROACH',
+      deliveredAt: null,
+      failedAt: '2026-11-12T10:00:08Z',
+      yieldingToLpr: true,
+    }
+
+    render(<FlightSection flight={failed} hubs={HUBS} workerStale={false} />)
+
+    expect(screen.getByRole('region', { name: 'Flight' })).not.toHaveTextContent('LPR')
   })
 
   it('shows a simulated emergency, labelled as not a real landing site', () => {

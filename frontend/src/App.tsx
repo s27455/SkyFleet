@@ -20,6 +20,7 @@ import {
   isRecipientTargetable,
 } from './features/flights/flightStatus'
 import type { FlightVisual } from './features/flights/interpolation'
+import { useLpr } from './features/lpr/useLpr'
 import { LiveDataNotices } from './features/flights/LiveDataNotices'
 import { useFlights } from './features/flights/useFlights'
 import { usePrefersReducedMotion } from './features/flights/usePrefersReducedMotion'
@@ -28,7 +29,7 @@ import { useHubs } from './features/hubs/useHubs'
 import { computeDroneOffsets } from './features/map/droneMarkers'
 import { partitionFleet } from './features/map/fleetPlacement'
 import { OrderMarkerLegend } from './features/map/OrderMarkerLegend'
-import { MapView } from './features/map/MapView'
+import { type LprView, MapView } from './features/map/MapView'
 import { computeOrderOffsets } from './features/map/orderMarkers'
 import { DronesManager } from './features/management/DronesManager'
 import { ManagementPanel } from './features/management/ManagementPanel'
@@ -154,6 +155,30 @@ function App() {
   const interruptedOrderIds = useMemo(() => deriveInterruptedOrderIds(flights), [flights])
   const canFailDrone = useMemo(() => flights.some(isFailable), [flights])
   const canMarkRecipient = useMemo(() => flights.some(isRecipientTargetable), [flights])
+  // The LPR helicopter (Feature 018E): the backend's scenario and which drones wait for it.
+  const lprResource = useLpr()
+  const lprScenario = lprResource.state.status === 'ready' ? lprResource.state.data.scenario : null
+  const lprReceivedAt = lprResource.receivedAt
+  const lprStale = lprResource.stale
+  const lprView = useMemo<LprView | null>(
+    () =>
+      lprScenario === null || lprReceivedAt === null
+        ? null
+        : {
+            scenario: lprScenario,
+            receivedAt: lprReceivedAt,
+            animate: canAnimateFlights({
+              reducedMotion,
+              workerStale: false, // the helicopter is computed from the clock, not by the worker
+              refreshFailed: lprStale,
+            }),
+          },
+    [lprScenario, lprReceivedAt, reducedMotion, lprStale],
+  )
+  const yieldingDroneIds = useMemo(
+    () => new Set(flights.filter((flight) => flight.yieldingToLpr).map((flight) => flight.droneId)),
+    [flights],
+  )
   const receivedAt = flightsResource.receivedAt
   const flightsStale = flightsResource.stale
   const flightVisuals = useMemo<FlightVisual[]>(
@@ -198,6 +223,7 @@ function App() {
   const refreshDrones = dronesResource.refresh
   const refreshOrders = ordersResource.refresh
   const refreshFlights = flightsResource.refresh
+  const refreshLpr = lprResource.refresh
   const refreshMissions = missionsResource.refresh
   const [activityTick, setActivityTick] = useState(0)
   const refreshAfterIncident = useCallback(() => {
@@ -207,7 +233,8 @@ function App() {
     refreshMissions()
     refreshDrones()
     refreshFlights()
-  }, [refreshOrders, refreshMissions, refreshDrones, refreshFlights])
+    refreshLpr()
+  }, [refreshOrders, refreshMissions, refreshDrones, refreshFlights, refreshLpr])
   const startAssignedMission = useCallback(
     async (missionId: string) => {
       try {
@@ -285,10 +312,13 @@ function App() {
           emergencyPoints={emergencyPoints}
           droneEmergencies={droneEmergencies}
           interruptedOrderIds={interruptedOrderIds}
+          lpr={lprView}
+          yieldingDroneIds={yieldingDroneIds}
         />
         <OrderMarkerLegend
           hideOnNarrow={selection !== null}
           showEmergency={emergencyPoints.length > 0}
+          showLpr={lprScenario !== null}
         />
         <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80">
           <ResourceStatusBanner
@@ -364,6 +394,8 @@ function App() {
                       onDroneFailed={refreshAfterIncident}
                       canMarkRecipient={canMarkRecipient}
                       onRecipientMarked={refreshAfterIncident}
+                      lprActive={lprScenario !== null}
+                      onLprTriggered={refreshAfterIncident}
                     />
                     <OrdersManager
                       selectedOrderId={selection?.kind === 'order' ? selection.id : null}

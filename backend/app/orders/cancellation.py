@@ -40,7 +40,13 @@ from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.service import OrderManagementError, OrderNotFoundError
 from app.simulation.clock import as_utc
 from app.simulation.engine import write_snapshot
-from app.simulation.flight import leg_from_dict, leg_to_dict, recall_legs, state_at
+from app.simulation.flight import (
+    delivery_leg,
+    leg_from_dict,
+    leg_to_dict,
+    recall_legs,
+    state_at,
+)
 from app.simulation.models import FlightPhase, MissionFlight
 
 MAX_ATTEMPTS = 3
@@ -244,7 +250,10 @@ def _recall(
     started = as_utc(flight.started_at)
     elapsed = max((now - started).total_seconds(), 0.0)
     legs = [leg_from_dict(entry) for entry in flight.legs]
-    already_handed_over = flight.delivered_at is not None or elapsed >= legs[1].end_s
+    stop = delivery_leg(legs)
+    already_handed_over = flight.delivered_at is not None or (
+        stop is not None and elapsed >= stop.end_s
+    )
     if already_handed_over:
         raise OrderAlreadyDeliveredError(order.id)  # the next tick delivers it; do not race it
     if (

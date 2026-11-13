@@ -25,6 +25,7 @@ export const OUTBOUND_FLIGHT: FlightResponse = {
   failed_at: null,
   recipient_unavailable_at: null,
   handover_failed_at: null,
+  yielding_to_lpr: false,
   updated_at: '2026-11-12T10:00:09Z',
   emergency: null,
 }

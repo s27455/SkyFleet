@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # Feature 018C: a failed drone flies this far (metres) along its current heading to a simulated
     # emergency landing point. A deterministic MVP rule, not a terrain or safety assessment.
     sim_emergency_landing_distance_m: float = Field(default=250.0, gt=0)
+    # Feature 018E: the LPR helicopter scenario. Fictional simulation parameters, not aviation
+    # values; each scenario stores the values it started with. A drone is held when it comes within
+    # radius + margin of the helicopter and released once the helicopter is radius + margin +
+    # clear-extra away (a hysteresis so it does not stop and go).
+    sim_lpr_speed_ms: float = Field(default=80.0, gt=0)
+    sim_lpr_zone_radius_m: float = Field(default=500.0, gt=0)
+    sim_lpr_hold_margin_m: float = Field(default=250.0, ge=0)
+    sim_lpr_clear_extra_m: float = Field(default=100.0, ge=0)
     # A mission can only be started if the worker's last heartbeat is at most this old.
     sim_heartbeat_stale_seconds: float = Field(default=10.0, gt=0)
 

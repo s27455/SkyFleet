@@ -5,6 +5,7 @@ backend chooses an eligible target, performs the real transition and records the
 409 `NO_ELIGIBLE_TARGET` and creates nothing.
 """
 
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,10 +13,16 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
-from app.simulation import clock
+from app.simulation import clock, lpr
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import NoEligibleTargetError, trigger_drone_failure
-from app.simulation.schemas import DroneFailureResponse, RecipientUnavailableResponse
+from app.simulation.models import LprScenario
+from app.simulation.schemas import (
+    DroneFailureResponse,
+    LprScenarioResponse,
+    LprStatusResponse,
+    RecipientUnavailableResponse,
+)
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -59,4 +66,47 @@ def recipient_unavailable(
         mission_id=result.mission_id,
         order_id=result.order_id,
         attempt_at=result.attempt_at,
+    )
+
+
+def _lpr_response(row: LprScenario, now: datetime) -> LprScenarioResponse:
+    zone = lpr.zone_of(row)
+    return LprScenarioResponse(
+        id=row.id,
+        status=row.status,
+        origin=row.origin,
+        started_at=zone.started_at,
+        ends_at=zone.ends_at,
+        position=lpr.helicopter_position(zone, now),
+        route_start=zone.start,
+        route_end=zone.end,
+        speed_ms=zone.speed_ms,
+        radius_m=zone.radius_m,
+        hold_margin_m=zone.margin_m,
+    )
+
+
+@router.post("/lpr-helicopter", response_model=LprScenarioResponse)
+def lpr_helicopter(session: SessionDep, settings: SettingsDep) -> LprScenarioResponse:
+    """Start the LPR helicopter pass: a moving safety zone that delivery drones yield to.
+
+    Only one scenario runs at a time: a second trigger answers 409 `LPR_ALREADY_ACTIVE`.
+    """
+    now = clock.utcnow()
+    try:
+        row = lpr.start_scenario(session, now, settings)
+    except lpr.LprAlreadyActiveError as error:
+        raise HTTPException(
+            status_code=409, detail={"code": "LPR_ALREADY_ACTIVE", "message": str(error)}
+        ) from error
+    return _lpr_response(row, now)
+
+
+@router.get("/lpr", response_model=LprStatusResponse)
+def lpr_status(session: SessionDep) -> LprStatusResponse:
+    """The running LPR scenario with the helicopter's position now, or `null` when none runs."""
+    now = clock.utcnow()
+    row = lpr.active_scenario(session, now)
+    return LprStatusResponse(
+        server_time=now, scenario=_lpr_response(row, now) if row is not None else None
     )

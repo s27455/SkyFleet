@@ -24,6 +24,7 @@ const flight = (overrides: Partial<Flight> = {}): Flight => ({
   failedAt: null,
   recipientUnavailableAt: null,
   handoverFailedAt: null,
+  yieldingToLpr: false,
   updatedAt: '2026-11-13T10:00:08Z',
   snapshotAgeS: 1,
   emergency: null,

@@ -44,6 +44,8 @@ export interface FlightResponse {
   recipient_unavailable_at: string | null
   /** Set when the handover failed: the drone returns to a Hub with the parcel on board. */
   handover_failed_at: string | null
+  /** The drone is standing still outside the LPR helicopter's safety zone (Feature 018E). */
+  yielding_to_lpr: boolean
   updated_at: string
   emergency: { reason: EmergencyReason; at: string; position: [number, number] } | null
 }
@@ -91,6 +93,8 @@ export interface Flight {
   recipientUnavailableAt: string | null
   /** The handover failed and the drone is returning (or has returned) with the parcel. */
   handoverFailedAt: string | null
+  /** Waiting for the LPR helicopter to pass; the mission resumes afterwards. */
+  yieldingToLpr: boolean
   updatedAt: string
   /** Seconds between the snapshot and the response, both on the backend's clock. */
   snapshotAgeS: number

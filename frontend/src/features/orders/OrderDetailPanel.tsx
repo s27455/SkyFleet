@@ -70,6 +70,15 @@ export function OrderDetailPanel({
   const failed = flight?.failedAt != null
   const interrupted = failed && flight?.deliveredAt === null && order.status === 'OUT_FOR_DELIVERY'
   const grounded = flight?.phase === 'EMERGENCY'
+  // Feature 018E: a drone that could not afford to wait for the LPR helicopter ends in the existing
+  // battery emergency before the handover. It is not a drone failure, so it is said differently.
+  const batteryEmergency =
+    flight?.phase === 'EMERGENCY' &&
+    !failed &&
+    flight.deliveredAt === null &&
+    flight.recalledAt === null &&
+    flight.handoverFailedAt === null &&
+    order.status === 'OUT_FOR_DELIVERY'
   // Feature 018D: "recipient unavailable" is pending until the drone reaches the destination; after
   // that the order itself is DELIVERY_FAILED (a real status, unlike an interruption).
   const pendingRecipient =
@@ -116,7 +125,7 @@ export function OrderDetailPanel({
         )}
       </dl>
 
-      {onCancelled && !interrupted && !deliveryFailed && (
+      {onCancelled && !interrupted && !batteryEmergency && !deliveryFailed && (
         <CancelOrderAction order={order} onCancelled={onCancelled} />
       )}
 
@@ -169,6 +178,19 @@ export function OrderDetailPanel({
           {flight && flight.handoverFailedAt && (
             <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
           )}
+        </>
+      )}
+      {batteryEmergency && flight && (
+        <>
+          <p
+            role="status"
+            className="mt-3 rounded border border-status-critical p-2 text-xs text-status-critical"
+          >
+            Delivery interrupted: drone {flight.droneId} made an emergency landing because its
+            battery would have fallen below the critical level, and is grounded, requiring service;
+            the parcel was not delivered.
+          </p>
+          <FlightSection flight={flight} hubs={hubs} workerStale={workerStale} />
         </>
       )}
       {interrupted && flight && (

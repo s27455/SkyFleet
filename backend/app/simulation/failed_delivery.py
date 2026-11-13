@@ -35,7 +35,7 @@ from app.missions.routing import nearest_reachable_hub
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.simulation.clock import as_utc
 from app.simulation.failure import NoEligibleTargetError
-from app.simulation.flight import leg_from_dict, state_at
+from app.simulation.flight import delivery_leg, leg_from_dict, state_at
 from app.simulation.models import FlightPhase, MissionFlight
 
 ELIGIBLE_PHASES: tuple[str, ...] = (FlightPhase.OUTBOUND.value, FlightPhase.DELIVERING.value)
@@ -130,7 +130,11 @@ def _mark_flight(
         started = as_utc(flight.started_at)
         elapsed = max((now - started).total_seconds(), 0.0)
         legs = [leg_from_dict(entry) for entry in flight.legs]
-        attempt_s = legs[1].end_s
+        stop = delivery_leg(legs)
+        if stop is None:
+            session.rollback()
+            return None  # no delivery stop left in this schedule
+        attempt_s = stop.end_s
         if elapsed >= attempt_s:
             session.rollback()
             return None  # the worker is about to deliver; leave this flight to it
@@ -150,7 +154,7 @@ def _mark_flight(
         hubs = list(mission_repository.list_hubs(session))
         if (
             nearest_reachable_hub(
-                legs[1].target,
+                stop.target,
                 hubs,
                 at_stop.battery_pct,
                 loaded,

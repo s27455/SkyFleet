@@ -30,3 +30,13 @@ describe('OrderMarkerLegend', () => {
     ).toHaveClass('hidden', 'sm:block')
   })
 })
+
+describe('OrderMarkerLegend LPR zone', () => {
+  it('names the safety zone only while the helicopter is on the map', () => {
+    const { rerender } = render(<OrderMarkerLegend />)
+    expect(screen.queryByText('LPR safety zone')).not.toBeInTheDocument()
+
+    rerender(<OrderMarkerLegend showLpr />)
+    expect(screen.getByText('LPR safety zone')).toBeInTheDocument()
+  })
+})

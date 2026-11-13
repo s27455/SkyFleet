@@ -166,6 +166,11 @@ function stubBackend(
       if (url.endsWith('/api/orders')) return allOrdersCalls()
       if (url.endsWith('/api/flights')) return flightsCalls()
       if (url.endsWith('/api/missions')) return missionsCalls()
+      if (url.endsWith('/api/incidents/lpr')) {
+        return Promise.resolve(
+          jsonResponse({ server_time: '2026-11-13T12:00:00Z', scenario: null }),
+        )
+      }
       return url.endsWith('/api/drones') ? dronesCalls() : hubsCalls()
     }),
   )

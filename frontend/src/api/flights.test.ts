@@ -50,6 +50,7 @@ describe('getFlights', () => {
       failedAt: null,
       recipientUnavailableAt: null,
       handoverFailedAt: null,
+      yieldingToLpr: false,
       updatedAt: '2026-11-12T10:00:09Z',
       snapshotAgeS: 1, // server_time minus updated_at, both on the backend's clock
       emergency: null,

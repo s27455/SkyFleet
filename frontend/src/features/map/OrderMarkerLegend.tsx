@@ -13,6 +13,8 @@ const LEGEND_STATES: readonly OrderMarkerState[] = [
 interface OrderMarkerLegendProps {
   /** Adds the emergency landing marker to the key while one is on the map (Feature 018C). */
   showEmergency?: boolean
+  /** Adds the LPR helicopter's safety zone to the key while it is on the map (Feature 018E). */
+  showLpr?: boolean
   /** Hidden on narrow screens while a details panel covers the bottom of the map. */
   hideOnNarrow?: boolean
 }
@@ -21,6 +23,7 @@ interface OrderMarkerLegendProps {
 export function OrderMarkerLegend({
   hideOnNarrow = false,
   showEmergency = false,
+  showLpr = false,
 }: OrderMarkerLegendProps) {
   return (
     <section
@@ -49,6 +52,15 @@ export function OrderMarkerLegend({
               ✕
             </span>
             Emergency landing
+          </li>
+        )}
+        {showLpr && (
+          <li className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="size-3 rounded-full border border-status-warning bg-status-warning/25"
+            />
+            LPR safety zone
           </li>
         )}
       </ul>
