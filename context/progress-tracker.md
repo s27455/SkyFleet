@@ -237,6 +237,7 @@ The system can assign orders to suitable drones using predictable, testable busi
 - [ ] Planned: Hub occupancy monitoring — drones present at each Hub vs. `drone_capacity`, shown to the operator (counting semantics open, Q8).
 - [ ] Planned: operator interventions (cancel/abort, request return, request landing) as backend-validated commands (exact semantics open, Q5).
 - [ ] Planned, subject to MVP prioritization: contextual drone detail view with live telemetry and a 3D drone representation, driven by backend telemetry.
+  - [x] Feature 016A (`docs/features/016a-drone-3d-model.md`): reusable procedural 3D quadcopter viewer (`Drone3DViewer`, React Three Fiber) with a dev-only preview at `/?preview=drone3d`; frontend only, not yet used by the app. Verified by frontend lint, typecheck, format check, 416 unit tests and a production build, plus headless-Chrome screenshots; no QA or code-review agent run. Still open: 016B inspector overlay and map popup button, 016C simulated telemetry, 016D component selection and polish.
 
 ### Expected Result
 
