@@ -39,6 +39,7 @@ const DRONES: Drone[] = [
 const mission = (droneId: string, status: Mission['status']): Mission => ({
   id: `MIS-${droneId}`,
   orderId: 'ORD-001',
+  purpose: 'DELIVERY',
   droneId,
   originHubId: 'hub-galeria-baltycka',
   returnHubId: 'hub-galeria-baltycka',

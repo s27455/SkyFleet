@@ -6,7 +6,8 @@ export type EmergencyLevel = 'approach' | 'grounded'
 
 export interface EmergencyPoint {
   droneId: string
-  orderId: string
+  /** null when a relocating drone failed: it served no order. */
+  orderId: string | null
   level: EmergencyLevel
   /** [longitude, latitude] of the simulated emergency landing point. */
   position: readonly [number, number]
@@ -60,6 +61,6 @@ export function interruptedOrderIds(flights: readonly Flight[]): Set<string> {
   return new Set(
     flights
       .filter((flight) => flight.failedAt !== null && flight.deliveredAt === null)
-      .map((flight) => flight.orderId),
+      .flatMap((flight) => (flight.orderId === null ? [] : [flight.orderId])),
   )
 }

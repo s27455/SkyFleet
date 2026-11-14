@@ -97,7 +97,7 @@ export function resolveInspectorData(sources: InspectorSources): InspectorData {
 
   const orderId = flightRecord?.orderId ?? missionRecord?.orderId
   let payload: Lookup<Order>
-  if (orderId === undefined) {
+  if (orderId === undefined || orderId === null) {
     // No mission, no payload; but if missions could not be read we cannot tell.
     payload = mission.kind === 'unavailable' ? mission : { kind: 'none' }
   } else if (sources.ordersStatus !== 'ready') {

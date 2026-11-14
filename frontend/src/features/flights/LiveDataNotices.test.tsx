@@ -9,6 +9,7 @@ import { LiveDataNotices, MAX_EMERGENCY_ALERTS } from './LiveDataNotices'
 const baseFlight: Flight = {
   missionId: 'MIS-1',
   orderId: 'ORD-1',
+  purpose: 'DELIVERY',
   droneId: 'DRN-1',
   missionStatus: 'EMERGENCY',
   phase: 'EMERGENCY',

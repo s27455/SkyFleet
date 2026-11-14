@@ -30,6 +30,8 @@ class LegKind(StrEnum):
     # Feature 018E: standing still in the air for a while (yielding to the LPR helicopter's zone).
     # It keeps the phase of the leg it interrupts and costs battery like cruising (see `hold_legs`).
     HOLD = "HOLD"
+    # Feature 019A: the single empty hub-to-hub leg of a manual relocation.
+    RELOCATE = "RELOCATE"
 
 
 _PHASE_OF_LEG = {
@@ -42,6 +44,7 @@ _PHASE_OF_LEG = {
     LegKind.EMERGENCY: FlightPhase.EMERGENCY_APPROACH,
     # Placeholder only: a hold takes the phase of the leg before it (see `state_at`).
     LegKind.HOLD: FlightPhase.OUTBOUND,
+    LegKind.RELOCATE: FlightPhase.RELOCATING,
 }
 
 
@@ -153,6 +156,20 @@ def build_legs(
         Leg(LegKind.RETURN, out_s + dwell_s, back_s, destination, return_point, back_km, False),
     ]
     return legs, pace
+
+
+def build_relocation_legs(
+    origin: Point, destination: Point, *, total_seconds: float
+) -> tuple[list[Leg], float]:
+    """The schedule of a relocation (Feature 019A) and the pace in seconds per km.
+
+    One empty leg from the origin Hub to the destination Hub. There is no delivery stop and no
+    parcel, so the landing decision applies to this leg and nothing else.
+    """
+    km = distance_km(origin, destination)
+    pace = total_seconds / km if km > 0 else FALLBACK_PACE_S_PER_KM
+    leg = Leg(LegKind.RELOCATE, 0.0, total_seconds, origin, destination, km, loaded=False)
+    return [leg], pace
 
 
 @dataclass(frozen=True)

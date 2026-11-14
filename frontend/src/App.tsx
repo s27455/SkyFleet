@@ -208,7 +208,12 @@ function App() {
     [missions],
   )
   const assignedByOrder = useMemo(
-    () => new Map(assignedMissions.map((mission) => [mission.orderId, mission])),
+    () =>
+      new Map(
+        assignedMissions.flatMap((mission) =>
+          mission.orderId === null ? [] : [[mission.orderId, mission] as const],
+        ),
+      ),
     [assignedMissions],
   )
   const assignedByDrone = useMemo(
@@ -235,6 +240,13 @@ function App() {
     refreshFlights()
     refreshLpr()
   }, [refreshOrders, refreshMissions, refreshDrones, refreshFlights, refreshLpr])
+  // A relocation changes the drone, its flight and its Activity; read them at once (Feature 019A).
+  const refreshAfterRelocation = useCallback(() => {
+    setActivityTick((tick) => tick + 1)
+    refreshMissions()
+    refreshDrones()
+    refreshFlights()
+  }, [refreshMissions, refreshDrones, refreshFlights])
   const startAssignedMission = useCallback(
     async (missionId: string) => {
       try {
@@ -440,6 +452,8 @@ function App() {
             workerStale={workerStale}
             assignedMission={assignedByDrone.get(selectedDrone.id)}
             onStartMission={startAssignedMission}
+            onRelocationChanged={refreshAfterRelocation}
+            activityRefreshKey={activityTick}
             onInspect={() => setInspectedDroneId(selectedDrone.id)}
             closeOnEscape={!inspectorOpen}
           />

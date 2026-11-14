@@ -34,6 +34,7 @@ describe('getFlights', () => {
     expect(flight).toEqual({
       missionId: 'MIS-AAAA0001',
       orderId: 'ORD-001',
+      purpose: 'DELIVERY',
       droneId: 'DRN-010',
       missionStatus: 'IN_FLIGHT',
       phase: 'OUTBOUND',
@@ -161,5 +162,33 @@ describe('getFlights', () => {
 
     stubFetch(() => Promise.reject(new TypeError('Failed to fetch')))
     await expect(getFlights()).rejects.toBeInstanceOf(ApiError)
+  })
+})
+
+describe('getFlights with a relocation (Feature 019A)', () => {
+  const RELOCATION = {
+    ...OUTBOUND_FLIGHT,
+    order_id: null,
+    purpose: 'RELOCATION' as const,
+    phase: 'RELOCATING' as const,
+    planned_return_hub_id: 'hub-forum-gdansk',
+    landing_target_hub_id: 'hub-forum-gdansk',
+  }
+
+  it('maps a relocation flight without an order', async () => {
+    respondWith(flightsResponse([RELOCATION]))
+
+    const [flight] = (await getFlights()).flights
+
+    expect(flight.orderId).toBeNull()
+    expect(flight.purpose).toBe('RELOCATION')
+    expect(flight.phase).toBe('RELOCATING')
+    expect(flight.landingTargetHubId).toBe('hub-forum-gdansk')
+  })
+
+  it('still requires an order for a delivery', async () => {
+    respondWith(flightsResponse([{ ...OUTBOUND_FLIGHT, order_id: null }]))
+
+    await expect(getFlights()).rejects.toThrow(/missing order_id/)
   })
 })

@@ -8,6 +8,7 @@ import { isFailable, isRecipientPending, isRecipientTargetable } from './flightS
 const flight = (overrides: Partial<Flight> = {}): Flight => ({
   missionId: 'MIS-1',
   orderId: 'ORD-1',
+  purpose: 'DELIVERY',
   droneId: 'DRN-1',
   missionStatus: 'IN_FLIGHT',
   phase: 'OUTBOUND',

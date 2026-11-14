@@ -47,6 +47,14 @@ class DroneCreateRequest(BaseModel):
     battery_pct: int = Field(default=100, ge=0, le=100)
 
 
+class RelocateRequest(BaseModel):
+    """The destination of a manual relocation (Feature 019A)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    destination_hub_id: str = Field(min_length=1, max_length=64)
+
+
 class DroneUpdateRequest(BaseModel):
     """Whitelisted administrative changes; every other field is rejected (422)."""
 

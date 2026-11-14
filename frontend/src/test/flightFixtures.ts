@@ -8,6 +8,7 @@ export const SERVER_TIME = '2026-11-12T10:00:10Z'
 export const OUTBOUND_FLIGHT: FlightResponse = {
   mission_id: 'MIS-AAAA0001',
   order_id: 'ORD-001',
+  purpose: 'DELIVERY',
   drone_id: 'DRN-010',
   mission_status: 'IN_FLIGHT',
   phase: 'OUTBOUND',
@@ -61,6 +62,7 @@ export function flightsResponse(
 export const ASSIGNED_MISSION: MissionResponse = {
   id: 'MIS-AAAA0001',
   order_id: 'ORD-001',
+  purpose: 'DELIVERY',
   drone_id: 'DRN-010',
   origin_hub_id: 'hub-galeria-baltycka',
   return_hub_id: 'hub-galeria-baltycka',

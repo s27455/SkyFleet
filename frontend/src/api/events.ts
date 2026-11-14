@@ -58,10 +58,19 @@ export async function getOrderEvents(
   orderId: string,
   signal?: AbortSignal,
 ): Promise<OperationalEvent[]> {
-  const payload = await apiGet<unknown>(
-    `/api/events?order_id=${encodeURIComponent(orderId)}`,
-    signal,
-  )
+  return getEvents(`order_id=${encodeURIComponent(orderId)}`, signal)
+}
+
+/** One drone's events, oldest first: the Activity of a drone, a relocation included (Feature 019A). */
+export async function getDroneEvents(
+  droneId: string,
+  signal?: AbortSignal,
+): Promise<OperationalEvent[]> {
+  return getEvents(`drone_id=${encodeURIComponent(droneId)}`, signal)
+}
+
+async function getEvents(query: string, signal?: AbortSignal): Promise<OperationalEvent[]> {
+  const payload = await apiGet<unknown>(`/api/events?${query}`, signal)
   if (!Array.isArray(payload)) invalid('response is not a list')
   return payload.map(toEvent)
 }

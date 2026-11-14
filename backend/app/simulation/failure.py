@@ -31,7 +31,7 @@ from app.events.models import EventOrigin, EventType
 from app.events.service import append_event
 from app.missions import repository as mission_repository
 from app.missions.energy import consumption_rates
-from app.missions.models import Mission, MissionStatus
+from app.missions.models import Mission, MissionPurpose, MissionStatus
 from app.simulation.clock import as_utc
 from app.simulation.engine import write_snapshot
 from app.simulation.flight import (
@@ -50,6 +50,7 @@ ELIGIBLE_PHASES: tuple[str, ...] = (
     FlightPhase.DELIVERING.value,
     FlightPhase.RETURNING.value,
     FlightPhase.DIVERTING.value,
+    FlightPhase.RELOCATING.value,
 )
 
 _rng = random.Random()
@@ -60,6 +61,7 @@ class FailureStage(StrEnum):
     RECALL = "RECALL"  # the order was cancelled and the drone is flying back (018B)
     AFTER_DELIVERY = "AFTER_DELIVERY"  # the parcel was delivered; the drone is on its way back
     HANDOVER_FAILED = "HANDOVER_FAILED"  # recipient unavailable; flying back with the parcel (018D)
+    RELOCATION = "RELOCATION"  # an empty hub-to-hub relocation flight (019A)
 
 
 class NoEligibleTargetError(Exception):
@@ -73,7 +75,7 @@ class NoEligibleTargetError(Exception):
 class FailureResult:
     drone_id: str
     mission_id: str
-    order_id: str
+    order_id: str | None
     stage: FailureStage
     landing_position: tuple[float, float]
 
@@ -129,9 +131,14 @@ def _fail_flight(
         if flight is None or mission is None:
             session.rollback()
             return None
-        order = mission_repository.get_order(session, mission.order_id, lock=True)
+        relocation = mission.purpose == MissionPurpose.RELOCATION.value
+        order = (
+            None
+            if mission.order_id is None
+            else mission_repository.get_order(session, mission.order_id, lock=True)
+        )
         drone = mission_repository.get_drone(session, mission.drone_id, lock=True)
-        if order is None or drone is None:
+        if drone is None or (order is None and not relocation):
             session.rollback()
             return None
         if (
@@ -156,12 +163,12 @@ def _fail_flight(
             session.rollback()
             return None
         decision_s, _ = landing_decision(legs[-1], settings.sim_landing_approach_m)
-        if (delivered or returning) and elapsed >= decision_s:
+        if (delivered or returning or relocation) and elapsed >= decision_s:
             session.rollback()
             return None
 
         empty, loaded = consumption_rates(
-            weight_kg=order.package_weight_kg,
+            weight_kg=0.0 if order is None else order.package_weight_kg,
             model=drone.model,
             payload_energy_factor=settings.mission_payload_energy_factor,
         )
@@ -181,10 +188,13 @@ def _fail_flight(
             here.position,
             landing,
             flight.pace_s_per_km,
-            loaded=not delivered,  # the parcel is still on board until it is handed over
+            # the parcel is still on board until it is handed over (a relocation has none)
+            loaded=not delivered and not relocation,
         )
         stage = (
-            FailureStage.RECALL
+            FailureStage.RELOCATION
+            if relocation
+            else FailureStage.RECALL
             if recalled
             else FailureStage.HANDOVER_FAILED
             if handover_failed
@@ -210,7 +220,7 @@ def _fail_flight(
             session,
             event_type=EventType.DRONE_FAILURE,
             origin=origin,
-            order_id=order.id,
+            order_id=None if order is None else order.id,
             mission_id=mission.id,
             flight_id=flight.mission_id,
             drone_id=drone.id,
@@ -224,7 +234,7 @@ def _fail_flight(
         return FailureResult(
             drone_id=drone.id,
             mission_id=mission.id,
-            order_id=order.id,
+            order_id=None if order is None else order.id,
             stage=stage,
             landing_position=landing,
         )

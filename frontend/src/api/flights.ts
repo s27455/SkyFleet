@@ -6,7 +6,7 @@ import {
   type FlightResponse,
   type FlightsSnapshot,
 } from '../types/flight'
-import { MISSION_STATUSES } from '../types/mission'
+import { MISSION_PURPOSES, MISSION_STATUSES } from '../types/mission'
 import { ApiError, apiGet } from './client'
 import { isFiniteNumberInRange, isNonEmptyString } from './validation'
 
@@ -58,8 +58,15 @@ function toFlight(item: unknown, serverTimeMs: number): Flight {
 
   const id = raw.mission_id
   if (!isNonEmptyString(id)) invalid('missing mission_id')
+  // A payload without it predates Feature 019A: every mission then was a delivery.
+  const purpose = raw.purpose ?? 'DELIVERY'
+  if (typeof purpose !== 'string' || !(MISSION_PURPOSES as readonly string[]).includes(purpose)) {
+    invalid(`unknown purpose for ${id}`)
+  }
+  // Only a relocation (Feature 019A) has no order; a delivery always has one.
+  if (purpose === 'DELIVERY' && !isNonEmptyString(raw.order_id))
+    invalid(`missing order_id for ${id}`)
   for (const key of [
-    'order_id',
     'drone_id',
     'origin_hub_id',
     'planned_return_hub_id',
@@ -111,7 +118,8 @@ function toFlight(item: unknown, serverTimeMs: number): Flight {
 
   return {
     missionId: id,
-    orderId: raw.order_id as string,
+    orderId: typeof raw.order_id === 'string' ? raw.order_id : null,
+    purpose: purpose as Flight['purpose'],
     droneId: raw.drone_id as string,
     missionStatus: raw.mission_status,
     phase: raw.phase as Flight['phase'],

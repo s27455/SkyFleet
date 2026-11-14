@@ -8,6 +8,7 @@ import { StartMissionControl } from './StartMissionControl'
 const MISSION: Mission = {
   id: 'MIS-AAAA0001',
   orderId: 'ORD-001',
+  purpose: 'DELIVERY',
   droneId: 'DRN-010',
   originHubId: 'hub-a',
   returnHubId: 'hub-a',

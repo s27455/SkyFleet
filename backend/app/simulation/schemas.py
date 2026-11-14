@@ -1,10 +1,11 @@
 """API contracts for flights (REST polling; the payload suits a later stream as well)."""
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel
 
-from app.missions.models import MissionStatus
+from app.missions.models import MissionPurpose, MissionStatus
 from app.simulation.models import EmergencyReason, FlightPhase
 
 
@@ -28,7 +29,8 @@ class FlightEmergency(BaseModel):
 
 class FlightResponse(BaseModel):
     mission_id: str
-    order_id: str
+    order_id: str | None  # None for a relocation (Feature 019A)
+    purpose: MissionPurpose
     drone_id: str
     mission_status: MissionStatus
     phase: FlightPhase
@@ -85,8 +87,8 @@ class DroneFailureResponse(BaseModel):
 
     drone_id: str
     mission_id: str
-    order_id: str
-    stage: str  # BEFORE_DELIVERY, RECALL, HANDOVER_FAILED or AFTER_DELIVERY
+    order_id: str | None  # None when a relocating drone failed
+    stage: str  # BEFORE_DELIVERY, RECALL, HANDOVER_FAILED, AFTER_DELIVERY or RELOCATION
     landing_position: tuple[float, float]  # [longitude, latitude], a simulated point
 
 
@@ -113,3 +115,51 @@ class LprScenarioResponse(BaseModel):
 class LprStatusResponse(BaseModel):
     server_time: datetime
     scenario: LprScenarioResponse | None
+
+
+class RelocationReasonCode(StrEnum):
+    DRONE_ALREADY_ASSIGNED = "DRONE_ALREADY_ASSIGNED"
+    DRONE_NOT_AVAILABLE = "DRONE_NOT_AVAILABLE"
+    DRONE_NOT_AT_HUB = "DRONE_NOT_AT_HUB"
+    SAME_HUB = "SAME_HUB"
+    ROUTE_TOO_LONG = "ROUTE_TOO_LONG"
+    INSUFFICIENT_BATTERY = "INSUFFICIENT_BATTERY"
+    DESTINATION_FULL = "DESTINATION_FULL"
+
+
+class RelocationReason(BaseModel):
+    code: RelocationReasonCode
+    message: str
+
+
+class RelocationPlanResponse(BaseModel):
+    """Feasibility of relocating one drone to one Hub (Feature 019A); the preview writes nothing.
+
+    Distances and energy are simulation assumptions (the existing empty-flight rate), not certified
+    flight performance. The destination is not reserved; capacity is rechecked at landing.
+    """
+
+    drone_id: str
+    eligible: bool
+    reasons: list[RelocationReason]
+    origin_hub_id: str | None  # the Hub the drone is docked at now
+    destination_hub_id: str
+    distance_km: float
+    distance_budget_km: float
+    required_battery_pct: float  # the flight plus the minimum reserve
+    expected_battery_use_pct: float
+    drone_battery_pct: int
+    destination_docked_drones: int
+    destination_capacity: int
+    warnings: list[str]
+
+
+class RelocationResponse(BaseModel):
+    """The relocation that was started (Feature 019A)."""
+
+    mission_id: str
+    drone_id: str
+    origin_hub_id: str
+    destination_hub_id: str
+    started_at: datetime
+    distance_km: float

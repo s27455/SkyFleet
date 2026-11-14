@@ -3,14 +3,24 @@
 from collections.abc import Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
+from app.api.errors import worker_unavailable
 from app.config import Settings
 from app.db.session import get_session
 from app.drones import repository, service
 from app.drones.models import Drone
-from app.drones.schemas import DroneCreateRequest, DroneResponse, DroneUpdateRequest
+from app.drones.schemas import (
+    DroneCreateRequest,
+    DroneResponse,
+    DroneUpdateRequest,
+    RelocateRequest,
+)
+from app.missions.service import DroneNotFoundError as MissionDroneNotFoundError
+from app.simulation import clock, relocation
+from app.simulation import service as simulation_service
+from app.simulation.schemas import RelocationPlanResponse, RelocationResponse
 
 router = APIRouter(prefix="/drones", tags=["drones"])
 
@@ -81,3 +91,55 @@ def delete_drone(drone_id: str, session: SessionDep) -> Response:
     except service.DroneManagementError as error:
         raise _http_error(error) from error
     return Response(status_code=204)
+
+
+def _relocation_not_found(error: Exception) -> HTTPException:
+    code = "DRONE_NOT_FOUND" if isinstance(error, MissionDroneNotFoundError) else "HUB_NOT_FOUND"
+    return HTTPException(status_code=404, detail={"code": code, "message": str(error)})
+
+
+@router.get("/{drone_id}/relocation-plan", response_model=RelocationPlanResponse)
+def relocation_plan(
+    drone_id: str,
+    session: SessionDep,
+    settings: SettingsDep,
+    destination_hub_id: Annotated[str, Query(min_length=1)],
+) -> RelocationPlanResponse:
+    """Read-only (Feature 019A): can this drone relocate to that Hub now, and why not."""
+    try:
+        return relocation.preview_relocation(session, drone_id, destination_hub_id, settings)
+    except (MissionDroneNotFoundError, relocation.HubNotFoundError) as error:
+        raise _relocation_not_found(error) from error
+
+
+@router.post("/{drone_id}/relocate", response_model=RelocationResponse, status_code=201)
+def relocate_drone(
+    drone_id: str, body: RelocateRequest, session: SessionDep, settings: SettingsDep
+) -> RelocationResponse:
+    """Start an empty relocation flight to another Hub (Feature 019A). Needs the worker."""
+    now = clock.utcnow()
+    try:
+        mission = relocation.start_relocation(
+            session, drone_id, body.destination_hub_id, now, settings
+        )
+    except (MissionDroneNotFoundError, relocation.HubNotFoundError) as error:
+        raise _relocation_not_found(error) from error
+    except simulation_service.WorkerUnavailableError as error:
+        raise worker_unavailable(error) from error
+    except relocation.RelocationRejectedError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "RELOCATION_NOT_ELIGIBLE",
+                "message": str(error),
+                "plan": error.plan.model_dump(mode="json"),
+            },
+        ) from error
+    return RelocationResponse(
+        mission_id=mission.id,
+        drone_id=mission.drone_id,
+        origin_hub_id=mission.origin_hub_id,
+        destination_hub_id=mission.return_hub_id,
+        started_at=now,
+        distance_km=mission.total_km,
+    )

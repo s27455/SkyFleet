@@ -6,7 +6,8 @@ import { isFiniteNumberInRange, isNonEmptyString, isPositiveFiniteNumber } from 
 export interface DroneFailureResult {
   droneId: string
   missionId: string
-  orderId: string
+  /** null when a relocating drone failed (Feature 019A). */
+  orderId: string | null
   stage: string
   /** [longitude, latitude] of the simulated emergency landing point. */
   landingPosition: [number, number]
@@ -23,7 +24,9 @@ function toResult(payload: unknown): DroneFailureResult {
   const position = raw.landing_position
   if (typeof droneId !== 'string' || droneId === '') invalid('missing drone_id')
   if (typeof missionId !== 'string' || missionId === '') invalid('missing mission_id')
-  if (typeof orderId !== 'string' || orderId === '') invalid('missing order_id')
+  if (orderId !== null && (typeof orderId !== 'string' || orderId === '')) {
+    invalid('bad order_id')
+  }
   if (typeof stage !== 'string') invalid('missing stage')
   if (
     !Array.isArray(position) ||
@@ -35,7 +38,7 @@ function toResult(payload: unknown): DroneFailureResult {
   return {
     droneId,
     missionId,
-    orderId,
+    orderId: orderId ?? null,
     stage,
     landingPosition: [position[0] as number, position[1] as number],
   }

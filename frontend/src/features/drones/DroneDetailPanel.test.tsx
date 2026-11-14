@@ -139,3 +139,43 @@ describe('DroneDetailPanel', () => {
     })
   })
 })
+
+describe('DroneDetailPanel relocation (Feature 019A)', () => {
+  it('offers Relocate for an idle drone and gives the reason when it is unavailable', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {})),
+    )
+    const { rerender } = render(
+      <DroneDetailPanel
+        drone={DRONE}
+        hub={HUB}
+        hubs={[HUB]}
+        markerSpread={false}
+        onClose={() => {}}
+        onRelocationChanged={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Relocate DRN-004' })).toBeEnabled()
+    expect(screen.getByRole('region', { name: 'Activity' })).toBeInTheDocument()
+
+    rerender(
+      <DroneDetailPanel
+        drone={{ ...DRONE, status: 'CHARGING' }}
+        hub={HUB}
+        hubs={[HUB]}
+        markerSpread={false}
+        onClose={() => {}}
+        onRelocationChanged={() => {}}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Relocate DRN-004' })).toBeDisabled()
+    expect(screen.getByText(/this drone is charging/)).toBeInTheDocument()
+  })
+
+  it('does not show Relocate without the refresh callback', () => {
+    render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
+
+    expect(screen.queryByRole('button', { name: /Relocate/ })).not.toBeInTheDocument()
+  })
+})

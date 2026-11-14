@@ -45,6 +45,7 @@ def _as_flight_response(flight: MissionFlight, mission: Mission, now: datetime) 
         {
             "mission_id": mission.id,
             "order_id": mission.order_id,
+            "purpose": mission.purpose,
             "drone_id": mission.drone_id,
             "mission_status": mission.status,
             "phase": flight.phase,

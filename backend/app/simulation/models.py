@@ -36,6 +36,8 @@ class FlightPhase(StrEnum):
     # emergency landing point (not terminal: the engine finishes it as EMERGENCY).
     EMERGENCY_APPROACH = "EMERGENCY_APPROACH"
     EMERGENCY = "EMERGENCY"  # terminal: simulated emergency, no safe Hub landing was possible
+    # Feature 019A: an empty hub-to-hub relocation flight (no order, no parcel).
+    RELOCATING = "RELOCATING"
 
 
 TERMINAL_PHASES: tuple[FlightPhase, ...] = (FlightPhase.LANDED, FlightPhase.EMERGENCY)

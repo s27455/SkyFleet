@@ -113,6 +113,7 @@ describe('OrderDetailPanel', () => {
     const flight: Flight = {
       missionId: 'MIS-AAAA0001',
       orderId: 'ORD-004',
+      purpose: 'DELIVERY',
       droneId: 'DRN-010',
       missionStatus: 'IN_FLIGHT',
       phase: 'RETURNING',
@@ -161,6 +162,7 @@ describe('OrderDetailPanel', () => {
     const flight: Flight = {
       missionId: 'MIS-AAAA0001',
       orderId: 'ORD-004',
+      purpose: 'DELIVERY',
       droneId: 'DRN-010',
       missionStatus: 'EMERGENCY',
       phase: 'EMERGENCY',
@@ -206,6 +208,7 @@ describe('OrderDetailPanel', () => {
   const ON_ITS_WAY: Flight = {
     missionId: 'MIS-AAAA0001',
     orderId: 'ORD-004',
+    purpose: 'DELIVERY',
     droneId: 'DRN-010',
     missionStatus: 'IN_FLIGHT',
     phase: 'OUTBOUND',

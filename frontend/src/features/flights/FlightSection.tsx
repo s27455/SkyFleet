@@ -3,7 +3,12 @@ import type { ReactNode } from 'react'
 import { StatusIndicator } from '../../components/ui/StatusIndicator'
 import type { Flight } from '../../types/flight'
 import type { Hub } from '../../types/hub'
-import { EMERGENCY_REASON_TEXT, FLIGHT_PHASE_DISPLAY, isRecipientPending } from './flightStatus'
+import {
+  EMERGENCY_REASON_TEXT,
+  FLIGHT_PHASE_DISPLAY,
+  isRecipientPending,
+  isRelocation,
+} from './flightStatus'
 
 interface FlightSectionProps {
   flight: Flight
@@ -58,8 +63,13 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
   } else if (handoverFailed && flight.phase !== 'LANDED' && flight.phase !== 'EMERGENCY') {
     phase = { tone: 'warning', label: 'Delivery failed: returning with the parcel' }
   }
-  if (yielding) phase = { tone: 'warning', label: 'Yielding to LPR helicopter' }
   const hubName = (id: string) => hubs.find((hub) => hub.id === id)?.name ?? id
+  // Feature 019A: an empty hub-to-hub relocation, named by its destination Hub.
+  const relocating = isRelocation(flight)
+  if (relocating && flight.phase === 'RELOCATING' && !failed) {
+    phase = { tone: 'ok', label: `Relocating to ${hubName(flight.plannedReturnHubId)}` }
+  }
+  if (yielding) phase = { tone: 'warning', label: 'Yielding to LPR helicopter' }
   const diverted = flight.landingTargetHubId !== flight.plannedReturnHubId
   const emergency = flight.emergency
   const approaching = failed && flight.phase === 'EMERGENCY_APPROACH'
@@ -108,7 +118,9 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
           </Row>
         )}
         {!failed && !handoverFailed && (
-          <Row label="Planned return Hub">{hubName(flight.plannedReturnHubId)}</Row>
+          <Row label={relocating ? 'Destination Hub' : 'Planned return Hub'}>
+            {hubName(flight.plannedReturnHubId)}
+          </Row>
         )}
         {handoverFailed && !emergency && (
           <Row label="Returning">
@@ -124,6 +136,12 @@ export function FlightSection({ flight, hubs, workerStale }: FlightSectionProps)
           <Row label="Now heading to">{hubName(flight.landingTargetHubId)}</Row>
         )}
       </dl>
+      {relocating && !failed && !emergency && (
+        <p className="mt-2 text-xs text-fg-muted">
+          An empty relocation flight (no order, no parcel). The drone keeps its current Hub until it
+          lands; the destination is not reserved.
+        </p>
+      )}
       {workerStale && (
         <p role="status" className="mt-2 text-xs text-fg-muted">
           The simulation worker has stopped updating this flight; the figures above are the last

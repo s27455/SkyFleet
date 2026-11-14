@@ -1,3 +1,5 @@
+import type { MissionPurpose } from './mission'
+
 export const FLIGHT_PHASES = [
   'OUTBOUND',
   'DELIVERING',
@@ -6,6 +8,7 @@ export const FLIGHT_PHASES = [
   'LANDED',
   'EMERGENCY_APPROACH',
   'EMERGENCY',
+  'RELOCATING',
 ] as const
 
 export type FlightPhase = (typeof FLIGHT_PHASES)[number]
@@ -22,7 +25,9 @@ export type EmergencyReason = (typeof EMERGENCY_REASONS)[number]
 /** Mirrors `FlightResponse` in backend/app/simulation/schemas.py (snake_case JSON). */
 export interface FlightResponse {
   mission_id: string
-  order_id: string
+  /** null for a relocation (Feature 019A). */
+  order_id: string | null
+  purpose: MissionPurpose
   drone_id: string
   mission_status: string
   phase: FlightPhase
@@ -69,7 +74,9 @@ export interface FlightEmergency {
 /** UI model of one flight, as the backend reports it at `updatedAt`. */
 export interface Flight {
   missionId: string
-  orderId: string
+  /** null for a relocation: an empty hub-to-hub flight with no order and no parcel. */
+  orderId: string | null
+  purpose: MissionPurpose
   droneId: string
   missionStatus: string
   phase: FlightPhase

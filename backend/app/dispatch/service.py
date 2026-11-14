@@ -145,7 +145,8 @@ def recommend_for_session(session: Session, settings: Settings) -> Recommendatio
         orders=order_repository.list_orders(session),
         drones=drone_repository.list_drones(session),
         hubs=mission_repository.list_hubs(session),
-        active_order_ids={order_id for order_id, _ in claims},
+        # a relocation (Feature 019A) claims its drone but no order
+        active_order_ids={order_id for order_id, _ in claims if order_id is not None},
         active_drone_ids={drone_id for _, drone_id in claims},
         payload_energy_factor=settings.mission_payload_energy_factor,
         dock_proximity_m=settings.hub_dock_proximity_m,

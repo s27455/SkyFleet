@@ -106,9 +106,9 @@ def _mark_flight(
             .execution_options(populate_existing=True)
         ).one_or_none()
         mission = mission_repository.get_mission_for_update(session, mission_id)
-        if flight is None or mission is None:
+        if flight is None or mission is None or mission.order_id is None:
             session.rollback()
-            return None
+            return None  # a relocation (Feature 019A) has no delivery to fail
         order = mission_repository.get_order(session, mission.order_id, lock=True)
         drone = mission_repository.get_drone(session, mission.drone_id, lock=True)
         if order is None or drone is None:

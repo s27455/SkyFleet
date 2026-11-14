@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react'
 import { formatUtcTimestamp } from '../orders/orderStatus'
 import type { EventOrigin, EventType } from '../../types/event'
 import { SECONDARY_BUTTON_CLASS } from '../management/formStyles'
-import { useOrderEvents } from './useOrderEvents'
+import { useDroneEvents, useOrderEvents } from './useOrderEvents'
 
 const EVENT_DESCRIPTIONS: Record<EventType, string> = {
   ORDER_CREATED: 'Order created',
@@ -11,6 +11,7 @@ const EVENT_DESCRIPTIONS: Record<EventType, string> = {
   DRONE_FAILURE: 'Drone failure',
   RECIPIENT_UNAVAILABLE: 'Recipient unavailable',
   LPR_TRANSIT: 'LPR helicopter in transit',
+  DRONE_RELOCATION: 'Drone relocation',
 }
 
 const ORIGIN_LABELS: Record<EventOrigin, string> = {
@@ -19,19 +20,43 @@ const ORIGIN_LABELS: Record<EventOrigin, string> = {
   MANUAL: 'Manual',
 }
 
+type EventTimelineProps = { refreshKey?: number } & (
+  { orderId: string; droneId?: undefined } | { droneId: string; orderId?: undefined }
+)
+
 /**
- * Chronological Activity timeline of one order, from the persisted backend events. It shows only
- * what the backend recorded: an order that predates event recording simply has no events.
+ * Chronological Activity timeline of one order, or of one drone (Feature 019A: a relocation has no
+ * order), from the persisted backend events. It shows only what the backend recorded: an order
+ * that predates event recording simply has no events.
  */
-export function EventTimeline({
-  orderId,
-  refreshKey = 0,
+export function EventTimeline(props: EventTimelineProps) {
+  // Changes when something happened to the order or drone: read the events again now.
+  const { refreshKey = 0 } = props
+  return props.droneId === undefined ? (
+    <OrderActivity orderId={props.orderId} refreshKey={refreshKey} />
+  ) : (
+    <DroneActivity droneId={props.droneId} refreshKey={refreshKey} />
+  )
+}
+
+function OrderActivity({ orderId, refreshKey }: { orderId: string; refreshKey: number }) {
+  return <Timeline resource={useOrderEvents(orderId)} refreshKey={refreshKey} subject="order" />
+}
+
+function DroneActivity({ droneId, refreshKey }: { droneId: string; refreshKey: number }) {
+  return <Timeline resource={useDroneEvents(droneId)} refreshKey={refreshKey} subject="drone" />
+}
+
+function Timeline({
+  resource,
+  refreshKey,
+  subject,
 }: {
-  orderId: string
-  /** Changes when something happened to the order (a cancellation): read the events again now. */
-  refreshKey?: number
+  resource: ReturnType<typeof useOrderEvents>
+  refreshKey: number
+  subject: 'order' | 'drone'
 }) {
-  const { state, stale, retry, refresh } = useOrderEvents(orderId)
+  const { state, stale, retry, refresh } = resource
   const firstKey = useRef(refreshKey)
   useEffect(() => {
     if (refreshKey !== firstKey.current) refresh()
@@ -54,7 +79,7 @@ export function EventTimeline({
         </p>
       )}
       {state.status === 'ready' && state.data.length === 0 && (
-        <p className="mt-1 text-xs text-fg-muted">No recorded activity for this order.</p>
+        <p className="mt-1 text-xs text-fg-muted">No recorded activity for this {subject}.</p>
       )}
       {state.status === 'ready' && state.data.length > 0 && (
         <ol className="mt-2 space-y-2 text-sm">

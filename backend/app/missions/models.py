@@ -27,6 +27,12 @@ class MissionStatus(StrEnum):
     EMERGENCY = "EMERGENCY"
 
 
+class MissionPurpose(StrEnum):
+    DELIVERY = "DELIVERY"  # serves one order (the default; every mission before Feature 019A)
+    # Feature 019A: an empty hub-to-hub flight with no order and no parcel. `order_id` is NULL.
+    RELOCATION = "RELOCATION"
+
+
 # A mission is active (it claims its order and its drone) while assigned or in flight.
 ACTIVE_MISSION_STATUSES: tuple[MissionStatus, ...] = (
     MissionStatus.ASSIGNED,
@@ -34,6 +40,12 @@ ACTIVE_MISSION_STATUSES: tuple[MissionStatus, ...] = (
 )
 
 _STATUS_VALUES = ", ".join(f"'{status.value}'" for status in MissionStatus)
+_PURPOSE_VALUES = ", ".join(f"'{purpose.value}'" for purpose in MissionPurpose)
+# A delivery serves an order; a relocation never has one.
+PURPOSE_ORDER_PREDICATE = (
+    "(purpose = 'RELOCATION' AND order_id IS NULL) "
+    "OR (purpose = 'DELIVERY' AND order_id IS NOT NULL)"
+)
 _ACTIVE_VALUES = ", ".join(f"'{status.value}'" for status in ACTIVE_MISSION_STATUSES)
 ACTIVE_PREDICATE = f"status IN ({_ACTIVE_VALUES})"
 
@@ -53,6 +65,8 @@ class Mission(Base):
     __tablename__ = "missions"
     __table_args__ = (
         CheckConstraint(f"status IN ({_STATUS_VALUES})", name="ck_missions_status_valid"),
+        CheckConstraint(f"purpose IN ({_PURPOSE_VALUES})", name="ck_missions_purpose_valid"),
+        CheckConstraint(PURPOSE_ORDER_PREDICATE, name="ck_missions_purpose_order"),
         CheckConstraint("origin_to_destination_km >= 0", name="ck_missions_leg_out_nonnegative"),
         CheckConstraint("destination_to_return_km >= 0", name="ck_missions_leg_back_nonnegative"),
         CheckConstraint("total_km >= 0", name="ck_missions_total_nonnegative"),
@@ -76,10 +90,18 @@ class Mission(Base):
     )
 
     id: Mapped[str] = mapped_column(String(12), primary_key=True)
-    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id", ondelete="RESTRICT"))
+    # NULL only for a relocation (Feature 019A); a delivery always has its order.
+    order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="RESTRICT"), default=None
+    )
+    purpose: Mapped[str] = mapped_column(
+        String(16), default=MissionPurpose.DELIVERY.value, server_default="DELIVERY"
+    )
     drone_id: Mapped[str] = mapped_column(ForeignKey("drones.id", ondelete="RESTRICT"))
     origin_hub_id: Mapped[str] = mapped_column(ForeignKey("hubs.id", ondelete="RESTRICT"))
-    # Planned return Hub: chosen at planning time, neither guaranteed nor reserved.
+    # Planned return Hub: chosen at planning time, neither guaranteed nor reserved. For a
+    # relocation it is the destination Hub and the delivery-shaped figures below describe the one
+    # hub-to-hub leg (`destination_to_return_km` is 0).
     return_hub_id: Mapped[str] = mapped_column(ForeignKey("hubs.id", ondelete="RESTRICT"))
     status: Mapped[str] = mapped_column(String(16))
     # Snapshot of the estimate at confirmation (simulation assumptions, not certified values).

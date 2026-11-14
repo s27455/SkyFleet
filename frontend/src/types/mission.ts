@@ -8,10 +8,17 @@ export const MISSION_STATUSES = [
 
 export type MissionStatus = (typeof MISSION_STATUSES)[number]
 
+/** A delivery serves one order; a relocation (Feature 019A) is an empty hub-to-hub flight. */
+export const MISSION_PURPOSES = ['DELIVERY', 'RELOCATION'] as const
+
+export type MissionPurpose = (typeof MISSION_PURPOSES)[number]
+
 /** The fields of `MissionResponse` (backend/app/missions/schemas.py) that the UI uses. */
 export interface MissionResponse {
   id: string
-  order_id: string
+  /** null for a relocation, which serves no order. */
+  order_id: string | null
+  purpose: MissionPurpose
   drone_id: string
   origin_hub_id: string
   return_hub_id: string
@@ -22,7 +29,9 @@ export interface MissionResponse {
 /** UI model. A mission claims an order and a drone; this UI only starts `ASSIGNED` ones. */
 export interface Mission {
   id: string
-  orderId: string
+  /** null for a relocation, which serves no order. */
+  orderId: string | null
+  purpose: MissionPurpose
   droneId: string
   originHubId: string
   /** The planned return Hub: planned at confirmation, neither guaranteed nor reserved. */

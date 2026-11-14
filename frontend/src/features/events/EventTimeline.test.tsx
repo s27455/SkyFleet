@@ -109,3 +109,43 @@ describe('EventTimeline refresh key', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('EventTimeline for a drone (Feature 019A)', () => {
+  it('reads the events of the drone and describes a relocation without an order', async () => {
+    const fetchMock = vi.fn((_url: string) =>
+      Promise.resolve(
+        jsonResponse([
+          {
+            ...EVENT,
+            id: 11,
+            event_type: 'DRONE_RELOCATION',
+            order_id: null,
+            mission_id: 'MIS-RELOC001',
+            drone_id: 'DRN-010',
+            reason: 'Drone DRN-010 relocates from Galeria Bałtycka to Forum Gdańsk',
+            details: { phase: 'STARTED' },
+          },
+        ]),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<EventTimeline droneId="DRN-010" />)
+
+    const item = await screen.findByRole('listitem')
+    expect(item).toHaveTextContent('Drone relocation')
+    expect(item).toHaveTextContent('Drone DRN-010 relocates from Galeria Bałtycka to Forum Gdańsk')
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/events?drone_id=DRN-010')
+  })
+
+  it('has an honest empty state for a drone', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse([]))),
+    )
+
+    render(<EventTimeline droneId="DRN-010" />)
+
+    expect(await screen.findByText('No recorded activity for this drone.')).toBeInTheDocument()
+  })
+})

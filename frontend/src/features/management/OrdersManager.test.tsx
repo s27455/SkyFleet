@@ -36,6 +36,7 @@ const MISSIONS: Mission[] = [
   {
     id: 'MIS-1',
     orderId: 'ORD-005',
+    purpose: 'DELIVERY',
     droneId: 'DRN-001',
     originHubId: 'hub-forum-gdansk',
     returnHubId: 'hub-forum-gdansk',

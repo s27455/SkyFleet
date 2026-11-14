@@ -71,6 +71,7 @@ const HUBS: Hub[] = [
 const FLIGHT: Flight = {
   missionId: 'MIS-1',
   orderId: 'ORD-1',
+  purpose: 'DELIVERY',
   droneId: 'DRN-004',
   missionStatus: 'IN_FLIGHT',
   phase: 'DELIVERING',

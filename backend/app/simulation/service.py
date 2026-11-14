@@ -75,6 +75,8 @@ def start_mission(session: Session, mission_id: str, now: datetime, settings: Se
             raise MissionNotFoundError(mission_id)
         if mission.status != MissionStatus.ASSIGNED.value:
             raise MissionNotStartableError(mission.id, mission.status)
+        if mission.order_id is None:  # a relocation is created already in flight (Feature 019A)
+            raise MissionNotStartableError(mission.id, mission.status)
         order, drone = load_order_and_drone(session, mission.order_id, mission.drone_id, lock=True)
 
         # Recheck everything with the actual current state; the mission's own claim is ignored.

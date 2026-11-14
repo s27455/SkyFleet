@@ -8,6 +8,7 @@ import { resolveInspectorData } from './inspectorData'
 const FLIGHT: Flight = {
   missionId: 'MIS-1',
   orderId: 'ORD-1',
+  purpose: 'DELIVERY',
   droneId: 'DRN-1',
   missionStatus: 'IN_FLIGHT',
   phase: 'OUTBOUND',
@@ -33,6 +34,7 @@ const FLIGHT: Flight = {
 const MISSION: Mission = {
   id: 'MIS-1',
   orderId: 'ORD-1',
+  purpose: 'DELIVERY',
   droneId: 'DRN-1',
   originHubId: 'hub-a',
   returnHubId: 'hub-b',

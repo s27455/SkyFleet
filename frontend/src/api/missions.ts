@@ -1,4 +1,9 @@
-import { MISSION_STATUSES, type Mission, type MissionResponse } from '../types/mission'
+import {
+  MISSION_PURPOSES,
+  MISSION_STATUSES,
+  type Mission,
+  type MissionResponse,
+} from '../types/mission'
 import { ApiError, apiGet, apiPost } from './client'
 import { isFiniteNumberInRange, isNonEmptyString } from './validation'
 
@@ -17,7 +22,16 @@ function toMission(item: unknown): Mission {
 
   const { id, order_id: orderId, drone_id: droneId, status, total_km: totalKm } = raw
   if (!isNonEmptyString(id)) invalid('missing id')
-  if (!isNonEmptyString(orderId)) invalid(`missing order_id for ${id}`)
+  // A payload without it predates Feature 019A: every mission then was a delivery.
+  const purpose = raw.purpose ?? 'DELIVERY'
+  if (typeof purpose !== 'string' || !(MISSION_PURPOSES as readonly string[]).includes(purpose)) {
+    invalid(`unknown purpose for ${id}`)
+  }
+  // Only a relocation (Feature 019A) has no order; a delivery always has one.
+  if (purpose === 'DELIVERY' && !isNonEmptyString(orderId)) invalid(`missing order_id for ${id}`)
+  if (purpose === 'RELOCATION' && orderId !== null && orderId !== undefined) {
+    invalid(`a relocation must not have an order_id for ${id}`)
+  }
   if (!isNonEmptyString(droneId)) invalid(`missing drone_id for ${id}`)
   if (!isNonEmptyString(raw.origin_hub_id)) invalid(`missing origin_hub_id for ${id}`)
   if (!isNonEmptyString(raw.return_hub_id)) invalid(`missing return_hub_id for ${id}`)
@@ -28,7 +42,8 @@ function toMission(item: unknown): Mission {
 
   return {
     id,
-    orderId,
+    orderId: typeof orderId === 'string' ? orderId : null,
+    purpose: purpose as Mission['purpose'],
     droneId,
     originHubId: raw.origin_hub_id,
     returnHubId: raw.return_hub_id,

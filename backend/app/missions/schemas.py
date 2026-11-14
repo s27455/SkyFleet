@@ -6,7 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.missions.capacity import SkipReason
-from app.missions.models import MissionStatus
+from app.missions.models import MissionPurpose, MissionStatus
 
 
 class ReasonCode(StrEnum):
@@ -85,7 +85,9 @@ class MissionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    order_id: str
+    # None for a relocation (Feature 019A): it serves no order.
+    order_id: str | None
+    purpose: MissionPurpose
     drone_id: str
     origin_hub_id: str
     return_hub_id: str

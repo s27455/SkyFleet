@@ -25,6 +25,7 @@ const HUBS: Hub[] = [
 const FLIGHT: Flight = {
   missionId: 'MIS-AAAA0001',
   orderId: 'ORD-001',
+  purpose: 'DELIVERY',
   droneId: 'DRN-010',
   missionStatus: 'IN_FLIGHT',
   phase: 'RETURNING',
@@ -267,5 +268,46 @@ describe('FlightSection', () => {
     expect(
       within(screen.getByRole('region', { name: 'Flight' })).getByText('Emergency'),
     ).toBeInTheDocument()
+  })
+})
+
+describe('FlightSection for a relocation (Feature 019A)', () => {
+  const RELOCATION: Flight = {
+    ...FLIGHT,
+    orderId: null,
+    purpose: 'RELOCATION',
+    phase: 'RELOCATING',
+    deliveredAt: null,
+    plannedReturnHubId: 'hub-forum-gdansk',
+    landingTargetHubId: 'hub-forum-gdansk',
+  }
+
+  it('names the destination Hub and says there is no order or parcel', () => {
+    render(<FlightSection flight={RELOCATION} hubs={HUBS} workerStale={false} />)
+
+    expect(valueOf('Phase')).toHaveTextContent('Relocating to Forum Gdańsk')
+    expect(valueOf('Destination Hub')).toHaveTextContent('Forum Gdańsk')
+    expect(screen.queryByText('Planned return Hub')).not.toBeInTheDocument()
+    expect(screen.getByText(/no order, no parcel/)).toBeInTheDocument()
+  })
+
+  it('lets the LPR wait and a drone failure take over the label', () => {
+    const { rerender } = render(
+      <FlightSection
+        flight={{ ...RELOCATION, yieldingToLpr: true }}
+        hubs={HUBS}
+        workerStale={false}
+      />,
+    )
+    expect(valueOf('Phase')).toHaveTextContent('Yielding to LPR helicopter')
+
+    rerender(
+      <FlightSection
+        flight={{ ...RELOCATION, failedAt: '2026-11-12T10:00:05Z', phase: 'EMERGENCY_APPROACH' }}
+        hubs={HUBS}
+        workerStale={false}
+      />,
+    )
+    expect(valueOf('Phase')).toHaveTextContent('Emergency landing: drone failure')
   })
 })

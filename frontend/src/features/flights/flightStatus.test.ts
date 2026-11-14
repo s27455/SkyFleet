@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Flight } from '../../types/flight'
-import { canAnimateFlights, flightsByDrone, isActiveFlight } from './flightStatus'
+import {
+  canAnimateFlights,
+  flightsByDrone,
+  isActiveFlight,
+  isFailable,
+  isRecipientTargetable,
+  isRelocation,
+} from './flightStatus'
 
 const flight = (overrides: Partial<Flight> = {}): Flight => ({
   missionId: 'MIS-1',
   orderId: 'ORD-1',
+  purpose: 'DELIVERY',
   droneId: 'DRN-1',
   missionStatus: 'IN_FLIGHT',
   phase: 'OUTBOUND',
@@ -77,5 +85,17 @@ describe('flightsByDrone', () => {
 
     expect(flightsByDrone([emergency, active]).get('DRN-1')?.missionId).toBe('MIS-NEW')
     expect(flightsByDrone([active, emergency]).get('DRN-1')?.missionId).toBe('MIS-NEW')
+  })
+})
+
+describe('relocation flights (Feature 019A)', () => {
+  it('is an active, failable flight and is told apart from a delivery', () => {
+    const relocating = flight({ purpose: 'RELOCATION', orderId: null, phase: 'RELOCATING' })
+
+    expect(isActiveFlight(relocating)).toBe(true)
+    expect(isFailable(relocating)).toBe(true)
+    expect(isRelocation(relocating)).toBe(true)
+    expect(isRelocation(flight())).toBe(false)
+    expect(isRecipientTargetable(relocating)).toBe(false)
   })
 })

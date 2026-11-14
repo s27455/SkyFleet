@@ -23,6 +23,7 @@ describe('getMissions', () => {
     expect(missions[0]).toEqual({
       id: 'MIS-AAAA0001',
       orderId: 'ORD-001',
+      purpose: 'DELIVERY',
       droneId: 'DRN-010',
       originHubId: 'hub-galeria-baltycka',
       returnHubId: 'hub-galeria-baltycka',
@@ -167,5 +168,31 @@ describe('startMission', () => {
 
     expect(error).toBeInstanceOf(StartMissionError)
     expect(error.failure).toBe('UNKNOWN')
+  })
+})
+
+describe('getMissions with a relocation (Feature 019A)', () => {
+  const RELOCATION = {
+    ...ASSIGNED_MISSION,
+    order_id: null,
+    purpose: 'RELOCATION',
+    status: 'IN_FLIGHT',
+  }
+
+  it('maps a relocation without an order', async () => {
+    stubFetch(() => Promise.resolve(jsonResponse([RELOCATION])))
+
+    const [mission] = await getMissions()
+
+    expect(mission.orderId).toBeNull()
+    expect(mission.purpose).toBe('RELOCATION')
+  })
+
+  it('rejects a delivery without an order and a relocation with one', async () => {
+    stubFetch(() => Promise.resolve(jsonResponse([{ ...ASSIGNED_MISSION, order_id: null }])))
+    await expect(getMissions()).rejects.toThrow(/missing order_id/)
+
+    stubFetch(() => Promise.resolve(jsonResponse([{ ...RELOCATION, order_id: 'ORD-001' }])))
+    await expect(getMissions()).rejects.toThrow(/relocation must not have an order_id/)
   })
 })

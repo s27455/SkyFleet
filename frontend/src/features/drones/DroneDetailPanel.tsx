@@ -6,9 +6,11 @@ import type { Drone } from '../../types/drone'
 import type { Flight } from '../../types/flight'
 import type { Hub } from '../../types/hub'
 import type { Mission } from '../../types/mission'
+import { EventTimeline } from '../events/EventTimeline'
 import { FlightSection } from '../flights/FlightSection'
 import { StartMissionControl } from '../missions/StartMissionControl'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
+import { RelocateDroneControl } from './RelocateDroneControl'
 
 interface DroneDetailPanelProps {
   drone: Drone
@@ -26,6 +28,10 @@ interface DroneDetailPanelProps {
   /** An `ASSIGNED` mission of this drone, which can be started from here. */
   assignedMission?: Mission
   onStartMission?: (missionId: string) => Promise<void>
+  /** Re-reads the polled data after a relocation request; the Relocate action needs it. */
+  onRelocationChanged?: () => void
+  /** Changes when something happened to the drone: its Activity is read again now. */
+  activityRefreshKey?: number
   /** Opens the drone inspector; the button is shown only when this is given. */
   onInspect?: () => void
   /** False while the inspector is open on top, so Escape closes only the inspector. Default: true. */
@@ -53,6 +59,8 @@ export function DroneDetailPanel({
   workerStale = false,
   assignedMission,
   onStartMission,
+  onRelocationChanged,
+  activityRefreshKey = 0,
   onInspect,
   closeOnEscape = true,
 }: DroneDetailPanelProps) {
@@ -68,6 +76,12 @@ export function DroneDetailPanel({
   const status = DRONE_STATUS_DISPLAY[drone.status]
   const { model } = drone
   const [longitude, latitude] = drone.coordinates
+  // A hint only: the backend decides whether the drone can be relocated (Feature 019A).
+  const relocateUnavailableReason = assignedMission
+    ? 'This drone has an assigned mission.'
+    : drone.status !== 'IDLE'
+      ? `Only an idle drone docked at a Hub can be relocated (this drone is ${status.label.toLowerCase()}).`
+      : undefined
 
   return (
     <aside aria-label={`Drone details: ${drone.id}`} className={DETAIL_PANEL_CLASS}>
@@ -119,6 +133,24 @@ export function DroneDetailPanel({
             hubs.find((candidate) => candidate.id === assignedMission.returnHubId)?.name
           }
           onStart={onStartMission}
+        />
+      )}
+
+      {onRelocationChanged && (
+        <RelocateDroneControl
+          key={drone.id}
+          drone={drone}
+          hubs={hubs}
+          unavailableReason={relocateUnavailableReason}
+          onChanged={onRelocationChanged}
+        />
+      )}
+
+      {onRelocationChanged && (
+        <EventTimeline
+          key={`activity-${drone.id}`}
+          droneId={drone.id}
+          refreshKey={activityRefreshKey}
         />
       )}
 

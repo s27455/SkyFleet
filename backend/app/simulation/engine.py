@@ -39,7 +39,7 @@ from app.events.service import append_event
 from app.hubs.models import Hub
 from app.missions import repository
 from app.missions.energy import consumption_rates
-from app.missions.models import Mission, MissionStatus
+from app.missions.models import Mission, MissionPurpose, MissionStatus
 from app.missions.presence import hub_occupancy
 from app.missions.routing import Point, distance_km, hub_point, nearest_reachable_hub
 from app.orders.models import DeliveryOrder, OrderStatus
@@ -136,9 +136,15 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
         mission = repository.get_mission_for_update(session, mission_id)
         if mission is None:
             raise FlightInvariantError(f"Flight {mission_id} has no mission")
-        order = repository.get_order(session, mission.order_id, lock=True)
+        # Feature 019A: a relocation has no order and no parcel; it only flies to another Hub.
+        relocation = mission.purpose == MissionPurpose.RELOCATION.value
+        order = (
+            None
+            if mission.order_id is None
+            else repository.get_order(session, mission.order_id, lock=True)
+        )
         drone = repository.get_drone(session, mission.drone_id, lock=True)
-        if order is None or drone is None:
+        if drone is None or (order is None and not relocation):
             raise FlightInvariantError(f"Flight {mission_id} has no order or drone")
         hubs = {hub.id: hub for hub in repository.list_hubs(session)}
 
@@ -146,7 +152,7 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
         elapsed = max((now - started).total_seconds(), 0.0)
         legs = [leg_from_dict(entry) for entry in flight.legs]
         empty, loaded = consumption_rates(
-            weight_kg=order.package_weight_kg,
+            weight_kg=0.0 if order is None else order.package_weight_kg,
             model=drone.model,
             payload_energy_factor=settings.mission_payload_energy_factor,
         )
@@ -177,7 +183,13 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
         # reported unavailable, the handover fails and the drone turns back with the parcel).
         stop = delivery_leg(legs)
         delivery_end = stop.end_s if stop is not None and not recalled else 0.0
-        if not loaded_return and flight.delivered_at is None and elapsed >= delivery_end:
+        if (
+            not relocation
+            and not loaded_return
+            and flight.delivered_at is None
+            and elapsed >= delivery_end
+        ):
+            assert order is not None  # only a relocation has none
             if flight.recipient_unavailable_at is not None:
                 _fail_handover(
                     session,
@@ -208,7 +220,9 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
 
         # Milestone 2: the landing decision (capacity recheck, docking, diversion or emergency).
         decision_s, decision_point = landing_decision(legs[-1], settings.sim_landing_approach_m)
-        if flight.delivered_at is not None or loaded_return:
+        # A relocation has no delivery: its landing decision applies from the start.
+        landing_applies = flight.delivered_at is not None or loaded_return or relocation
+        if landing_applies:
             # The battery falling below the critical floor before the landing decision is an
             # emergency at the exact crossing time, however late this tick runs (deterministic).
             crossing = first_time_below(
@@ -237,9 +251,10 @@ def advance_once(session: Session, settings: Settings, mission_id: str, now: dat
                     started=started,
                     now=now,
                 )
+                _record_relocation_emergency(session, mission, flight, drone, now)
                 session.commit()
                 return False
-        if (flight.delivered_at is not None or loaded_return) and elapsed >= decision_s:
+        if landing_applies and elapsed >= decision_s:
             return _decide_landing(
                 session,
                 settings,
@@ -367,7 +382,7 @@ def _yield_to_lpr(
     settings: Settings,
     flight: MissionFlight,
     mission: Mission,
-    order: DeliveryOrder,
+    order: DeliveryOrder | None,
     drone: Drone,
     legs: list[Leg],
     plan: lpr.HoldPlan,
@@ -410,6 +425,7 @@ def _yield_to_lpr(
             started=started,
             now=now,
         )
+        _record_relocation_emergency(session, mission, flight, drone, now)
         session.commit()
         return
     flight.legs = [leg_to_dict(leg) for leg in new_legs]
@@ -418,7 +434,7 @@ def _yield_to_lpr(
         session,
         event_type=EventType.LPR_TRANSIT,
         origin=EventOrigin(zone.origin),
-        order_id=order.id,
+        order_id=None if order is None else order.id,
         mission_id=mission.id,
         flight_id=flight.mission_id,
         drone_id=drone.id,
@@ -542,6 +558,25 @@ def _decide_landing(
         flight.progress = 1.0
         flight.target_longitude = flight.target_latitude = flight.target_eta_s = None
         flight.updated_at = now
+        if mission.purpose == MissionPurpose.RELOCATION.value:
+            append_event(
+                session,
+                event_type=EventType.DRONE_RELOCATION,
+                origin=EventOrigin.SYSTEM,
+                mission_id=mission.id,
+                flight_id=flight.mission_id,
+                drone_id=drone.id,
+                reason=f"Drone {drone.id} landed at {target.name}",
+                details={
+                    "phase": "COMPLETED",
+                    "destination_hub_id": flight.planned_return_hub_id,
+                    "landed_hub_id": target.id,
+                    # the planned Hub filled up meanwhile and the drone landed at another one
+                    "diverted": target.id != flight.planned_return_hub_id,
+                },
+                dedupe_key=f"{EventType.DRONE_RELOCATION.value}:COMPLETED:{mission.id}",
+                occurred_at=now,
+            )
         session.commit()
         return False
 
@@ -603,8 +638,35 @@ def _decide_landing(
         now=now,
     )
     flight.tried_hub_ids = tried
+    _record_relocation_emergency(session, mission, flight, drone, now)
     session.commit()
     return False
+
+
+def _record_relocation_emergency(
+    session: Session, mission: Mission, flight: MissionFlight, drone: Drone, now: datetime
+) -> None:
+    """Feature 019A: a relocation that ended in an emergency is recorded once, in the same
+    transaction. Deliveries are unchanged (they write no such event); a drone failure has its own
+    event."""
+    if mission.purpose != MissionPurpose.RELOCATION.value:
+        return
+    append_event(
+        session,
+        event_type=EventType.DRONE_RELOCATION,
+        origin=EventOrigin.SYSTEM,
+        mission_id=mission.id,
+        flight_id=flight.mission_id,
+        drone_id=drone.id,
+        reason=f"Drone {drone.id} relocation ended in an emergency stop",
+        details={
+            "phase": "EMERGENCY",
+            "destination_hub_id": flight.planned_return_hub_id,
+            "emergency_reason": flight.emergency_reason,
+        },
+        dedupe_key=f"{EventType.DRONE_RELOCATION.value}:EMERGENCY:{mission.id}",
+        occurred_at=now,
+    )
 
 
 def _end_in_emergency(

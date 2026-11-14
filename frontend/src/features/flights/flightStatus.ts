@@ -9,6 +9,8 @@ export const FLIGHT_PHASE_DISPLAY: Record<FlightPhase, { tone: StatusTone; label
   LANDED: { tone: 'neutral', label: 'Landed' },
   EMERGENCY_APPROACH: { tone: 'critical', label: 'Emergency landing: drone failure' },
   EMERGENCY: { tone: 'critical', label: 'Emergency' },
+  // The Hub is named where the flight is shown ("Relocating to [hub]"); this is the generic label.
+  RELOCATING: { tone: 'ok', label: 'Relocating to another Hub' },
 }
 
 export const EMERGENCY_REASON_TEXT: Record<EmergencyReason, string> = {
@@ -25,10 +27,17 @@ const MOVING_PHASES: readonly string[] = [
   'RETURNING',
   'DIVERTING',
   'EMERGENCY_APPROACH',
+  'RELOCATING',
 ]
 
 /** Flights a drone failure can still interrupt (the backend decides; this only enables the control). */
-const FAILABLE_PHASES: readonly string[] = ['OUTBOUND', 'DELIVERING', 'RETURNING', 'DIVERTING']
+const FAILABLE_PHASES: readonly string[] = [
+  'OUTBOUND',
+  'DELIVERING',
+  'RETURNING',
+  'DIVERTING',
+  'RELOCATING',
+]
 
 export const isFailable = (flight: Flight) =>
   flight.failedAt === null &&
@@ -55,6 +64,9 @@ export const isRecipientPending = (flight: Flight) =>
   flight.deliveredAt === null &&
   flight.recalledAt === null &&
   flight.failedAt === null
+
+/** An empty hub-to-hub relocation (Feature 019A): no order, no parcel, no delivery. */
+export const isRelocation = (flight: Flight) => flight.purpose === 'RELOCATION'
 
 export const isActiveFlight = (flight: Flight) => MOVING_PHASES.includes(flight.phase)
 

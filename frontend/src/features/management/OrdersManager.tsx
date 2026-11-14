@@ -102,7 +102,8 @@ function OrdersAdmin({
   const deletion = useAction()
   const hubNames = useMemo(() => new Map(hubs.map((hub) => [hub.id, hub.name])), [hubs])
   const ordersWithMissions = useMemo(
-    () => new Set(missions.map((mission) => mission.orderId)),
+    () =>
+      new Set(missions.flatMap((mission) => (mission.orderId === null ? [] : [mission.orderId]))),
     [missions],
   )
 
