@@ -213,6 +213,7 @@ def _start_once(
     now: datetime,
     settings: Settings,
     origin: EventOrigin,
+    reason: str | None,
 ) -> Mission:
     mission_id: str | None = None
     try:
@@ -279,12 +280,14 @@ def _start_once(
             mission_id=mission.id,
             flight_id=mission.id,
             drone_id=drone.id,
-            reason=f"Drone {drone.id} relocates from {source.name} to {destination.name}",
+            reason=f"Drone {drone.id} relocates from {source.name} to {destination.name}"
+            + (f" ({reason})" if reason else ""),
             details={
                 "phase": "STARTED",
                 "origin_hub_id": source.id,
                 "destination_hub_id": destination.id,
                 "distance_km": round(plan.distance_km, 3),
+                **({"trigger": reason} if reason else {}),
             },
             dedupe_key=f"{EventType.DRONE_RELOCATION.value}:STARTED:{mission.id}",
             occurred_at=now,
@@ -319,8 +322,13 @@ def start_relocation(
     settings: Settings,
     *,
     origin: EventOrigin = EventOrigin.MANUAL,
+    reason: str | None = None,
 ) -> Mission:
-    """Revalidate and start a relocation flight atomically (mission, flight, drone, event)."""
+    """Revalidate and start a relocation flight atomically (mission, flight, drone, event).
+
+    `reason` is an optional short explanation recorded in the STARTED event (the automatic fleet
+    rebalancing, Feature 019B, says why it moved the drone).
+    """
     # Nothing would fly it without the worker; refuse before taking any lock.
     beat = heartbeat.last_heartbeat(session)
     if not heartbeat.is_fresh(beat, now, settings.sim_heartbeat_stale_seconds):
@@ -329,7 +337,7 @@ def start_relocation(
     session.rollback()
     for _ in range(MAX_ID_ATTEMPTS):
         try:
-            return _start_once(session, drone_id, destination_hub_id, now, settings, origin)
+            return _start_once(session, drone_id, destination_hub_id, now, settings, origin, reason)
         except _IdCollisionError:
             continue
     raise MissionError("Could not allocate a unique mission id")

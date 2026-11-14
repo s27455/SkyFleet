@@ -7,6 +7,10 @@ starts. A pass takes the 014A recommendations and executes each pair with the 01
 repeated. The mode is read again before every execution: disabling stops further attempts at once,
 while an execution already running may finish. Flights already started are never touched.
 
+After dispatching, the same pass may move one spare drone to a Hub that has orders waiting and no
+drone (Feature 019B, `app.dispatch.rebalancing`); the mode, its OFF default and the reset at worker
+start are the same, so OFF means no new dispatch and no new relocation.
+
 Every failure is a controlled outcome summarised in one short line; one bad pair never stops the
 others, and nothing is cancelled or compensated automatically (a mission whose start failed stays
 ASSIGNED and is reported).
@@ -20,6 +24,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import Settings
 from app.dispatch.models import AUTO_DISPATCH, DispatchAutoState
+from app.dispatch.rebalancing import run_rebalancing
 from app.dispatch.schemas import AutoDispatchStatus
 from app.dispatch.service import DispatchStartFailedError, execute_dispatch, recommend_for_session
 from app.missions.service import MissionError
@@ -144,11 +149,19 @@ def run_dispatch_pass(
                 )
                 problems.append(f"unexpected error dispatching {recommendation.order_id}")
 
+    # Feature 019B: after dispatching, the same pass may move one spare drone to a Hub that has
+    # orders waiting and no drone. Skipped when the worker was found unavailable.
+    rebalanced: str | None = None
+    if not any("worker unavailable" in problem for problem in problems):
+        rebalanced = run_rebalancing(factory, settings, now, lambda: is_enabled(factory))
+
     parts: list[str] = []
     if started:
         parts.append(f"Started {started} mission(s)")
     if skipped:
         parts.append(f"{skipped} no longer eligible")
+    if rebalanced:
+        parts.append(rebalanced)
     parts.extend(problems)
     if not parts:
         waiting = len(result.pending)

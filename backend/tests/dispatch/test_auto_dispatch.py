@@ -48,7 +48,7 @@ def _missions(session: Session) -> list[Mission]:
     return list(session.scalars(select(Mission)))
 
 
-def _pairs(session: Session) -> set[tuple[str, str]]:
+def _pairs(session: Session) -> set[tuple[str | None, str]]:
     return {(m.order_id, m.drone_id) for m in _missions(session)}
 
 

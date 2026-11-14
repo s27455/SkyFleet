@@ -4,6 +4,7 @@ Opt-in (`uv run pytest -m postgres`); it uses the `temp_engine` fixture, which a
 migrations (0015 included) to a throwaway database, so the development database is never touched.
 """
 
+import functools
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
@@ -96,7 +97,7 @@ def test_concurrent_relocations_of_one_drone_create_exactly_one_flight(
     _beat(factory)
     destinations = [FORUM, OSOWA, FORUM, OSOWA, FORUM, OSOWA]
 
-    results = _run_all([lambda d=d: _relocate(factory, "DRN-012", d) for d in destinations])
+    results = _run_all([functools.partial(_relocate, factory, "DRN-012", d) for d in destinations])
 
     assert sum(result != "rejected" for result in results) == 1
     assert _count(factory, "DRN-012") == (1, 1)  # one mission, one STARTED event
@@ -133,6 +134,12 @@ def test_relocation_against_dispatch_never_gives_a_drone_two_missions(
 def test_a_failure_racing_the_worker_ends_the_relocation_once(temp_engine: Engine) -> None:
     factory = sessionmaker(bind=temp_engine, expire_on_commit=False)
     _beat(factory)
+    # The database is shared by this module's tests: land the flights they left, so the failure
+    # trigger can only pick the relocation under test.
+    with factory() as session:
+        leftovers = list(session.scalars(select(Mission.id).where(Mission.status == "IN_FLIGHT")))
+    for leftover in leftovers:
+        sim_engine.advance_flight(factory, SETTINGS, leftover, NOW + timedelta(hours=1))
     mission_id = _relocate(factory, "DRN-007", BALTYCKA)
     assert mission_id != "rejected"
     end = _end_s(factory, mission_id)
@@ -178,6 +185,13 @@ def test_two_relocations_landing_at_a_nearly_full_hub_never_exceed_its_capacity(
         forum = session.get(Hub, FORUM)
         assert forum is not None
         forum.drone_capacity = docked + 2  # both pass the start check, only one fits at landing
+        for drone_id in (
+            "DRN-001",
+            "DRN-002",
+        ):  # full batteries: the diverted one must still fly on
+            drone = session.get(Drone, drone_id)
+            assert drone is not None
+            drone.battery_pct = 100
         session.commit()
     first = _relocate(factory, "DRN-001", FORUM)
     second = _relocate(factory, "DRN-002", FORUM)

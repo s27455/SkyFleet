@@ -52,6 +52,29 @@ from app.simulation.service import WorkerUnavailableError, start_mission
 DISPATCH_BATTERY_PCT = FULL_CHARGE_PCT
 
 
+def available_drones_by_hub(
+    drones: Sequence[Drone],
+    hubs: Sequence[Hub],
+    active_drone_ids: set[str],
+    dock_proximity_m: float,
+) -> dict[str, list[Drone]]:
+    """Drones that may be dispatched, by the Hub they are physically docked at, in id order.
+
+    Shared with the automatic fleet rebalancing (Feature 019B) so both use one definition.
+    """
+    available: dict[str, list[Drone]] = defaultdict(list)
+    for drone in sorted(drones, key=lambda d: d.id):
+        if (
+            drone.status == DroneStatus.IDLE
+            and drone.battery_pct == DISPATCH_BATTERY_PCT
+            and drone.id not in active_drone_ids
+        ):
+            hub = docked_hub(drone, hubs, dock_proximity_m)
+            if hub is not None:
+                available[hub.id].append(drone)
+    return available
+
+
 def recommend(
     *,
     orders: Sequence[DeliveryOrder],
@@ -68,17 +91,7 @@ def recommend(
         if order.status == OrderStatus.READY_FOR_PICKUP and order.id not in active_order_ids:
             queues[order.origin_hub_id].append(order)
 
-    # Drones that may be dispatched, by the Hub they are physically docked at, in id order.
-    available: dict[str, list[Drone]] = defaultdict(list)
-    for drone in sorted(drones, key=lambda d: d.id):
-        if (
-            drone.status == DroneStatus.IDLE
-            and drone.battery_pct == DISPATCH_BATTERY_PCT
-            and drone.id not in active_drone_ids
-        ):
-            hub = docked_hub(drone, hubs, dock_proximity_m)
-            if hub is not None:
-                available[hub.id].append(drone)
+    available = available_drones_by_hub(drones, hubs, active_drone_ids, dock_proximity_m)
 
     claimed: set[str] = set()
     recommendations: list[Recommendation] = []
@@ -135,19 +148,27 @@ def recommend(
     return RecommendationsResponse(recommendations=recommendations, pending=pending)
 
 
-def recommend_for_session(session: Session, settings: Settings) -> RecommendationsResponse:
-    """Load the current state (reads only) and decide."""
+def active_claims(session: Session) -> tuple[set[str], set[str]]:
+    """Order ids and drone ids held by an active mission (a relocation claims no order)."""
     active = [status.value for status in ACTIVE_MISSION_STATUSES]
     claims = session.execute(
         select(Mission.order_id, Mission.drone_id).where(Mission.status.in_(active))
     ).all()
+    return (
+        {order_id for order_id, _ in claims if order_id is not None},
+        {drone_id for _, drone_id in claims},
+    )
+
+
+def recommend_for_session(session: Session, settings: Settings) -> RecommendationsResponse:
+    """Load the current state (reads only) and decide."""
+    active_order_ids, active_drone_ids = active_claims(session)
     return recommend(
         orders=order_repository.list_orders(session),
         drones=drone_repository.list_drones(session),
         hubs=mission_repository.list_hubs(session),
-        # a relocation (Feature 019A) claims its drone but no order
-        active_order_ids={order_id for order_id, _ in claims if order_id is not None},
-        active_drone_ids={drone_id for _, drone_id in claims},
+        active_order_ids=active_order_ids,
+        active_drone_ids=active_drone_ids,
         payload_energy_factor=settings.mission_payload_energy_factor,
         dock_proximity_m=settings.hub_dock_proximity_m,
     )

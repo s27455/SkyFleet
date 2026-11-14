@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     # Seconds between automatic-dispatch passes in the worker (only used while the mode is ON).
     dispatch_auto_interval_seconds: float = Field(default=3.0, gt=0)
 
+    # Feature 019B: while Auto Dispatch is ON the same pass also rebalances the fleet. After a
+    # relocation between two Hubs, the pair is left alone (either direction) for this long, in real
+    # seconds, so drones are not shuttled back and forth. Manual relocation is never blocked.
+    rebalance_pair_cooldown_seconds: float = Field(default=300.0, ge=0)
+
     # Automatic order generation (Feature 015B), used only while Order Simulation is ON: a random
     # pause between the min and max seconds before each new order, and a cap on outstanding
     # (READY_FOR_PICKUP) orders above which generation pauses.
