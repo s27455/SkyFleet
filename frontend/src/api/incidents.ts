@@ -1,4 +1,5 @@
 import type { LprScenario, LprStatus } from '../types/lpr'
+import type { RainWarning } from '../types/weather'
 import { ApiError, apiGet, apiPost } from './client'
 import { isFiniteNumberInRange, isNonEmptyString, isPositiveFiniteNumber } from './validation'
 
@@ -154,5 +155,45 @@ export function isLprAlreadyActive(error: unknown): boolean {
     typeof detail === 'object' &&
     detail !== null &&
     (detail as { code?: unknown }).code === 'LPR_ALREADY_ACTIVE'
+  )
+}
+
+function toRainWarning(payload: unknown): RainWarning {
+  if (typeof payload !== 'object' || payload === null) invalid('rain warning is not an object')
+  const raw = payload as Record<string, unknown>
+  if (typeof raw.active !== 'boolean') invalid('bad active')
+  for (const key of ['activated_at', 'cleared_at'] as const) {
+    if (raw[key] !== null && !isTimestamp(raw[key])) invalid(`bad ${key}`)
+  }
+  return {
+    active: raw.active,
+    activatedAt: raw.activated_at as string | null,
+    clearedAt: raw.cleared_at as string | null,
+  }
+}
+
+/** The global rain warning (`GET /api/incidents/rain-warning`). */
+export async function getRainWarning(signal?: AbortSignal): Promise<RainWarning> {
+  return toRainWarning(await apiGet<unknown>('/api/incidents/rain-warning', signal))
+}
+
+/** Suspends NEW takeoffs; idempotent. Flights already in the air are not affected. */
+export async function activateRainWarning(): Promise<RainWarning> {
+  return toRainWarning(await apiPost<unknown>('/api/incidents/rain-warning/activate'))
+}
+
+/** Allows takeoffs again; idempotent. */
+export async function clearRainWarning(): Promise<RainWarning> {
+  return toRainWarning(await apiPost<unknown>('/api/incidents/rain-warning/clear'))
+}
+
+/** True for the backend's 409 `RAIN_WARNING_ACTIVE`: a takeoff was refused, nothing was written. */
+export function isRainWarningActive(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 409) return false
+  const { detail } = error
+  return (
+    typeof detail === 'object' &&
+    detail !== null &&
+    (detail as { code?: unknown }).code === 'RAIN_WARNING_ACTIVE'
   )
 }

@@ -41,12 +41,14 @@ from app.missions.service import (
     DroneNotFoundError,
     MissionError,
     OrderNotFoundError,
+    cancel_mission,
     confirm_mission,
 )
 from app.orders import repository as order_repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.simulation import heartbeat
 from app.simulation.service import WorkerUnavailableError, start_mission
+from app.weather import service as weather
 
 # Dispatch only sends fully charged drones. This is in addition to the planner's own energy check.
 DISPATCH_BATTERY_PCT = FULL_CHARGE_PCT
@@ -233,6 +235,11 @@ def execute_dispatch(
         session.rollback()
         raise MissionAlreadyAssignedError(existing)
 
+    # Feature 020: refuse before creating anything while a rain warning suspends takeoffs.
+    if weather.is_active(session):
+        session.rollback()
+        raise weather.RainWarningActiveError
+
     # Refuse before creating anything when nothing would fly the mission.
     beat = heartbeat.last_heartbeat(session)
     if not heartbeat.is_fresh(beat, now, settings.sim_heartbeat_stale_seconds):
@@ -242,6 +249,13 @@ def execute_dispatch(
     mission = confirm_mission(session, order_id, drone_id, settings, require_full_charge=True)
     try:
         return start_mission(session, mission.id, now, settings)
+    except weather.RainWarningActiveError:
+        # The warning became active between the check above and takeoff. `start_mission` wrote
+        # nothing; cancel the mission this call just created (the existing cancellation) so that
+        # neither the drone nor the order stays reserved by a mission nobody will start.
+        session.rollback()
+        cancel_mission(session, mission.id)
+        raise
     except Exception as error:
         session.rollback()
         current = mission_repository.get_mission(session, mission.id)

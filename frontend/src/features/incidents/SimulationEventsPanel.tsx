@@ -1,6 +1,8 @@
 import { type ReactNode, useState } from 'react'
 
 import {
+  activateRainWarning,
+  clearRainWarning,
   isLprAlreadyActive,
   isNoEligibleTarget,
   triggerDroneFailure,
@@ -62,6 +64,15 @@ const RECIPIENT_ICON = (
   </Icon>
 )
 
+const RAIN_ICON = (
+  <Icon>
+    <path d="M4 14a4 4 0 0 1 1-7.9 6 6 0 0 1 11.6 1.4A3.5 3.5 0 0 1 17 14z" />
+    <path d="M8 18l-1 3" />
+    <path d="M12 18l-1 3" />
+    <path d="M16 18l-1 3" />
+  </Icon>
+)
+
 const LPR_ICON = (
   <Icon>
     <path d="M4 5h16" />
@@ -91,6 +102,10 @@ interface SimulationEventsPanelProps {
   lprActive?: boolean
   /** Called after an LPR helicopter request (whatever the answer) so the views refresh. */
   onLprTriggered?: () => void
+  /** Whether the global rain warning is active (the backend is the source of truth). */
+  rainWarningActive?: boolean
+  /** Called after an activate or clear request (whatever the answer) so the views refresh. */
+  onRainWarningChanged?: () => void
 }
 
 /**
@@ -111,8 +126,11 @@ export function SimulationEventsPanel({
   onRecipientMarked,
   lprActive = false,
   onLprTriggered,
+  rainWarningActive = false,
+  onRainWarningChanged,
 }: SimulationEventsPanelProps) {
   const cancellation = useAction()
+  const rainAction = useAction()
   const lprAction = useAction()
   const [lprNote, setLprNote] = useState<string | null>(null)
   const failure = useAction()
@@ -155,6 +173,11 @@ export function SimulationEventsPanel({
       }
     })
     onDroneFailed?.() // the state may have changed whatever the answer was
+  }
+
+  const toggleRainWarning = async () => {
+    await rainAction.run(rainWarningActive ? clearRainWarning : activateRainWarning)
+    onRainWarningChanged?.() // the state may have changed whatever the answer was
   }
 
   const startLpr = async () => {
@@ -213,7 +236,7 @@ export function SimulationEventsPanel({
       <h3 className="text-sm font-semibold">
         Simulation events <span className="font-normal text-fg-muted">(demo only)</span>
       </h3>
-      <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
         <li>
           <button
             type="button"
@@ -296,6 +319,32 @@ export function SimulationEventsPanel({
             </span>
           </button>
         </li>
+        <li>
+          <button
+            type="button"
+            disabled={rainAction.busy}
+            aria-pressed={rainWarningActive}
+            title={
+              rainWarningActive
+                ? 'Clear the rain warning: new takeoffs are allowed again'
+                : 'Suspend new takeoffs (flights in the air continue)'
+            }
+            onClick={toggleRainWarning}
+            className={`flex w-full flex-col items-center gap-1 rounded border px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60 ${
+              rainWarningActive ? 'border-status-warning bg-status-warning/15' : 'border-line'
+            }`}
+          >
+            {RAIN_ICON}
+            <span>{rainWarningActive ? 'Clear Rain Warning' : 'Activate Rain Warning'}</span>
+            <span className="text-[11px] text-fg-muted">
+              {rainAction.busy
+                ? 'Updating…'
+                : rainWarningActive
+                  ? 'Active: takeoffs suspended'
+                  : 'Precautionary grounding'}
+            </span>
+          </button>
+        </li>
       </ul>
       {confirming && (
         <CancelConfirmation
@@ -308,6 +357,11 @@ export function SimulationEventsPanel({
       {failure.error && (
         <p role="alert" className="mt-2 text-xs text-status-critical">
           {failure.error}
+        </p>
+      )}
+      {rainAction.error && (
+        <p role="alert" className="mt-2 text-xs text-status-critical">
+          {rainAction.error}
         </p>
       )}
       {lprAction.error && (

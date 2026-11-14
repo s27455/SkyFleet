@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.errors import worker_unavailable
+from app.api.errors import rain_warning_active, worker_unavailable
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
 from app.dispatch import auto, service
@@ -19,6 +19,7 @@ from app.missions.models import Mission
 from app.missions.schemas import MissionResponse
 from app.simulation import clock
 from app.simulation import service as simulation_service
+from app.weather.service import RainWarningActiveError
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
 
@@ -82,6 +83,8 @@ def execute_dispatch(
                 "plan": error.plan.model_dump(mode="json"),
             },
         ) from error
+    except RainWarningActiveError as error:
+        raise rain_warning_active(error) from error
     except simulation_service.WorkerUnavailableError as error:
         raise worker_unavailable(error) from error
     except service.DispatchStartFailedError as error:

@@ -5,6 +5,7 @@ import type { Drone } from '../../types/drone'
 import type { Hub } from '../../types/hub'
 import type { RelocationPlan } from '../../types/relocation'
 import { INPUT_CLASS, PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from '../management/formStyles'
+import { TAKEOFFS_SUSPENDED_REASON, useTakeoffsSuspended } from '../weather/TakeoffGate'
 
 interface RelocateDroneControlProps {
   drone: Drone
@@ -29,9 +30,11 @@ type PlanState =
 export function RelocateDroneControl({
   drone,
   hubs,
-  unavailableReason,
+  unavailableReason: reason,
   onChanged,
 }: RelocateDroneControlProps) {
+  // A rain warning suspends new takeoffs, a relocation included; the backend refuses it anyway.
+  const unavailableReason = useTakeoffsSuspended() ? TAKEOFFS_SUSPENDED_REASON : reason
   const selectId = useId()
   const [open, setOpen] = useState(false)
   const [destinationId, setDestinationId] = useState('')

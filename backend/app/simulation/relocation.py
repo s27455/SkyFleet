@@ -44,6 +44,7 @@ from app.simulation.schemas import (
     RelocationReasonCode,
 )
 from app.simulation.service import WorkerUnavailableError
+from app.weather import service as weather
 
 MAX_ID_ATTEMPTS = 5
 
@@ -217,6 +218,8 @@ def _start_once(
 ) -> Mission:
     mission_id: str | None = None
     try:
+        # Feature 020: the rain warning gate, the first lock of the takeoff transaction.
+        weather.lock_for_takeoff(session)
         drone, destination = _load(session, drone_id, destination_hub_id, lock=True)
         plan = _plan(session, drone, destination, settings)  # revalidated under the locks
         if not plan.eligible or plan.origin_hub_id is None:

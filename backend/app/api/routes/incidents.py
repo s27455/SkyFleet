@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
+from app.events.models import EventOrigin
 from app.simulation import clock, lpr
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import NoEligibleTargetError, trigger_drone_failure
@@ -23,6 +24,8 @@ from app.simulation.schemas import (
     LprStatusResponse,
     RecipientUnavailableResponse,
 )
+from app.weather import service as weather
+from app.weather.schemas import RainWarningResponse
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -110,3 +113,33 @@ def lpr_status(session: SessionDep) -> LprStatusResponse:
     return LprStatusResponse(
         server_time=now, scenario=_lpr_response(row, now) if row is not None else None
     )
+
+
+def _rain_response(status: weather.RainWarningStatus, changed: bool = False) -> RainWarningResponse:
+    return RainWarningResponse(
+        active=status.active,
+        activated_at=status.activated_at,
+        cleared_at=status.cleared_at,
+        origin=status.origin,
+        changed=changed,
+    )
+
+
+@router.get("/rain-warning", response_model=RainWarningResponse)
+def rain_warning_status(session: SessionDep) -> RainWarningResponse:
+    """The global rain warning (Feature 020): `active` means new takeoffs are suspended."""
+    return _rain_response(weather.get_status(session))
+
+
+@router.post("/rain-warning/activate", response_model=RainWarningResponse)
+def activate_rain_warning(session: SessionDep) -> RainWarningResponse:
+    """Suspend NEW takeoffs (idempotent). Flights already in the air are not affected."""
+    status, changed = weather.activate(session, clock.utcnow(), EventOrigin.MANUAL)
+    return _rain_response(status, changed)
+
+
+@router.post("/rain-warning/clear", response_model=RainWarningResponse)
+def clear_rain_warning(session: SessionDep) -> RainWarningResponse:
+    """Allow takeoffs again (idempotent)."""
+    status, changed = weather.clear(session, clock.utcnow(), EventOrigin.MANUAL)
+    return _rain_response(status, changed)

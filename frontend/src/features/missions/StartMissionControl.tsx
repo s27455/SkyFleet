@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { StartMissionError } from '../../api/missions'
 import type { Mission } from '../../types/mission'
+import { TAKEOFFS_SUSPENDED_REASON, useTakeoffsSuspended } from '../weather/TakeoffGate'
 
 interface StartMissionControlProps {
   /** An `ASSIGNED` mission: the backend validates and performs the start. */
@@ -18,6 +19,7 @@ interface StartMissionControlProps {
  * the same backend action, so this control is never a required step.
  */
 export function StartMissionControl({ mission, returnHubName, onStart }: StartMissionControlProps) {
+  const suspended = useTakeoffsSuspended()
   const [pending, setPending] = useState(false)
   // After a successful start the button stays off until the mission is no longer ASSIGNED (the
   // panel then drops this control), so a slow refresh can never invite a second, refused click.
@@ -68,12 +70,17 @@ export function StartMissionControl({ mission, returnHubName, onStart }: StartMi
       <button
         type="button"
         onClick={start}
-        disabled={pending || started}
+        disabled={pending || started || suspended}
         aria-label={`Start mission ${mission.id}`}
         className="mt-2 inline-flex min-h-10 items-center rounded-md border border-line bg-surface-raised px-3 font-medium hover:bg-line focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-60"
       >
         {pending ? 'Starting…' : started ? 'Mission started' : 'Start mission'}
       </button>
+      {suspended && !started && (
+        <p className="mt-1 text-xs text-fg-muted">
+          {TAKEOFFS_SUSPENDED_REASON} The mission stays assigned.
+        </p>
+      )}
       {error && (
         <div role="alert" className="mt-2 rounded-md border border-line bg-canvas p-2 text-xs">
           <p>{error.message}</p>

@@ -171,6 +171,11 @@ function stubBackend(
           jsonResponse({ server_time: '2026-11-13T12:00:00Z', scenario: null }),
         )
       }
+      if (url.endsWith('/api/incidents/rain-warning')) {
+        return Promise.resolve(
+          jsonResponse({ active: false, activated_at: null, cleared_at: null, origin: null }),
+        )
+      }
       return url.endsWith('/api/drones') ? dronesCalls() : hubsCalls()
     }),
   )
@@ -236,6 +241,32 @@ describe('App hub loading', () => {
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Close hub details' }))
     expect(panels()).toHaveLength(0)
+  })
+
+  it('shows the rain warning banner when the backend reports it active', async () => {
+    stubBackend()
+    const backend = globalThis.fetch as unknown as (url: string) => Promise<Response>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        url.endsWith('/api/incidents/rain-warning')
+          ? Promise.resolve(
+              jsonResponse({
+                active: true,
+                activated_at: '2026-11-14T10:00:00Z',
+                cleared_at: null,
+                origin: 'MANUAL',
+              }),
+            )
+          : backend(url),
+      ),
+    )
+
+    render(<App />)
+
+    expect(await screen.findByRole('status', { name: 'Rain warning' })).toHaveTextContent(
+      'New takeoffs suspended',
+    )
   })
 
   it('shows an empty state without inventing hub markers', async () => {

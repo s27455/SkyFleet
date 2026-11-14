@@ -33,6 +33,7 @@ from app.orders.models import OrderStatus
 from app.simulation import heartbeat
 from app.simulation.flight import build_legs, flight_duration_s, leg_to_dict
 from app.simulation.models import FlightPhase, MissionFlight
+from app.weather import service as weather
 
 
 class WorkerUnavailableError(MissionError):
@@ -70,6 +71,9 @@ def start_mission(session: Session, mission_id: str, now: datetime, settings: Se
         raise WorkerUnavailableError(beat, settings.sim_heartbeat_stale_seconds)
 
     try:
+        # Feature 020: the rain warning gate, the first lock of the takeoff transaction. Raising
+        # here rolls back, so a refused takeoff writes nothing and the mission stays ASSIGNED.
+        weather.lock_for_takeoff(session)
         mission = repository.get_mission_for_update(session, mission_id)
         if mission is None:
             raise MissionNotFoundError(mission_id)

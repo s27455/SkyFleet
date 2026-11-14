@@ -17,14 +17,15 @@ def list_events(
     order_id: str | None = None,
     mission_id: str | None = None,
     drone_id: str | None = None,
+    event_type: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> Sequence[OperationalEvent]:
     """The newest `limit` matching events, returned oldest first (occurred_at, then id).
 
     At least one filter is required so that the full history is never read in one call.
     """
-    if order_id is None and mission_id is None and drone_id is None:
-        raise ValueError("At least one of order_id, mission_id or drone_id is required")
+    if order_id is None and mission_id is None and drone_id is None and event_type is None:
+        raise ValueError("At least one of order_id, mission_id, drone_id or event_type is required")
     limit = max(1, min(limit, MAX_LIMIT))
     statement = select(OperationalEvent)
     if order_id is not None:
@@ -33,6 +34,8 @@ def list_events(
         statement = statement.where(OperationalEvent.mission_id == mission_id)
     if drone_id is not None:
         statement = statement.where(OperationalEvent.drone_id == drone_id)
+    if event_type is not None:
+        statement = statement.where(OperationalEvent.event_type == event_type)
     newest = session.scalars(
         statement.order_by(OperationalEvent.occurred_at.desc(), OperationalEvent.id.desc()).limit(
             limit

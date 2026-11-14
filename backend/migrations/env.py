@@ -11,6 +11,7 @@ from app.hubs import models  # noqa: F401  (registers tables on Base.metadata)
 from app.missions import models as mission_models  # noqa: F401  (registers tables on Base.metadata)
 from app.orders import models as order_models  # noqa: F401  (registers tables on Base.metadata)
 from app.simulation import models as simulation_models  # noqa: F401  (registers tables)
+from app.weather import models as weather_models  # noqa: F401  (registers tables)
 
 target_metadata = Base.metadata
 # A URL set on the Alembic config (e.g. by tests) wins; otherwise use DATABASE_URL from settings.

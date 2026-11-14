@@ -12,6 +12,8 @@ const EVENT_DESCRIPTIONS: Record<EventType, string> = {
   RECIPIENT_UNAVAILABLE: 'Recipient unavailable',
   LPR_TRANSIT: 'LPR helicopter in transit',
   DRONE_RELOCATION: 'Drone relocation',
+  RAIN_WARNING_ACTIVATED: 'Rain warning activated',
+  RAIN_WARNING_CLEARED: 'Rain warning cleared',
 }
 
 const ORIGIN_LABELS: Record<EventOrigin, string> = {

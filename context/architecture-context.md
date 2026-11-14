@@ -275,6 +275,8 @@ The final entity attributes, relationships, and state definitions should be spec
 
 Implemented foundation (Feature 018A): the append-only `operational_events` table with a read-only `GET /api/events`; only `ORDER_CREATED` is emitted so far. See `docs/decisions/0004-incident-event-foundation.md`.
 
+Weather restriction (Feature 020): `app/weather` holds one persisted global rain warning. Every takeoff transaction (`start_mission`, `start_relocation`) calls `weather.lock_for_takeoff` first; activation serialises against it with a row lock, and airborne flights never consult it. See `docs/decisions/0011-rain-warning-flight-grounding.md`.
+
 Do not over-engineer the initial domain model.
 
 ## 6. Operational Workflows

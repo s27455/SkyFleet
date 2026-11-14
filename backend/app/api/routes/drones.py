@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.errors import worker_unavailable
+from app.api.errors import rain_warning_active, worker_unavailable
 from app.config import Settings
 from app.db.session import get_session
 from app.drones import repository, service
@@ -21,6 +21,7 @@ from app.missions.service import DroneNotFoundError as MissionDroneNotFoundError
 from app.simulation import clock, relocation
 from app.simulation import service as simulation_service
 from app.simulation.schemas import RelocationPlanResponse, RelocationResponse
+from app.weather.service import RainWarningActiveError
 
 router = APIRouter(prefix="/drones", tags=["drones"])
 
@@ -126,6 +127,8 @@ def relocate_drone(
         raise _relocation_not_found(error) from error
     except simulation_service.WorkerUnavailableError as error:
         raise worker_unavailable(error) from error
+    except RainWarningActiveError as error:
+        raise rain_warning_active(error) from error
     except relocation.RelocationRejectedError as error:
         raise HTTPException(
             status_code=409,

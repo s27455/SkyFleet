@@ -31,10 +31,12 @@ from app.missions.service import MissionError
 from app.simulation import heartbeat
 from app.simulation.clock import as_utc
 from app.simulation.service import WorkerUnavailableError
+from app.weather import service as weather
 
 logger = logging.getLogger("skyfleet.dispatch")
 
 MAX_OUTCOME_LENGTH = 255
+RAIN_OUTCOME = "Rain warning active; new takeoffs suspended"
 
 
 def _row(session: Session) -> DispatchAutoState | None:
@@ -118,6 +120,16 @@ def run_dispatch_pass(
     if not is_enabled(factory):
         return None
 
+    # Feature 020: while a rain warning is active nothing is recommended, created or relocated, so
+    # queued orders simply wait (no pending missions, no repeated outcome text or log line).
+    with factory() as session:
+        suspended = weather.is_active(session)
+    if suspended:
+        outcome = RAIN_OUTCOME
+        if _record(factory, now, outcome):
+            logger.info("Automatic dispatch: %s", outcome)
+        return outcome
+
     with factory() as session:
         result = recommend_for_session(session, settings)
 
@@ -137,6 +149,9 @@ def run_dispatch_pass(
             except WorkerUnavailableError:
                 problems.append("simulation worker unavailable; will retry")
                 break
+            except weather.RainWarningActiveError:
+                problems.append("rain warning became active; stopped")
+                break  # the rest of the pass, and rebalancing, would be refused too
             except DispatchStartFailedError as error:
                 problems.append(f"mission {error.mission_id} created but not started")
             except MissionError:
@@ -152,7 +167,9 @@ def run_dispatch_pass(
     # Feature 019B: after dispatching, the same pass may move one spare drone to a Hub that has
     # orders waiting and no drone. Skipped when the worker was found unavailable.
     rebalanced: str | None = None
-    if not any("worker unavailable" in problem for problem in problems):
+    if not any(
+        "worker unavailable" in problem or "rain warning" in problem for problem in problems
+    ):
         rebalanced = run_rebalancing(factory, settings, now, lambda: is_enabled(factory))
 
     parts: list[str] = []

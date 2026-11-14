@@ -34,6 +34,7 @@ from app.orders.seed import seed_orders
 from app.simulation import models as simulation_models  # noqa: F401  (registers tables)
 from app.simulation import service as simulation_service
 from app.simulation.heartbeat import record_heartbeat
+from app.weather import models as weather_models  # noqa: F401  (registers tables)
 
 
 def _enable_sqlite_foreign_keys(dbapi_connection: SQLiteConnection, _: ConnectionPoolEntry) -> None:

@@ -92,6 +92,11 @@ function toRelocateError(error: unknown): RelocateError {
       'The simulation worker is not running, so the drone cannot fly. Start it with "uv run python -m app.worker" and try again.',
     )
   }
+  if (error.status === 409 && detail.code === 'RAIN_WARNING_ACTIVE') {
+    return new RelocateError(
+      'Takeoff is prohibited while the rain warning is active. Nothing was started.',
+    )
+  }
   if (error.status === 404) {
     return new RelocateError('The drone or the destination Hub no longer exists.')
   }

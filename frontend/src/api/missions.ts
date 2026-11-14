@@ -65,7 +65,13 @@ export async function getMissions(signal?: AbortSignal): Promise<Mission[]> {
 }
 
 export type StartMissionFailure =
-  'WORKER_UNAVAILABLE' | 'NOT_STARTABLE' | 'NOT_ELIGIBLE' | 'NOT_FOUND' | 'UNREACHABLE' | 'UNKNOWN'
+  | 'WORKER_UNAVAILABLE'
+  | 'NOT_STARTABLE'
+  | 'NOT_ELIGIBLE'
+  | 'RAIN_WARNING'
+  | 'NOT_FOUND'
+  | 'UNREACHABLE'
+  | 'UNKNOWN'
 
 /** Why a start was refused, with a message that can be shown to the operator as is. */
 export class StartMissionError extends Error {
@@ -100,6 +106,12 @@ function toStartError(error: unknown): StartMissionError {
     return new StartMissionError(
       'WORKER_UNAVAILABLE',
       'The simulation worker is not running, so the mission cannot fly. Start it with "uv run python -m app.worker" and try again.',
+    )
+  }
+  if (error.status === 409 && detail.code === 'RAIN_WARNING_ACTIVE') {
+    return new StartMissionError(
+      'RAIN_WARNING',
+      'Takeoff is prohibited while the rain warning is active. The mission stays assigned; start it after the warning is cleared.',
     )
   }
   if (error.status === 404) {

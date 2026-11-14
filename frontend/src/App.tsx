@@ -21,6 +21,9 @@ import {
 } from './features/flights/flightStatus'
 import type { FlightVisual } from './features/flights/interpolation'
 import { useLpr } from './features/lpr/useLpr'
+import { RainWarningBanner } from './features/weather/RainWarningBanner'
+import { TakeoffsSuspendedProvider } from './features/weather/TakeoffGate'
+import { useRainWarning } from './features/weather/useRainWarning'
 import { LiveDataNotices } from './features/flights/LiveDataNotices'
 import { useFlights } from './features/flights/useFlights'
 import { usePrefersReducedMotion } from './features/flights/usePrefersReducedMotion'
@@ -157,6 +160,9 @@ function App() {
   const canMarkRecipient = useMemo(() => flights.some(isRecipientTargetable), [flights])
   // The LPR helicopter (Feature 018E): the backend's scenario and which drones wait for it.
   const lprResource = useLpr()
+  const rainResource = useRainWarning()
+  const rainWarningActive = rainResource.state.status === 'ready' && rainResource.state.data.active
+  const refreshRainWarning = rainResource.refresh
   const lprScenario = lprResource.state.status === 'ready' ? lprResource.state.data.scenario : null
   const lprReceivedAt = lprResource.receivedAt
   const lprStale = lprResource.stale
@@ -239,7 +245,15 @@ function App() {
     refreshDrones()
     refreshFlights()
     refreshLpr()
-  }, [refreshOrders, refreshMissions, refreshDrones, refreshFlights, refreshLpr])
+    refreshRainWarning()
+  }, [
+    refreshOrders,
+    refreshMissions,
+    refreshDrones,
+    refreshFlights,
+    refreshLpr,
+    refreshRainWarning,
+  ])
   // A relocation changes the drone, its flight and its Activity; read them at once (Feature 019A).
   const refreshAfterRelocation = useCallback(() => {
     setActivityTick((tick) => tick + 1)
@@ -281,201 +295,206 @@ function App() {
   }, [flyingKey, refreshDrones, refreshOrders, refreshMissions])
 
   return (
-    <div className="flex h-dvh flex-col">
-      <header
-        inert={inspectorOpen}
-        className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6"
-      >
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-lg font-semibold tracking-tight">
-            Sky<span className="text-accent">Fleet</span>
-          </h1>
-          <span className="hidden text-sm text-fg-muted sm:inline">Operations Center</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <AutoDispatchControl />
-          <button
-            type="button"
-            aria-expanded={managementOpen}
-            className="rounded border border-line px-3 py-1.5 text-sm hover:bg-surface-raised"
-            onClick={() => setManagementOpen((open) => !open)}
-          >
-            Management
-          </button>
-          <BackendStatus />
-        </div>
-      </header>
+    <TakeoffsSuspendedProvider value={rainWarningActive}>
+      <div className="flex h-dvh flex-col">
+        <header
+          inert={inspectorOpen}
+          className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6"
+        >
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-lg font-semibold tracking-tight">
+              Sky<span className="text-accent">Fleet</span>
+            </h1>
+            <span className="hidden text-sm text-fg-muted sm:inline">Operations Center</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <AutoDispatchControl />
+            <button
+              type="button"
+              aria-expanded={managementOpen}
+              className="rounded border border-line px-3 py-1.5 text-sm hover:bg-surface-raised"
+              onClick={() => setManagementOpen((open) => !open)}
+            >
+              Management
+            </button>
+            <BackendStatus />
+          </div>
+        </header>
+        <RainWarningBanner active={rainWarningActive} stale={rainResource.stale} />
 
-      <main className="relative min-h-0 flex-1">
-        <MapView
-          hubs={hubs}
-          selectedHubId={selection?.kind === 'hub' ? selection.id : null}
-          onSelectHub={selectHub}
-          drones={markerDrones}
-          dockedCounts={dockedCounts}
-          selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
-          onSelectDrone={selectDrone}
-          droneOffsets={droneOffsets}
-          flights={flightVisuals}
-          orders={orders}
-          selectedOrderId={selection?.kind === 'order' ? selection.id : null}
-          onSelectOrder={selectOrder}
-          orderOffsets={orderOffsets}
-          emergencyPoints={emergencyPoints}
-          droneEmergencies={droneEmergencies}
-          interruptedOrderIds={interruptedOrderIds}
-          lpr={lprView}
-          yieldingDroneIds={yieldingDroneIds}
-        />
-        <OrderMarkerLegend
-          hideOnNarrow={selection !== null}
-          showEmergency={emergencyPoints.length > 0}
-          showLpr={lprScenario !== null}
-        />
-        <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80">
-          <ResourceStatusBanner
-            resource="hub"
-            state={hubsResource.state}
-            onRetry={hubsResource.retry}
-          />
-          <ResourceStatusBanner
-            resource="drone"
-            state={dronesResource.state}
-            onRetry={dronesResource.retry}
-          />
-          <ResourceStatusBanner
-            resource="order"
-            state={ordersResource.state}
-            onRetry={ordersResource.retry}
-          />
-          <LiveDataNotices
-            flights={flightsResource}
-            missions={missionsResource}
-            fleetStale={dronesResource.stale || ordersResource.stale}
-            onRefreshFleet={() => {
-              refreshDrones()
-              refreshOrders()
-            }}
-          />
-          <OrdersList
-            orders={orders}
+        <main className="relative min-h-0 flex-1">
+          <MapView
             hubs={hubs}
+            selectedHubId={selection?.kind === 'hub' ? selection.id : null}
+            onSelectHub={selectHub}
+            drones={markerDrones}
+            dockedCounts={dockedCounts}
+            selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
+            onSelectDrone={selectDrone}
+            droneOffsets={droneOffsets}
+            flights={flightVisuals}
+            orders={orders}
             selectedOrderId={selection?.kind === 'order' ? selection.id : null}
             onSelectOrder={selectOrder}
+            orderOffsets={orderOffsets}
+            emergencyPoints={emergencyPoints}
+            droneEmergencies={droneEmergencies}
+            interruptedOrderIds={interruptedOrderIds}
+            lpr={lprView}
+            yieldingDroneIds={yieldingDroneIds}
+          />
+          <OrderMarkerLegend
             hideOnNarrow={selection !== null}
+            showEmergency={emergencyPoints.length > 0}
+            showLpr={lprScenario !== null}
           />
-        </div>
-        {selectedHub && (
-          <HubDetailPanel
-            hub={selectedHub}
-            dockedDrones={dockedByHub.get(selectedHub.id)}
-            onSelectDrone={selectDrone}
-            assignedMissionDroneIds={assignedMissionDroneIds}
-            onClose={clearSelection}
-          />
-        )}
-        {selectedOrder && (
-          <OrderDetailPanel
-            order={selectedOrder}
-            hub={hubs.find((hub) => hub.id === selectedOrder.originHubId)}
-            markerSpread={orderOffsets.has(selectedOrder.id)}
-            onClose={clearSelection}
-            hubs={hubs}
-            assignedMission={assignedByOrder.get(selectedOrder.id)}
-            onStartMission={startAssignedMission}
-            onCancelled={refreshAfterIncident}
-            flight={flights.find((candidate) => candidate.orderId === selectedOrder.id)}
-            workerStale={workerStale}
-            activityRefreshKey={activityTick}
-          />
-        )}
-        {managementOpen && (
-          <ManagementPanel
-            onClose={() => setManagementOpen(false)}
-            tabs={[
-              {
-                id: 'orders',
-                label: 'Orders',
-                content: (
-                  <div className="flex flex-col gap-4">
-                    <OrderSimulationPanel onGenerated={refreshOrders} />
-                    <SimulationEventsPanel
-                      selectedOrder={selectedOrder ?? null}
-                      onOrderCancelled={refreshAfterIncident}
-                      canFailDrone={canFailDrone}
-                      onDroneFailed={refreshAfterIncident}
-                      canMarkRecipient={canMarkRecipient}
-                      onRecipientMarked={refreshAfterIncident}
-                      lprActive={lprScenario !== null}
-                      onLprTriggered={refreshAfterIncident}
-                    />
-                    <OrdersManager
-                      selectedOrderId={selection?.kind === 'order' ? selection.id : null}
-                      onSelectOrder={selectOrder}
-                      orders={orders}
+          <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80">
+            <ResourceStatusBanner
+              resource="hub"
+              state={hubsResource.state}
+              onRetry={hubsResource.retry}
+            />
+            <ResourceStatusBanner
+              resource="drone"
+              state={dronesResource.state}
+              onRetry={dronesResource.retry}
+            />
+            <ResourceStatusBanner
+              resource="order"
+              state={ordersResource.state}
+              onRetry={ordersResource.retry}
+            />
+            <LiveDataNotices
+              flights={flightsResource}
+              missions={missionsResource}
+              fleetStale={dronesResource.stale || ordersResource.stale}
+              onRefreshFleet={() => {
+                refreshDrones()
+                refreshOrders()
+              }}
+            />
+            <OrdersList
+              orders={orders}
+              hubs={hubs}
+              selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+              onSelectOrder={selectOrder}
+              hideOnNarrow={selection !== null}
+            />
+          </div>
+          {selectedHub && (
+            <HubDetailPanel
+              hub={selectedHub}
+              dockedDrones={dockedByHub.get(selectedHub.id)}
+              onSelectDrone={selectDrone}
+              assignedMissionDroneIds={assignedMissionDroneIds}
+              onClose={clearSelection}
+            />
+          )}
+          {selectedOrder && (
+            <OrderDetailPanel
+              order={selectedOrder}
+              hub={hubs.find((hub) => hub.id === selectedOrder.originHubId)}
+              markerSpread={orderOffsets.has(selectedOrder.id)}
+              onClose={clearSelection}
+              hubs={hubs}
+              assignedMission={assignedByOrder.get(selectedOrder.id)}
+              onStartMission={startAssignedMission}
+              onCancelled={refreshAfterIncident}
+              flight={flights.find((candidate) => candidate.orderId === selectedOrder.id)}
+              workerStale={workerStale}
+              activityRefreshKey={activityTick}
+            />
+          )}
+          {managementOpen && (
+            <ManagementPanel
+              onClose={() => setManagementOpen(false)}
+              tabs={[
+                {
+                  id: 'orders',
+                  label: 'Orders',
+                  content: (
+                    <div className="flex flex-col gap-4">
+                      <OrderSimulationPanel onGenerated={refreshOrders} />
+                      <SimulationEventsPanel
+                        selectedOrder={selectedOrder ?? null}
+                        onOrderCancelled={refreshAfterIncident}
+                        canFailDrone={canFailDrone}
+                        onDroneFailed={refreshAfterIncident}
+                        canMarkRecipient={canMarkRecipient}
+                        onRecipientMarked={refreshAfterIncident}
+                        lprActive={lprScenario !== null}
+                        onLprTriggered={refreshAfterIncident}
+                        rainWarningActive={rainWarningActive}
+                        onRainWarningChanged={refreshAfterIncident}
+                      />
+                      <OrdersManager
+                        selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+                        onSelectOrder={selectOrder}
+                        orders={orders}
+                        hubs={hubs}
+                        missions={missions}
+                        onChanged={() => {
+                          refreshOrders()
+                          refreshMissions()
+                        }}
+                      />
+                    </div>
+                  ),
+                },
+                {
+                  id: 'drones',
+                  label: 'Drones',
+                  content: (
+                    <DronesManager
+                      drones={drones}
                       hubs={hubs}
                       missions={missions}
                       onChanged={() => {
-                        refreshOrders()
+                        refreshDrones()
                         refreshMissions()
                       }}
                     />
-                  </div>
-                ),
-              },
-              {
-                id: 'drones',
-                label: 'Drones',
-                content: (
-                  <DronesManager
-                    drones={drones}
-                    hubs={hubs}
-                    missions={missions}
-                    onChanged={() => {
-                      refreshDrones()
-                      refreshMissions()
-                    }}
-                  />
-                ),
-              },
-            ]}
-          />
-        )}
-        {selectedDrone && (
-          <DroneDetailPanel
-            drone={selectedDrone}
-            hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
-            markerSpread={droneOffsets.has(selectedDrone.id)}
-            onClose={clearSelection}
-            hubs={hubs}
-            flight={flightByDrone.get(selectedDrone.id)}
-            workerStale={workerStale}
-            assignedMission={assignedByDrone.get(selectedDrone.id)}
-            onStartMission={startAssignedMission}
-            onRelocationChanged={refreshAfterRelocation}
-            activityRefreshKey={activityTick}
-            onInspect={() => setInspectedDroneId(selectedDrone.id)}
-            closeOnEscape={!inspectorOpen}
-          />
-        )}
-        {selectedDrone && inspectorOpen && inspectorData && (
-          <DroneInspector
-            drone={selectedDrone}
-            hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
-            hubs={hubs}
-            data={inspectorData}
-            workerStale={workerStale}
-            dataStale={
-              dronesResource.stale ||
-              flightsResource.stale ||
-              missionsResource.stale ||
-              ordersResource.stale
-            }
-            onClose={closeInspector}
-          />
-        )}
-      </main>
-    </div>
+                  ),
+                },
+              ]}
+            />
+          )}
+          {selectedDrone && (
+            <DroneDetailPanel
+              drone={selectedDrone}
+              hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
+              markerSpread={droneOffsets.has(selectedDrone.id)}
+              onClose={clearSelection}
+              hubs={hubs}
+              flight={flightByDrone.get(selectedDrone.id)}
+              workerStale={workerStale}
+              assignedMission={assignedByDrone.get(selectedDrone.id)}
+              onStartMission={startAssignedMission}
+              onRelocationChanged={refreshAfterRelocation}
+              activityRefreshKey={activityTick}
+              onInspect={() => setInspectedDroneId(selectedDrone.id)}
+              closeOnEscape={!inspectorOpen}
+            />
+          )}
+          {selectedDrone && inspectorOpen && inspectorData && (
+            <DroneInspector
+              drone={selectedDrone}
+              hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
+              hubs={hubs}
+              data={inspectorData}
+              workerStale={workerStale}
+              dataStale={
+                dronesResource.stale ||
+                flightsResource.stale ||
+                missionsResource.stale ||
+                ordersResource.stale
+              }
+              onClose={closeInspector}
+            />
+          )}
+        </main>
+      </div>
+    </TakeoffsSuspendedProvider>
   )
 }
 
