@@ -95,7 +95,7 @@ The two agent-only skills, `agent-code-review` and `agent-qa-testing`, are descr
 
 ## 5. Feature development lifecycle
 
-```
+```text
  business idea
       |
       v
@@ -198,7 +198,7 @@ The cycle then started again with the next feature.
 
 ## 7. Verification and lessons learned
 
-**What worked**
+### What worked
 - **Shared context instead of one-off prompts.** The seven context documents and `CLAUDE.md` kept
   terminology, architecture and business rules consistent across 46 specifications.
 - **Business decisions stayed separate from implementation.** Requirements were settled before
@@ -211,18 +211,78 @@ The cycle then started again with the next feature.
 - **Traceability.** Every feature has a specification, many with an implementation record. Larger
   decisions have ADRs, and the larger commits name the feature they complete.
 
-**What needed care**
-- **AI output had to be verified.** Review agents found real defects, such as missing locks,
-  incorrect status flags and missing guards. Automated checks and my live testing caught behaviour
-  that looked right in code but not in the running application. The implementation records
-  deliberately state what was *not* verified, for example "not observed live by the implementer".
-- **Specifications and code drifted.** Briefs sometimes conflicted with the existing code or with
-  each other, which is why plans had to report such conflicts and why approved adjustments are
-  recorded at the top of specifications.
-- **Documentation needed maintenance.** Detailed per-feature notes went out of date as later
-  features changed behaviour, and the README was condensed at the end of the project for that
-  reason. A few skill definitions still mention folder names from an earlier project layout.
-  These are historical implementation details and are not part of the workflow described here.
-- **Agent reviews were not a substitute for testing.** The agents are read-only and cannot run the
-  application, so their reports were combined with real test runs and manual checks rather than
-  treated as proof that the code works.
+### Personal retrospective — lessons learned
+
+SkyFleet was my first project of this scale, and it grew considerably beyond what I initially expected. Building a more complex application with extensive AI assistance was both a productive experience and an important lesson in software engineering discipline.
+
+#### The value of AI-assisted development
+
+The biggest advantage was the speed at which I could turn ideas into working functionality. The combination of ChatGPT for discussing requirements and technical approaches, and Claude Code for planning and implementation, worked particularly well during the early stages.
+
+Claude Code was often remarkably effective at solving implementation problems and connecting different parts of the system. The amount of functionality completed within the available time would have been extremely difficult for me to achieve through manual development alone.
+
+This experience made me much more interested in using AI tools in future projects.
+
+#### When speed became a problem
+
+The same speed also created risks.
+
+Early in development, I spent considerable time defining the project's foundations: writing the seven core context documents, planning the architecture, establishing development rules, and preparing diagrams. I initially reviewed implementations closely and understood the code being introduced.
+
+As the project grew and deadlines approached, I sometimes became less thorough. There were occasions when I accepted an implementation after limited verification or postponed a concern with the intention of addressing it later. Fatigue and time pressure contributed to this.
+
+Those shortcuts accumulated. Some issues that could have been caught during the original feature work required additional investigation and correction near the end of the project.
+
+In hindsight, I should have maintained the same level of code review and hands-on verification throughout development, even when the AI-generated solutions appeared convincing.
+
+#### Context management across two AI tools
+
+Using ChatGPT and Claude Code together was initially a deliberate choice. I wanted to separate discussions about business requirements and technical design from implementation work, partly because I was concerned about token consumption and the cost of longer Claude sessions.
+
+However, the two tools did not share a complete, continuously synchronized understanding of the project.
+
+As requirements evolved, one conversation could be based on assumptions that were no longer accurate in the codebase. Even with seven foundational context documents, specifications and implementation decisions sometimes drifted apart.
+
+This created additional coordination work and occasionally contributed to inconsistencies that had to be resolved later.
+
+For future projects, I would consider a more consolidated workflow, potentially centered on one primary development assistant, while keeping the repository documentation as the authoritative source of project context.
+
+#### Architectural decisions and their consequences
+
+One decision I would reconsider is the use of HTTP polling rather than WebSockets for live simulation updates.
+
+The current approach works and keeps the communication model relatively straightforward, but I have noticed occasional visual stuttering in the drone simulation. I believe a push-based update mechanism could be worth exploring for a smoother real-time experience.
+
+I cannot claim that WebSockets alone would solve every animation issue without profiling and testing. Nevertheless, this is an example of an architectural trade-off that I would investigate earlier in a future project rather than postponing until the application had grown.
+
+#### AI-assisted engineering is not the same as vibe coding
+
+One of my most important takeaways is the distinction between using AI as an engineering tool and simply accepting generated code because it appears to work.
+
+At the beginning of SkyFleet, I approached AI-assisted development systematically: defining requirements, reviewing plans, understanding the code, testing behavior, and recording decisions.
+
+Later, under time pressure, parts of my workflow moved closer to what is commonly called *vibe coding*: relying more heavily on generated output and spending less time examining its implementation details.
+
+I do not consider that a sustainable approach for professional software development.
+
+AI can accelerate implementation dramatically, but it does not remove the need to understand the architecture, inspect changes, challenge assumptions, verify behavior, and take responsibility for the final result.
+
+#### What I would do differently
+
+For my next project, I would:
+
+- Maintain consistent code review standards throughout development, regardless of deadlines or how convincing an AI-generated solution looks.
+
+- Complete meaningful verification before considering a feature finished, rather than accumulating deferred checks.
+
+- Keep architectural decisions and feature specifications synchronized with the actual codebase.
+
+- Reduce unnecessary context fragmentation between AI tools.
+
+- Revisit performance-sensitive architectural choices earlier, especially where real-time behavior affects the user experience.
+
+- Keep using AI extensively, but treat its speed as an opportunity for better engineering rather than a reason to skip engineering discipline.
+
+Overall, I consider SkyFleet a very positive learning experience. It demonstrated how much a single developer can accomplish with capable AI tools, but also how quickly technical and process debt can accumulate when the pace of implementation exceeds the pace of understanding and verification.
+
+The central lesson I am taking forward is simple: **AI-assisted software engineering should make development more effective, not make engineering judgment optional.**
