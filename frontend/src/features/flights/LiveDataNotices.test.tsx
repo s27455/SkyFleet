@@ -37,6 +37,7 @@ const baseFlight: Flight = {
     reason: 'NO_HUB_WITH_CAPACITY',
     at: '2026-11-12T10:00:09Z',
     position: [18.6012, 54.3821],
+    acknowledgedAt: null,
   },
 }
 

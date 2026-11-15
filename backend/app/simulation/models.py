@@ -159,6 +159,23 @@ class IncidentSchedulerState(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class IncidentAcknowledgement(Base):
+    """An operator has acknowledged the emergency alert of one mission (Feature 022).
+
+    Keyed by the mission id, which is also the failed flight's id: one failure produces one
+    emergency flight, so a later failure of the same drone is a different mission and a new alert.
+    It only hides the alert in the map overlay. The incident, its events, the mission and the
+    drone are never changed by it, and it is not a resolution or a cancellation.
+    """
+
+    __tablename__ = "incident_acknowledgements"
+
+    mission_id: Mapped[str] = mapped_column(
+        ForeignKey("missions.id", ondelete="RESTRICT"), primary_key=True
+    )
+    acknowledged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class LprStatus(StrEnum):
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"

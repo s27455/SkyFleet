@@ -18,6 +18,11 @@ Random Incidents (Feature 021D-2) is a third independent mode with its own persi
 to OFF at startup, and while ON the worker makes one attempt after each random real-time pause
 (`app.simulation.incident_scheduler`), triggering at most one incident through the existing
 incident services. It never stops the loop or the flight updates.
+
+Drone recovery (Feature 022) is not a mode: every `drone_recovery_check_seconds` the worker looks
+for drones grounded by a drone failure (automatic or manual) whose delay has passed and moves a few
+of them to a Hub (`app.simulation.recovery`). Everything it needs is stored, so a restart loses
+nothing, and it does not depend on Random Incidents being ON.
 """
 
 import logging
@@ -32,6 +37,7 @@ from app.orders import simulation as order_simulation
 from app.simulation import clock, engine, random_incidents
 from app.simulation.charging import ChargingState, charge_step
 from app.simulation.incident_scheduler import IncidentScheduler
+from app.simulation.recovery import RecoveryState, run_recovery_step
 
 logger = logging.getLogger("skyfleet.worker")
 
@@ -51,6 +57,8 @@ def run_forever(settings: Settings) -> None:
     order_schedule = order_simulation.GenerationSchedule(settings)
     incidents_reset = False  # no random incident until the mode has been reset to OFF
     incident_scheduler = IncidentScheduler(settings)
+    recovery = RecoveryState()
+    next_recovery_at = 0.0
     while True:
         tick_number += 1
         run_tick(tick_number)
@@ -97,6 +105,13 @@ def run_forever(settings: Settings) -> None:
                 incident_scheduler.run_step(factory, clock.utcnow(), time.monotonic())
         except Exception:  # incidents must never take the worker down
             logger.exception("Random incident step failed")
+
+        try:  # drones grounded by a drone failure return to a Hub after the recovery delay
+            if time.monotonic() >= next_recovery_at:
+                next_recovery_at = time.monotonic() + settings.drone_recovery_check_seconds
+                run_recovery_step(factory, settings, clock.utcnow(), recovery)
+        except Exception:  # recovery must never take the worker down
+            logger.exception("Drone recovery step failed")
         time.sleep(settings.sim_tick_seconds)
 
 

@@ -25,6 +25,15 @@ class FlightEmergency(BaseModel):
     reason: EmergencyReason
     at: datetime
     position: tuple[float, float]
+    # Feature 022: when an operator acknowledged this alert (hides it in the map overlay only).
+    acknowledged_at: datetime | None = None
+
+
+class EmergencyAcknowledgement(BaseModel):
+    """The stored acknowledgement of one emergency alert (Feature 022)."""
+
+    mission_id: str
+    acknowledged_at: datetime
 
 
 class FlightResponse(BaseModel):

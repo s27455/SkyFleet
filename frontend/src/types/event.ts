@@ -8,6 +8,7 @@ export const EVENT_TYPES = [
   'DRONE_RELOCATION',
   'RAIN_WARNING_ACTIVATED',
   'RAIN_WARNING_CLEARED',
+  'DRONE_RECOVERED',
 ] as const
 
 export type EventType = (typeof EVENT_TYPES)[number]

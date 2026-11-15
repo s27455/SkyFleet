@@ -158,6 +158,7 @@ describe('FlightSection', () => {
         reason: 'DRONE_FAILURE',
         at: '2026-11-12T10:00:15Z',
         position: [18.6012, 54.3821],
+        acknowledgedAt: null,
       },
     }
 
@@ -253,6 +254,7 @@ describe('FlightSection', () => {
         reason: 'BATTERY_INSUFFICIENT',
         at: '2026-11-12T10:00:30Z',
         position: [18.6012, 54.3821],
+        acknowledgedAt: null,
       },
     }
     render(<FlightSection flight={emergency} hubs={HUBS} workerStale={false} />)

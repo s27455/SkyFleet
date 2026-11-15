@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
 from app.missions.models import Mission
-from app.simulation import clock, heartbeat, lpr
+from app.simulation import acknowledgements, clock, heartbeat, lpr
 from app.simulation.engine import rounded_pct
 from app.simulation.models import FlightPhase, MissionFlight
 from app.simulation.schemas import (
@@ -25,7 +25,12 @@ router = APIRouter(prefix="/flights", tags=["flights"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
-def _as_flight_response(flight: MissionFlight, mission: Mission, now: datetime) -> FlightResponse:
+def _as_flight_response(
+    flight: MissionFlight,
+    mission: Mission,
+    now: datetime,
+    acknowledged_at: datetime | None = None,
+) -> FlightResponse:
     target = None
     if flight.target_longitude is not None and flight.target_latitude is not None:
         target = FlightTarget(
@@ -39,6 +44,7 @@ def _as_flight_response(flight: MissionFlight, mission: Mission, now: datetime) 
                 "reason": flight.emergency_reason,
                 "at": clock.as_utc(flight.emergency_at),
                 "position": (flight.longitude, flight.latitude),
+                "acknowledged_at": acknowledged_at,
             }
         )
     return FlightResponse.model_validate(
@@ -87,9 +93,21 @@ def list_flights(session: SessionDep, settings: SettingsDep) -> FlightsResponse:
         .where(MissionFlight.phase != FlightPhase.LANDED.value)
         .order_by(MissionFlight.started_at, MissionFlight.mission_id)
     ).all()
+    # Feature 022: when an operator acknowledged each emergency alert (hides it in the overlay only)
+    acknowledged = acknowledgements.acknowledged_at_by_mission(
+        session,
+        [
+            flight.mission_id
+            for flight, _ in rows
+            if flight.emergency_reason is not None and flight.emergency_at is not None
+        ],
+    )
     return FlightsResponse(
         server_time=now,
         worker_heartbeat_at=beat,
         worker_stale=not heartbeat.is_fresh(beat, now, settings.sim_heartbeat_stale_seconds),
-        flights=[_as_flight_response(flight, mission, now) for flight, mission in rows],
+        flights=[
+            _as_flight_response(flight, mission, now, acknowledged.get(flight.mission_id))
+            for flight, mission in rows
+        ],
     )

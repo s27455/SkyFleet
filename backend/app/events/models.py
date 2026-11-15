@@ -27,6 +27,7 @@ class EventType(StrEnum):
     DRONE_RELOCATION = "DRONE_RELOCATION"  # 019A (`details.phase` STARTED or COMPLETED)
     RAIN_WARNING_ACTIVATED = "RAIN_WARNING_ACTIVATED"  # 020 (global: no order, mission, drone)
     RAIN_WARNING_CLEARED = "RAIN_WARNING_CLEARED"  # 020
+    DRONE_RECOVERED = "DRONE_RECOVERED"  # 022 (a grounded drone moved to a Hub by ground crew)
 
 
 class EventOrigin(StrEnum):

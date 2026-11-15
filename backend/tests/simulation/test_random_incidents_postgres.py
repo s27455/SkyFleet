@@ -185,7 +185,11 @@ def test_the_migration_round_trips_and_leaves_the_other_modes_alone(temp_engine:
     config.set_main_option("sqlalchemy.url", temp_engine.url.render_as_string(hide_password=False))
     columns = {c["name"] for c in inspect(temp_engine).get_columns("incident_scheduler_state")}
     assert columns == {"name", "enabled", "last_check_at", "last_outcome", "updated_at"}
-    tables_before = set(inspect(temp_engine).get_table_names()) - {"incident_scheduler_state"}
+    # Migration 0018 (Feature 022) sits above 0017, so its table is dropped by the same downgrade.
+    tables_before = set(inspect(temp_engine).get_table_names()) - {
+        "incident_scheduler_state",
+        "incident_acknowledgements",
+    }
 
     command.downgrade(config, "0016")
     assert "incident_scheduler_state" not in inspect(temp_engine).get_table_names()

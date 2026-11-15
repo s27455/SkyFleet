@@ -14,6 +14,7 @@ const EVENT_DESCRIPTIONS: Record<EventType, string> = {
   DRONE_RELOCATION: 'Drone relocation',
   RAIN_WARNING_ACTIVATED: 'Rain warning activated',
   RAIN_WARNING_CLEARED: 'Rain warning cleared',
+  DRONE_RECOVERED: 'Drone recovered and returned to a Hub',
 }
 
 const ORIGIN_LABELS: Record<EventOrigin, string> = {

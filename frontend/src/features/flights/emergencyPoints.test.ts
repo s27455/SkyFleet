@@ -61,6 +61,7 @@ describe('emergencyPoints', () => {
         reason: 'DRONE_FAILURE',
         at: '2026-11-13T10:00:15Z',
         position: [18.605, 54.385],
+        acknowledgedAt: null,
       },
     })
 

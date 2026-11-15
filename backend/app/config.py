@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     incident_sim_weight_recipient: float = Field(default=0.4, ge=0)
     incident_sim_weight_failure: float = Field(default=0.2, ge=0)
 
+    # Automatic recovery of drones grounded by a drone failure (Feature 022): a simulated
+    # ground crew moves the drone to a Hub this many real seconds after its emergency landing
+    # (`mission_flights.emergency_at`). The worker looks every `check` seconds and recovers at most
+    # `batch` drones per look, so a backlog is processed in small steps.
+    drone_recovery_delay_seconds: float = Field(default=120.0, ge=0)
+    drone_recovery_check_seconds: float = Field(default=5.0, gt=0)
+    drone_recovery_batch_size: int = Field(default=3, ge=1)
+
     # Feature 017A: how long a DELIVERED order stays in the active operational views, counted from
     # its persisted delivery time. The order itself is never deleted.
     order_delivered_visibility_seconds: float = Field(default=120.0, gt=0)

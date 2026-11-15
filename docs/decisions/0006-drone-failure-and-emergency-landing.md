@@ -15,10 +15,14 @@
 ## MVP assumptions (not approved business rules)
 
 - The parcel of an interrupted order is not handled further; there is no reassignment, recovery or compensation (`business-rules.md` Q3 and Q6 stay partly open).
-- The existing Management drone status toggle can still return a `MAINTENANCE` drone to `IDLE`; it is an operator override and was left unchanged.
+- *Corrected (Feature 022):* it was assumed that the Management drone status toggle could return a grounded drone to `IDLE`. It cannot: `IDLE` requires the drone to be within the 50 m docking radius of a Hub, and a grounded drone stops about 250 m away by design, so a grounded drone had no way back into service until Feature 022.
 - The approach window is short (about 5 to 20 s with default timings; `SIM_FLIGHT_MIN_SECONDS` and `SIM_FLIGHT_MAX_SECONDS` can slow flights).
 
 ## Consequences
 
 - 018D and 018E must keep order, mission and drone state independent and reuse `append_event` and the same trigger convention.
 - Random or automatic failures are not implemented; the Random incidents switch stays disabled.
+
+## Update: recovery (Feature 022)
+
+A grounded drone is no longer permanently out of service. 120 s of real time after the landing (`mission_flights.emergency_at`) the worker recovers **every** completed `DRONE_FAILURE` landing, whether the failure was automatic or manual: the drone moves straight to the nearest Hub with a free place (no flight), keeps its battery, becomes `CHARGING` below 100 % (else `IDLE`) and one `DRONE_RECOVERED` event (unique key `DRONE_RECOVERED:<mission>`) is appended. The mission stays `EMERGENCY`, the flight stays an emergency, and the order keeps its status (an interrupted order is still not resurrected). A drone an operator put into `MAINTENANCE`, one that stopped for another emergency reason, or one still in its emergency approach is never recovered. See `docs/features/022-incident-acknowledgement-drone-recovery.md`.

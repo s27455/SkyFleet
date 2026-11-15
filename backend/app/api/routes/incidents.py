@@ -15,13 +15,14 @@ from app.api.errors import worker_unavailable
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
 from app.events.models import EventOrigin
-from app.simulation import clock, lpr, random_incidents
+from app.simulation import acknowledgements, clock, lpr, random_incidents
 from app.simulation import service as simulation_service
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import NoEligibleTargetError, trigger_drone_failure
 from app.simulation.models import LprScenario
 from app.simulation.schemas import (
     DroneFailureResponse,
+    EmergencyAcknowledgement,
     LprScenarioResponse,
     LprStatusResponse,
     RandomIncidentsStatus,
@@ -170,3 +171,18 @@ def enable_random_incidents(session: SessionDep, settings: SettingsDep) -> Rando
 def disable_random_incidents(session: SessionDep, settings: SettingsDep) -> RandomIncidentsStatus:
     """Turn Random Incidents OFF (idempotent). An incident already in progress is not undone."""
     return random_incidents.disable(session, clock.utcnow(), settings)
+
+
+@router.post("/emergencies/{mission_id}/acknowledge", response_model=EmergencyAcknowledgement)
+def acknowledge_emergency(mission_id: str, session: SessionDep) -> EmergencyAcknowledgement:
+    """Hide one emergency alert in the map overlay (idempotent; the incident is not changed).
+
+    Acknowledging is not resolving or cancelling: events, the mission and the drone are untouched.
+    """
+    try:
+        at = acknowledgements.acknowledge_emergency(session, mission_id, clock.utcnow())
+    except acknowledgements.EmergencyNotFoundError as error:
+        raise HTTPException(
+            status_code=404, detail={"code": "EMERGENCY_NOT_FOUND", "message": str(error)}
+        ) from error
+    return EmergencyAcknowledgement(mission_id=mission_id, acknowledged_at=at)

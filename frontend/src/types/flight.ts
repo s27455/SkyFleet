@@ -52,7 +52,13 @@ export interface FlightResponse {
   /** The drone is standing still outside the LPR helicopter's safety zone (Feature 018E). */
   yielding_to_lpr: boolean
   updated_at: string
-  emergency: { reason: EmergencyReason; at: string; position: [number, number] } | null
+  emergency: {
+    reason: EmergencyReason
+    at: string
+    position: [number, number]
+    /** When an operator acknowledged the alert (Feature 022); absent from an older backend. */
+    acknowledged_at?: string | null
+  } | null
 }
 
 /** Mirrors `FlightsResponse` (`GET /api/flights`). */
@@ -69,6 +75,11 @@ export interface FlightEmergency {
   at: string
   /** [longitude, latitude] where the simulated flight ended. */
   position: [longitude: number, latitude: number]
+  /**
+   * When an operator acknowledged this alert (Feature 022). It only hides the alert in the map
+   * overlay: the emergency, the drone and the history are unchanged.
+   */
+  acknowledgedAt: string | null
 }
 
 /** UI model of one flight, as the backend reports it at `updatedAt`. */

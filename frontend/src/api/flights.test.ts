@@ -88,8 +88,27 @@ describe('getFlights', () => {
       reason: 'NO_HUB_WITH_CAPACITY',
       at: '2026-11-12T10:00:09Z',
       position: [18.6012, 54.3821],
+      acknowledgedAt: null, // an older backend sends no acknowledgement: not acknowledged
     })
     expect(flight.deliveredAt).toBe('2026-11-12T10:00:03Z')
+  })
+
+  it('maps the acknowledgement time of an emergency (Feature 022)', async () => {
+    const acknowledged = {
+      ...EMERGENCY_FLIGHT,
+      emergency: { ...EMERGENCY_FLIGHT.emergency!, acknowledged_at: '2026-11-12T10:05:00Z' },
+    }
+    const open = {
+      ...EMERGENCY_FLIGHT,
+      mission_id: 'MIS-OPEN',
+      emergency: { ...EMERGENCY_FLIGHT.emergency!, acknowledged_at: null },
+    }
+    respondWith(flightsResponse([acknowledged, open]))
+
+    const flights = (await getFlights()).flights
+
+    expect(flights[0].emergency?.acknowledgedAt).toBe('2026-11-12T10:05:00Z')
+    expect(flights[1].emergency?.acknowledgedAt).toBeNull()
   })
 
   it('accepts no flights, and a worker that never sent a heartbeat', async () => {
@@ -131,6 +150,17 @@ describe('getFlights', () => {
     [
       'an emergency without a time',
       bad({ emergency: { reason: 'BATTERY_CRITICAL', at: 'soon', position: [18.6, 54.4] } }),
+    ],
+    [
+      'an emergency acknowledgement without a time zone',
+      bad({
+        emergency: {
+          reason: 'BATTERY_CRITICAL',
+          at: '2026-11-12T10:00:09Z',
+          position: [18.6, 54.4],
+          acknowledged_at: '2026-11-12T10:05:00',
+        },
+      }),
     ],
     ['a non-object flight', 42],
   ])('rejects the whole response for %s', async (_name, flight) => {

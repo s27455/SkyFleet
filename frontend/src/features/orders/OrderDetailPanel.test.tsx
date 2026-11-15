@@ -182,7 +182,12 @@ describe('OrderDetailPanel', () => {
       yieldingToLpr: false,
       updatedAt: '2026-11-13T12:00:10Z',
       snapshotAgeS: 1,
-      emergency: { reason: 'DRONE_FAILURE', at: '2026-11-13T12:00:09Z', position: [18.6, 54.37] },
+      emergency: {
+        reason: 'DRONE_FAILURE',
+        at: '2026-11-13T12:00:09Z',
+        position: [18.6, 54.37],
+        acknowledgedAt: null,
+      },
     }
 
     render(
@@ -311,6 +316,7 @@ describe('OrderDetailPanel', () => {
         reason: 'BATTERY_CRITICAL',
         at: '2026-11-13T12:00:09Z',
         position: [18.6, 54.37],
+        acknowledgedAt: null,
       },
     }
 

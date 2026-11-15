@@ -39,15 +39,20 @@ function toPosition(value: unknown, what: string): [number, number] {
 function toEmergency(value: unknown, id: string): FlightEmergency | null {
   if (value === null || value === undefined) return null
   if (!isRecord(value)) invalid(`bad emergency for ${id}`)
-  const { reason, at, position } = value
+  const { reason, at, position, acknowledged_at: acknowledgedAt } = value
   if (typeof reason !== 'string' || !(EMERGENCY_REASONS as readonly string[]).includes(reason)) {
     invalid(`unknown emergency reason for ${id}`)
   }
   if (!isTimestamp(at)) invalid(`bad emergency time for ${id}`)
+  // Absent (an older backend) or null means not acknowledged.
+  if (acknowledgedAt !== undefined && acknowledgedAt !== null && !isTimestamp(acknowledgedAt)) {
+    invalid(`bad emergency acknowledgement time for ${id}`)
+  }
   return {
     reason: reason as FlightEmergency['reason'],
     at,
     position: toPosition(position, `emergency position for ${id}`),
+    acknowledgedAt: acknowledgedAt ?? null,
   }
 }
 
