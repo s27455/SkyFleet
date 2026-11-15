@@ -148,6 +148,8 @@ AI must not bypass domain rules or directly manipulate persistence.
 
 Foundation (Feature 024): `app/ai` is a self-contained module (a gateway, one SDK-bound transport, an allowlist of model and prices, a durable budget in `ai_budget_state` and `ai_request_log`). It imports no domain module, is not wired into any endpoint, worker or service yet, is disabled by default and gives the model no tools or data access. Every request reserves its worst-case cost in the database under a row lock before it is sent, within fixed limits (16 KiB input, 500 question characters, 400 output tokens, 10 per hour, 30 s apart, one in flight, USD 4 lifetime). See `docs/decisions/0012-ai-foundation-and-cost-guardrails.md`.
 
+Fleet context (Feature 025): `app/fleet_context` builds a bounded, deterministic, read-only snapshot of the present operational state (one PostgreSQL `REPEATABLE READ`, `READ ONLY` transaction with a statement timeout; the database itself refuses writes), renders it as compact JSON within the request's byte budget (reduced and flagged, never silently) and hands it to `AiGateway.ask` as data. It reuses the domain's own docking, dispatch-eligibility, emergency and warning rules, fails closed (no budget reserved, no provider contact) when a snapshot cannot be built, and is imported by nothing yet. See `docs/decisions/0013-fleet-context-read-only-intelligence.md`.
+
 ## 4. Backend Architecture
 
 Use a modular backend structure with clear separation of responsibilities.

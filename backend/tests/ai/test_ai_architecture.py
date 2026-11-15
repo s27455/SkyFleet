@@ -72,7 +72,7 @@ def test_the_gateway_reaches_the_sdk_only_through_the_transport_module() -> None
     assert top_level == []
 
 
-def test_nothing_outside_the_ai_package_uses_it_yet() -> None:
+def test_only_the_fleet_context_package_uses_the_ai_package_yet() -> None:
     users = [
         path.relative_to(APP).as_posix()
         for path in python_files(APP)
@@ -80,7 +80,9 @@ def test_nothing_outside_the_ai_package_uses_it_yet() -> None:
         and any(m == "app.ai" or m.startswith("app.ai.") for m in imported_modules(path))
     ]
 
-    assert users == []  # not wired into the API, the worker or any service (no endpoint in 024)
+    # Feature 025: `app/fleet_context` (its orchestrator and errors) is the one permitted user.
+    # Nothing else may: no route, no worker, no other service (no endpoint exists yet).
+    assert sorted(users) == ["fleet_context/errors.py", "fleet_context/service.py"]
 
 
 def test_the_application_has_no_ai_route() -> None:
