@@ -9,14 +9,12 @@ import type { Mission } from '../../types/mission'
 import { EventTimeline } from '../events/EventTimeline'
 import { FlightSection } from '../flights/FlightSection'
 import { StartMissionControl } from '../missions/StartMissionControl'
-import { describeNearestHub } from '../hubs/nearestHub'
+import { nearestHubName } from '../hubs/nearestHub'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
 import { RelocateDroneControl } from './RelocateDroneControl'
 
 interface DroneDetailPanelProps {
   drone: Drone
-  /** The Hub where the drone last docked, if the Hub data is available; otherwise the Hub id is shown as is. */
-  hub?: Hub
   /** True when the map marker is spread on screen because drones share this location. */
   markerSpread: boolean
   onClose: () => void
@@ -52,7 +50,6 @@ const NO_HUBS: readonly Hub[] = []
 
 export function DroneDetailPanel({
   drone,
-  hub,
   markerSpread,
   onClose,
   hubs = NO_HUBS,
@@ -108,8 +105,7 @@ export function DroneDetailPanel({
         <Row label="Battery">
           <span className="font-mono tabular-nums">{drone.batteryPct}%</span>
         </Row>
-        <Row label="Assigned Hub">{hub ? hub.name : drone.hubId}</Row>
-        <Row label="Nearest Hub">{describeNearestHub(drone.coordinates, hubs)}</Row>
+        <Row label="Hub">{nearestHubName(drone.coordinates, hubs)}</Row>
         <Row label="Stored position">
           <span className="font-mono text-xs tabular-nums">
             {latitude.toFixed(6)}, {longitude.toFixed(6)}

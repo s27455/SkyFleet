@@ -39,23 +39,19 @@ const HUB: Hub = {
 const valueOf = (label: string) => screen.getByText(label).nextElementSibling
 
 describe('DroneDetailPanel', () => {
-  it('shows identity, status, battery and the assigned Hub name', () => {
-    render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
+  it('shows identity, status, battery and the Hub field', () => {
+    render(<DroneDetailPanel drone={DRONE} hubs={[HUB]} markerSpread={false} onClose={() => {}} />)
 
     expect(screen.getByRole('heading', { name: 'DRN-004' })).toBeInTheDocument()
     expect(screen.getByText('SkyFleet SF-1 Courier')).toBeInTheDocument()
     expect(valueOf('Status')).toHaveTextContent('Idle')
     expect(valueOf('Battery')).toHaveTextContent('90%')
-    expect(valueOf('Assigned Hub')).toHaveTextContent('Centrum Riviera')
+    expect(valueOf('Hub')).toHaveTextContent('Centrum Riviera')
+    expect(screen.queryByText('Assigned Hub')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nearest Hub')).not.toBeInTheDocument()
   })
 
-  it('falls back to the Hub id when the Hub is not available', () => {
-    render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
-
-    expect(valueOf('Assigned Hub')).toHaveTextContent('hub-centrum-riviera')
-  })
-
-  it('shows the Nearest Hub separately from the Assigned Hub and follows the position', () => {
+  it('shows the Hub nearest to the current position, name only, and follows the position', () => {
     const FORUM: Hub = {
       id: 'hub-forum-gdansk',
       name: 'Forum Gdańsk',
@@ -71,39 +67,30 @@ describe('DroneDetailPanel', () => {
       coordinates: [18.65, 54.35] as [number, number],
     }
     const { rerender } = render(
-      <DroneDetailPanel
-        drone={flying}
-        hub={HUB}
-        hubs={hubs}
-        markerSpread={false}
-        onClose={() => {}}
-      />,
+      <DroneDetailPanel drone={flying} hubs={hubs} markerSpread={false} onClose={() => {}} />,
     )
 
-    expect(valueOf('Assigned Hub')).toHaveTextContent('Centrum Riviera')
-    expect(valueOf('Nearest Hub')).toHaveTextContent('Forum Gdańsk')
+    expect(valueOf('Hub')).toHaveTextContent(/^Forum Gdańsk$/)
 
     rerender(
       <DroneDetailPanel
         drone={{ ...flying, coordinates: [18.532, 54.5047] }}
-        hub={HUB}
         hubs={hubs}
         markerSpread={false}
         onClose={() => {}}
       />,
     )
-    expect(valueOf('Nearest Hub')).toHaveTextContent('Centrum Riviera')
-    expect(valueOf('Assigned Hub')).toHaveTextContent('Centrum Riviera') // never changed
+    expect(valueOf('Hub')).toHaveTextContent(/^Centrum Riviera$/)
   })
 
-  it('shows a dash for the Nearest Hub when no Hubs are known', () => {
+  it('shows a dash for the Hub when no Hubs are known', () => {
     render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
 
-    expect(valueOf('Nearest Hub')).toHaveTextContent('—')
+    expect(valueOf('Hub')).toHaveTextContent('—')
   })
 
   it('shows the model capabilities including the 3 kg payload', () => {
-    render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
+    render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
 
     expect(valueOf('Maximum payload')).toHaveTextContent('3 kg')
     expect(valueOf('Maximum total flight distance')).toHaveTextContent('20 km')
@@ -114,7 +101,7 @@ describe('DroneDetailPanel', () => {
   })
 
   it('shows the real stored position and labels the data as a snapshot', () => {
-    render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
+    render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
 
     expect(valueOf('Stored position')).toHaveTextContent('54.504662, 18.531786')
     expect(
@@ -124,14 +111,14 @@ describe('DroneDetailPanel', () => {
   })
 
   it('explains the display spread when the marker was moved on screen', () => {
-    render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread onClose={() => {}} />)
+    render(<DroneDetailPanel drone={DRONE} markerSpread onClose={() => {}} />)
 
     expect(screen.getByText(/spread slightly on screen/)).toBeInTheDocument()
   })
 
   it('closes via the close button and on Escape', () => {
     const onClose = vi.fn()
-    render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={onClose} />)
+    render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={onClose} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Close drone details' }))
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -141,7 +128,7 @@ describe('DroneDetailPanel', () => {
 
   describe('inspector entry point', () => {
     it('shows no Inspect Drone button unless the inspector can be opened', () => {
-      render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
+      render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
 
       expect(screen.queryByRole('button', { name: 'Inspect Drone' })).not.toBeInTheDocument()
     })
@@ -151,7 +138,7 @@ describe('DroneDetailPanel', () => {
       render(
         <DroneDetailPanel
           drone={DRONE}
-          hub={HUB}
+
           markerSpread={false}
           onClose={() => {}}
           onInspect={onInspect}
@@ -196,7 +183,7 @@ describe('DroneDetailPanel relocation (Feature 019A)', () => {
     const { rerender } = render(
       <DroneDetailPanel
         drone={DRONE}
-        hub={HUB}
+
         hubs={[HUB]}
         markerSpread={false}
         onClose={() => {}}
@@ -209,7 +196,7 @@ describe('DroneDetailPanel relocation (Feature 019A)', () => {
     rerender(
       <DroneDetailPanel
         drone={{ ...DRONE, status: 'CHARGING' }}
-        hub={HUB}
+
         hubs={[HUB]}
         markerSpread={false}
         onClose={() => {}}
@@ -221,7 +208,7 @@ describe('DroneDetailPanel relocation (Feature 019A)', () => {
   })
 
   it('does not show Relocate without the refresh callback', () => {
-    render(<DroneDetailPanel drone={DRONE} hub={HUB} markerSpread={false} onClose={() => {}} />)
+    render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
 
     expect(screen.queryByRole('button', { name: /Relocate/ })).not.toBeInTheDocument()
   })

@@ -8,6 +8,11 @@ route that no open order uses is preferred; once every route is in use a repeat 
 already spreads markers that share a place). The earlier organic generator (Feature 017C, synthetic
 "Delivery Point TC-0042" labels) is no longer used here; orders created by it keep their labels.
 
+Feature 021E: the catalog holds verified official address points (see `generator_catalog.py`) and
+the choice is made in two simple steps so that no small area dominates: first a district that still
+has a free route (every district equally likely, however many routes it has), then a free route of
+that district. A district is an editorial label of the catalog, not an official boundary.
+
 The order is created through the existing `create_order` service, so it follows the normal
 persistence path (Hub check, unique id, rollback on failure) and starts as `READY_FOR_PICKUP`.
 Nothing here looks at drones, battery state, Hub occupancy, missions or the Automatic Dispatch
@@ -52,6 +57,18 @@ def _place(longitude: float, latitude: float) -> tuple[float, float]:
     return (round(longitude, 6), round(latitude, 6))
 
 
+def pick_route(routes: Sequence[CatalogRoute], rng: random.Random) -> CatalogRoute:
+    """A district chosen uniformly among the districts of `routes`, then one of its routes.
+
+    Districts are visited in sorted order so a seeded `rng` always gives the same result.
+    """
+    by_district: dict[tuple[str, str], list[CatalogRoute]] = {}
+    for route in routes:
+        by_district.setdefault((route.city, route.district), []).append(route)
+    district = rng.choice(sorted(by_district))
+    return rng.choice(by_district[district])
+
+
 def _route_request(
     session: Session, rng: random.Random, catalog: Sequence[CatalogRoute]
 ) -> OrderCreateRequest:
@@ -65,7 +82,7 @@ def _route_request(
         )
     }
     free = [route for route in catalog if _place(route.longitude, route.latitude) not in taken]
-    route = rng.choice(free or list(catalog))
+    route = pick_route(free or list(catalog), rng)
     return OrderCreateRequest(
         origin_hub_id=route.origin_hub_id,
         destination_address=route.destination_address,

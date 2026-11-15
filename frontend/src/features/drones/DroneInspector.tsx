@@ -7,7 +7,7 @@ import { Drone3DViewer, type DronePartId } from '../drone3d'
 import { FlightSection } from '../flights/FlightSection'
 import { usePrefersReducedMotion } from '../flights/usePrefersReducedMotion'
 import { ORDER_STATUS_DISPLAY } from '../orders/orderStatus'
-import { describeNearestHub } from '../hubs/nearestHub'
+import { nearestHubName } from '../hubs/nearestHub'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
 import type { InspectorData, Lookup } from './inspectorData'
 import { useDialogFocus } from './useDialogFocus'
@@ -29,7 +29,6 @@ const VIEWER_CLASS = 'h-[38dvh] min-h-64 w-full lg:h-[min(58dvh,34rem)]'
 
 interface DroneInspectorProps {
   drone: Drone
-  hub?: Hub
   hubs: readonly Hub[]
   /** The drone's flight, mission and payload as far as the backend data allows. */
   data: InspectorData
@@ -96,7 +95,6 @@ function BatteryBar({ percent }: { percent: number }) {
  */
 export function DroneInspector({
   drone,
-  hub,
   hubs,
   data,
   workerStale,
@@ -255,8 +253,7 @@ export function DroneInspector({
                     <span className="w-10 font-mono tabular-nums">{drone.batteryPct}%</span>
                   </span>
                 </Row>
-                <Row label="Assigned Hub">{hub ? hub.name : drone.hubId}</Row>
-                <Row label="Nearest Hub">{describeNearestHub(drone.coordinates, hubs)}</Row>
+                <Row label="Hub">{nearestHubName(drone.coordinates, hubs)}</Row>
                 <Row label="Stored position">
                   <span className="font-mono text-xs tabular-nums">
                     {latitude.toFixed(6)}, {longitude.toFixed(6)}

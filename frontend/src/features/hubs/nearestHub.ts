@@ -34,13 +34,7 @@ export function nearestHub(
   return best
 }
 
-/** "Forum Gdańsk · 1.4 km" (metres below one kilometre), or "—" when it cannot be determined. */
-export function describeNearestHub(position: readonly [number, number], hubs: readonly Hub[]) {
-  const nearest = nearestHub(position, hubs)
-  if (nearest === null) return '—'
-  const distance =
-    nearest.distanceM < 1000
-      ? `${Math.round(nearest.distanceM)} m`
-      : `${(nearest.distanceM / 1000).toFixed(1)} km`
-  return `${nearest.hub.name} · ${distance}`
+/** The name of the Hub closest to the position, or "—" when it cannot be determined. */
+export function nearestHubName(position: readonly [number, number], hubs: readonly Hub[]) {
+  return nearestHub(position, hubs)?.hub.name ?? '—'
 }

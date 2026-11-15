@@ -17,6 +17,7 @@ const fake = vi.hoisted(() => {
     handlers: Record<string, Handler>
     remove: () => void
     resize: () => void
+    options?: Record<string, unknown>
   }[] = []
   const markers: {
     element: HTMLElement
@@ -57,7 +58,9 @@ vi.mock('mapbox-gl', () => {
     handlers: Record<string, Handler> = {}
     remove = vi.fn()
     resize = vi.fn()
-    constructor() {
+    options?: Record<string, unknown>
+    constructor(options?: Record<string, unknown>) {
+      this.options = options
       fake.instances.push(this)
     }
     on(event: string, handler: Handler) {
@@ -130,6 +133,18 @@ describe('MapView', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('VITE_MAPBOX_TOKEN')
     expect(fake.instances).toHaveLength(0)
+  })
+
+  it('credits the official address data once, through the map attribution control', () => {
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test')
+
+    render(<MapView />)
+
+    expect(fake.instances).toHaveLength(1)
+    expect(fake.instances[0].options?.customAttribution).toBe(
+      'Źródło: PRG, GUGiK (geoportal.gov.pl)',
+    )
+    expect(screen.queryByText(/Źródło: PRG/)).not.toBeInTheDocument() // no second, visible credit
   })
 
   it('shows a loading state until the map has loaded', () => {

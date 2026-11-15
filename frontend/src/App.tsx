@@ -555,7 +555,6 @@ function App() {
           {selectedDrone && (
             <DroneDetailPanel
               drone={selectedDrone}
-              hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
               markerSpread={droneOffsets.has(selectedDrone.id)}
               onClose={clearSelection}
               hubs={hubs}
@@ -572,7 +571,6 @@ function App() {
           {selectedDrone && inspectorOpen && inspectorData && (
             <DroneInspector
               drone={selectedDrone}
-              hub={hubs.find((hub) => hub.id === selectedDrone.hubId)}
               hubs={hubs}
               data={inspectorData}
               workerStale={workerStale}

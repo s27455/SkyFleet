@@ -109,7 +109,7 @@ def test_unused_routes_are_preferred_and_a_repeat_comes_only_when_all_are_in_use
     in_use = {_place(o) for o in seeded.scalars(select(DeliveryOrder))}
     all_places = {(round(r.longitude, 6), round(r.latitude, 6)) for r in ROUTE_CATALOG}
     free_count = len(all_places - in_use)
-    assert 0 < free_count < len(all_places)  # the seed already uses part of the catalog
+    assert 0 < free_count <= len(all_places)  # the legacy seed orders use no catalog point
 
     created = [generate_one_order(seeded, rng=rng) for _ in range(free_count)]
 

@@ -477,9 +477,7 @@ describe('App selection', () => {
 
     expect(panels()).toHaveLength(1)
     const panel = screen.getByRole('complementary', { name: 'Drone details: DRN-005' })
-    expect(within(panel).getByText('Assigned Hub').nextElementSibling).toHaveTextContent(
-      'Centrum Riviera',
-    )
+    expect(within(panel).getByText('Hub').nextElementSibling).toHaveTextContent('Centrum Riviera')
     expect(within(panel).getByText('Battery').nextElementSibling).toHaveTextContent('90%')
     expect(within(panel).getByText('Status').nextElementSibling).toHaveTextContent('Idle')
     expect(within(panel).getByText('Maximum payload').nextElementSibling).toHaveTextContent('3 kg')

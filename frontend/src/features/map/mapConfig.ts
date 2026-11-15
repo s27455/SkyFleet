@@ -10,6 +10,13 @@ export const TRICITY_BOUNDS: LngLatBoundsLike = [
 
 export const TRICITY_FIT_PADDING_PX = 24
 
+/**
+ * Credit for the official address data behind the generated delivery destinations (Feature 021E).
+ * It is added to Mapbox's own attribution control, so it sits with the other map credits and is
+ * never shown twice.
+ */
+export const DATA_ATTRIBUTION = 'Źródło: PRG, GUGiK (geoportal.gov.pl)'
+
 /** Read at call time (not import time) so tests can stub the environment. */
 export function getMapboxToken(): string | undefined {
   const token = import.meta.env.VITE_MAPBOX_TOKEN?.trim()

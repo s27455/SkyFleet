@@ -24,7 +24,13 @@ import {
   setOrderMarkerSelected,
   updateOrderMarkerElement,
 } from './orderMarkers'
-import { MAP_STYLE, TRICITY_BOUNDS, TRICITY_FIT_PADDING_PX, getMapboxToken } from './mapConfig'
+import {
+  DATA_ATTRIBUTION,
+  MAP_STYLE,
+  TRICITY_BOUNDS,
+  TRICITY_FIT_PADDING_PX,
+  getMapboxToken,
+} from './mapConfig'
 
 type MapStatus = 'loading' | 'ready' | 'error'
 
@@ -505,6 +511,7 @@ export function MapView({
         accessToken: token,
         container,
         style: MAP_STYLE,
+        customAttribution: DATA_ATTRIBUTION,
         bounds: TRICITY_BOUNDS,
         fitBoundsOptions: { padding: TRICITY_FIT_PADDING_PX },
       })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Hub } from '../../types/hub'
-import { describeNearestHub, nearestHub } from './nearestHub'
+import { nearestHub, nearestHubName } from './nearestHub'
 
 const hub = (id: string, lng: number, lat: number): Hub => ({
   id,
@@ -42,13 +42,13 @@ describe('nearestHub', () => {
   })
 })
 
-describe('describeNearestHub', () => {
-  it('formats metres below a kilometre and kilometres above', () => {
-    expect(describeNearestHub([18.6, 54.381], [GALERIA])).toMatch(/^GALERIA · \d+ m$/)
-    expect(describeNearestHub([18.65, 54.4], [FORUM])).toMatch(/^FORUM · \d+\.\d km$/)
+describe('nearestHubName', () => {
+  it('shows only the name of the nearest Hub, without a distance', () => {
+    expect(nearestHubName([18.6, 54.381], [GALERIA, FORUM])).toBe('GALERIA')
+    expect(nearestHubName([18.65, 54.4], [FORUM])).toBe('FORUM')
   })
 
   it('shows a dash when it cannot be determined', () => {
-    expect(describeNearestHub([18.6, 54.38], [])).toBe('—')
+    expect(nearestHubName([18.6, 54.38], [])).toBe('—')
   })
 })

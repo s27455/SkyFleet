@@ -128,7 +128,6 @@ function renderInspector(overrides: Partial<Parameters<typeof DroneInspector>[0]
   const view = render(
     <DroneInspector
       drone={DRONE}
-      hub={HUBS[0]}
       hubs={HUBS}
       data={FLYING}
       workerStale={false}
@@ -417,7 +416,6 @@ describe('DroneInspector', () => {
       rerender(
         <DroneInspector
           drone={DRONE}
-          hub={HUBS[0]}
           hubs={HUBS}
           data={refreshed}
           workerStale={false}
@@ -430,7 +428,6 @@ describe('DroneInspector', () => {
       rerender(
         <DroneInspector
           drone={{ ...DRONE, id: 'DRN-005' }}
-          hub={HUBS[0]}
           hubs={HUBS}
           data={refreshed}
           workerStale={false}

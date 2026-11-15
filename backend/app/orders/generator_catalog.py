@@ -1,15 +1,41 @@
-"""Curated catalog of prevalidated simulated delivery routes for the order generator.
+"""Catalog of verified, prevalidated simulated delivery routes for the order generator.
 
 Incoming orders are assumed to have passed customer checkout validation, so the generator does not
 search or validate routes at runtime: it picks one entry from this catalog. Each route names an
-origin Hub, a delivery point and a package-weight range that the SF-1 drone can fly with a full
-battery under the mission planner's rules (route budget and payload-aware energy estimate). The
-tests re-check every route and both weight bounds with the planner's own routing and energy helpers,
-so a change to the Hubs, the drone model or the energy model that breaks a route fails the build.
+origin Hub, a real delivery address with its official coordinates and a package-weight range that
+the SF-1 drone can fly with a full battery under the mission planner's rules (route budget and
+payload-aware energy estimate). The tests re-check every route and both weight bounds with the
+planner's own routing and energy helpers, so a change to the Hubs, the drone model or the energy
+model that breaks a route fails the build.
 
-All addresses, coordinates and weights are ILLUSTRATIVE SIMULATION DATA (inland urban points in
-Gdańsk, Gdynia and Sopot; coordinates are approximate). They are not verified customer addresses
-and not a legal flight corridor. Drone availability and battery state are the dispatcher's concern.
+DATA SOURCE (Feature 021E). Every delivery point is ONE record of the official address-point
+register, Państwowy Rejestr Granic (PRG), published by GUGiK as open data:
+"Źródło: PRG, GUGiK (geoportal.gov.pl)". The street, house number, locality and coordinates of an
+entry are copied from the same PRG record (collection `PunktAdresowy` of the OGC API Features
+service https://ogcapi.geoportal.gov.pl/res/ims/maps/prg_ad/apiFeatures, retrieved on 2026-11-15,
+WGS84 longitude/latitude). The official spelling is kept as is ("Aleja Grunwaldzka", not "al.").
+Coordinates are only rounded to 6 decimals (about 0.1 m). Nothing is geocoded, interpolated or
+moved by hand. `prg_id` (`idLokalny`) and `prg_version` (`idWersja`) identify the record and its
+version, so every entry can be re-checked against the register; they are never shown to operators.
+PRG data is "dostępne bezpłatnie i do dowolnego wykorzystania" (free, any use); the Geoportal terms
+ask for the source to be named when material is published, which the map credit does.
+
+`city` is the official locality of the record. `district` is NOT PRG data: it is an editorial label
+of the search area the point was taken from, used only to spread generated orders over the Tricity
+(see `generator.py`). It may differ from an official district boundary.
+
+HOW THE CATALOG WAS BUILT. For each search area a small bounding box was requested from the PRG
+service (a few hundred metres, one-off, with pauses between requests), the nearest record that has
+a street was taken, and it was kept only if it passed the existing rules: inside the approximate
+operating area (`operating_area.py`), flyable from the nearest Hub that can serve it
+(`feasibility.choose_origin_hub`) at 0.2 kg, and a maximum weight of at least 0.5 kg. Candidates
+that failed were dropped, never adjusted. The origin Hub is the one the planner itself would
+choose. The maximum weight is 3 kg, or 0.3 kg below the heaviest parcel a full battery can take on
+that route when that is less.
+
+Drone availability and battery state are the dispatcher's concern. The earlier hand-written
+catalog (Feature 021D-1) is replaced: its coordinates did not match its addresses. Existing orders
+are never changed.
 """
 
 from dataclasses import dataclass
@@ -21,6 +47,10 @@ FORUM = "hub-forum-gdansk"
 RIVIERA = "hub-centrum-riviera"
 OSOWA = "hub-centrum-handlowe-osowa"
 
+GDANSK = "Gdańsk"
+SOPOT = "Sopot"
+GDYNIA = "Gdynia"
+
 
 @dataclass(frozen=True)
 class CatalogRoute:
@@ -30,32 +60,1014 @@ class CatalogRoute:
     latitude: float
     min_weight_kg: float
     max_weight_kg: float
+    city: str = ""  # official PRG locality
+    district: str = ""  # editorial search-area label (not PRG data), used to spread orders
+    prg_id: str | None = None  # PRG `idLokalny` of the source record (never shown to operators)
+    prg_version: str | None = None  # PRG `idWersja` of that record
 
 
 _FULL = MAX_PACKAGE_WEIGHT_KG
+_MIN_KG = 0.2
 
-# Weight ranges keep a margin below the full-battery limit of each route; heavier parcels are only
-# offered on short routes. Append-only: add new routes rather than reordering.
+
+def _route(
+    origin_hub_id: str,
+    address: str,
+    longitude: float,
+    latitude: float,
+    max_weight_kg: float,
+    city: str,
+    district: str,
+    prg_id: str,
+    prg_version: str,
+) -> CatalogRoute:
+    return CatalogRoute(
+        origin_hub_id,
+        address,
+        longitude,
+        latitude,
+        _MIN_KG,
+        max_weight_kg,
+        city,
+        district,
+        prg_id,
+        prg_version,
+    )
+
+
+# Append-only: add new routes rather than reordering.
 ROUTE_CATALOG: tuple[CatalogRoute, ...] = (
-    # Galeria Bałtycka
-    CatalogRoute(GALERIA, "ul. Grunwaldzka 82, Gdańsk", 18.5972, 54.3768, 0.2, _FULL),
-    CatalogRoute(GALERIA, "ul. Do Studzienki 25, Gdańsk", 18.5887, 54.3881, 0.2, _FULL),
-    CatalogRoute(GALERIA, "ul. Słowackiego 200, Gdańsk", 18.6120, 54.3935, 0.2, _FULL),
-    CatalogRoute(GALERIA, "ul. Narutowicza 11/12, Gdańsk", 18.6178, 54.3722, 0.2, _FULL),
-    CatalogRoute(GALERIA, "Park Oliwski, ul. Opata Rybickiego, Gdańsk", 18.5686, 54.4106, 0.2, 2.5),
-    CatalogRoute(GALERIA, "ul. Monte Cassino 20, Sopot", 18.5693, 54.4467, 0.2, 1.0),
-    # Cross-Hub: the nearest return Hub is Forum Gdańsk.
-    CatalogRoute(GALERIA, "Podwale Grodzkie 2, Gdańsk", 18.6444, 54.3560, 0.2, 2.5),
-    # Forum Gdańsk
-    CatalogRoute(FORUM, "ul. Długa 45, Gdańsk", 18.6531, 54.3487, 0.2, _FULL),
-    CatalogRoute(FORUM, "ul. Chmielna 10, Gdańsk", 18.6410, 54.3512, 0.2, _FULL),
-    CatalogRoute(FORUM, "ul. Podwale Staromiejskie 60, Gdańsk", 18.6459, 54.3558, 0.2, _FULL),
-    # Centrum Riviera
-    CatalogRoute(RIVIERA, "ul. Świętojańska 30, Gdynia", 18.5440, 54.5189, 0.2, _FULL),
-    CatalogRoute(RIVIERA, "ul. Morska 59, Gdynia", 18.5120, 54.5050, 0.2, _FULL),
-    CatalogRoute(RIVIERA, "Skwer Kościuszki, Gdynia", 18.5530, 54.5188, 0.2, _FULL),
-    CatalogRoute(RIVIERA, "Bulwar Nadmorski, Gdynia Orłowo", 18.5700, 54.4800, 0.2, 2.5),
-    # Centrum Handlowe Osowa
-    CatalogRoute(OSOWA, "ul. Spacerowa 12, Gdańsk", 18.4952, 54.4311, 0.2, _FULL),
-    CatalogRoute(OSOWA, "ul. Kielnieńska 5, Gdańsk", 18.4720, 54.4180, 0.2, _FULL),
+    # Gdańsk, Główne Miasto
+    _route(
+        FORUM,
+        "Chlebnicka 2, Gdańsk",
+        18.653718,
+        54.348976,
+        _FULL,
+        GDANSK,
+        "Główne Miasto",
+        "ID-0404cb6c-36ff-4878-8beb-931076c798e5",
+        "20261110T133302+0200",
+    ),
+    # Gdańsk, Stare Przedmieście
+    _route(
+        FORUM,
+        "Targ Sienny 5, Gdańsk",
+        18.643493,
+        54.350153,
+        _FULL,
+        GDANSK,
+        "Stare Przedmieście",
+        "ID-48a3b5dd-bc58-4176-b387-338b8be8b8b6",
+        "20261110T132845+0200",
+    ),
+    # Gdańsk, Dolne Miasto
+    _route(
+        FORUM,
+        "Królikarnia 22, Gdańsk",
+        18.664042,
+        54.342548,
+        _FULL,
+        GDANSK,
+        "Dolne Miasto",
+        "ID-972b6473-7c91-4b9e-92c4-9b0c5164e27f",
+        "20261110T130932+0200",
+    ),
+    # Gdańsk, Biskupia Górka
+    _route(
+        FORUM,
+        "Dyrekcyjna 2-4, Gdańsk",
+        18.645407,
+        54.35935,
+        _FULL,
+        GDANSK,
+        "Biskupia Górka",
+        "ID-cd06eb7c-96cd-4a9a-a230-e28c38bc500d",
+        "20261110T131930+0200",
+    ),
+    # Gdańsk, Siedlce
+    _route(
+        FORUM,
+        "gen. Stefana Grota-Roweckiego 12, Gdańsk",
+        18.627081,
+        54.347103,
+        _FULL,
+        GDANSK,
+        "Siedlce",
+        "ID-758d954e-1b1f-40a2-ae65-854d7acecde7",
+        "20261110T132656+0200",
+    ),
+    _route(
+        FORUM,
+        "Zakopiańska 44A, Gdańsk",
+        18.619178,
+        54.349465,
+        _FULL,
+        GDANSK,
+        "Siedlce",
+        "ID-4caca763-6f93-4cf4-88c6-2ca1872e7f52",
+        "20261110T134043+0200",
+    ),
+    # Gdańsk, Wzgórze Mickiewicza
+    _route(
+        FORUM,
+        "Elizy Orzeszkowej 15, Gdańsk",
+        18.633081,
+        54.363887,
+        _FULL,
+        GDANSK,
+        "Wzgórze Mickiewicza",
+        "ID-109d6ecf-3a8c-4faf-92d5-82bb969691cd",
+        "20261110T133046+0200",
+    ),
+    _route(
+        GALERIA,
+        "Aleja Zwycięstwa 14, Gdańsk",
+        18.627017,
+        54.371922,
+        _FULL,
+        GDANSK,
+        "Wzgórze Mickiewicza",
+        "ID-d5bc1bb6-f869-4012-8b59-95bc8bd62a59",
+        "20261110T131807+0200",
+    ),
+    # Gdańsk, Suchanino
+    _route(
+        FORUM,
+        "Cygańska Góra 26A, Gdańsk",
+        18.61604,
+        54.359213,
+        _FULL,
+        GDANSK,
+        "Suchanino",
+        "ID-ab1de275-7449-43d7-ae56-6d7efbf21a76",
+        "20261110T133507+0200",
+    ),
+    _route(
+        GALERIA,
+        "Mariana Smoluchowskiego 16, Gdańsk",
+        18.620589,
+        54.366327,
+        _FULL,
+        GDANSK,
+        "Suchanino",
+        "ID-ab39531b-bc48-4ee6-8620-2a776724c7ee",
+        "20261110T133658+0200",
+    ),
+    # Gdańsk, Orunia
+    _route(
+        FORUM,
+        "Ptasia 5, Gdańsk",
+        18.625549,
+        54.330951,
+        _FULL,
+        GDANSK,
+        "Orunia",
+        "ID-0e61482b-d238-4358-96c9-2dc9ed78e3c5",
+        "20261110T132451+0200",
+    ),
+    _route(
+        FORUM,
+        "Brzegi 40a, Gdańsk",
+        18.635092,
+        54.335014,
+        _FULL,
+        GDANSK,
+        "Orunia",
+        "ID-6100143e-4441-44ff-b7f2-44dcc997fa70",
+        "20261110T132154+0200",
+    ),
+    # Gdańsk, Wrzeszcz Dolny
+    _route(
+        GALERIA,
+        "Józefa Wassowskiego 12/13, Gdańsk",
+        18.609937,
+        54.374032,
+        _FULL,
+        GDANSK,
+        "Wrzeszcz Dolny",
+        "ID-ae48af48-d683-45fa-8814-28bd7cfeaf64",
+        "20261110T133644+0200",
+    ),
+    _route(
+        GALERIA,
+        "Bracka 2, Gdańsk",
+        18.618495,
+        54.372615,
+        _FULL,
+        GDANSK,
+        "Wrzeszcz Dolny",
+        "ID-39926ea7-3ba9-4572-b797-6d7bf74eee5b",
+        "20261110T130921+0200",
+    ),
+    _route(
+        GALERIA,
+        "Jana Sobieskiego 8, Gdańsk",
+        18.613867,
+        54.368954,
+        _FULL,
+        GDANSK,
+        "Wrzeszcz Dolny",
+        "ID-6df69190-e198-4fc1-9ac8-b054093920f7",
+        "20261110T131256+0200",
+    ),
+    # Gdańsk, Wrzeszcz Górny
+    _route(
+        GALERIA,
+        "Brzozowa 9A, Gdańsk",
+        18.60516,
+        54.380024,
+        _FULL,
+        GDANSK,
+        "Wrzeszcz Górny",
+        "ID-7935676d-422d-4f09-ab79-517545a948a4",
+        "20261110T132557+0200",
+    ),
+    _route(
+        GALERIA,
+        "Stefana Batorego 26, Gdańsk",
+        18.600341,
+        54.377067,
+        _FULL,
+        GDANSK,
+        "Wrzeszcz Górny",
+        "ID-41d6f5aa-357e-4972-91a3-e203b721768b",
+        "20261110T133625+0200",
+    ),
+    _route(
+        GALERIA,
+        "Mariana Hemara 23, Gdańsk",
+        18.593209,
+        54.383024,
+        _FULL,
+        GDANSK,
+        "Wrzeszcz Górny",
+        "ID-a58a2d25-6a24-4735-944a-83bd00074b9d",
+        "20261110T132741+0200",
+    ),
+    _route(
+        GALERIA,
+        "Adama Mickiewicza 27, Gdańsk",
+        18.624063,
+        54.383158,
+        _FULL,
+        GDANSK,
+        "Wrzeszcz Górny",
+        "ID-5c58b2a6-e859-4251-87e6-fd59fd11881e",
+        "20261110T131710+0200",
+    ),
+    # Gdańsk, Strzyża
+    _route(
+        GALERIA,
+        "Aleja Legionów 13, Gdańsk",
+        18.613023,
+        54.386185,
+        _FULL,
+        GDANSK,
+        "Strzyża",
+        "ID-656922e1-b72d-49f5-9021-b75c1ced18fd",
+        "20261110T133306+0200",
+    ),
+    _route(
+        GALERIA,
+        "Kolonia Uroda 21, Gdańsk",
+        18.62401,
+        54.392036,
+        _FULL,
+        GDANSK,
+        "Strzyża",
+        "ID-d4c430a1-0894-407d-9d66-b50107916bc6",
+        "20261110T131657+0200",
+    ),
+    # Gdańsk, Zaspa
+    _route(
+        GALERIA,
+        "Opolska 9, Gdańsk",
+        18.599364,
+        54.402081,
+        _FULL,
+        GDANSK,
+        "Zaspa",
+        "ID-7fb8db71-318c-43db-a65b-e3762ca5b4d9",
+        "20261110T132040+0200",
+    ),
+    _route(
+        GALERIA,
+        "Olsztyńska 2, Gdańsk",
+        18.603626,
+        54.405867,
+        _FULL,
+        GDANSK,
+        "Zaspa",
+        "ID-1a936197-a948-4a56-85e9-057163e7edf9",
+        "20261110T134347+0200",
+    ),
+    _route(
+        GALERIA,
+        "Jagiellońska 10M, Gdańsk",
+        18.589186,
+        54.412032,
+        _FULL,
+        GDANSK,
+        "Zaspa",
+        "ID-ed41d7df-7507-4a7f-a5fe-e4c0afc6ead4",
+        "20261110T132814+0200",
+    ),
+    # Gdańsk, Przymorze
+    _route(
+        GALERIA,
+        "Śląska 72A, Gdańsk",
+        18.585789,
+        54.40599,
+        _FULL,
+        GDANSK,
+        "Przymorze",
+        "ID-d5e72fe8-2ea2-4300-8c77-d6e28b30c222",
+        "20261110T131619+0200",
+    ),
+    _route(
+        GALERIA,
+        "Słupska 58, Gdańsk",
+        18.580039,
+        54.398888,
+        _FULL,
+        GDANSK,
+        "Przymorze",
+        "ID-188086b5-ee49-4ef0-b739-caced25fc3d5",
+        "20261110T131557+0200",
+    ),
+    _route(
+        GALERIA,
+        "Pilotów 15, Gdańsk",
+        18.590958,
+        54.3946,
+        _FULL,
+        GDANSK,
+        "Przymorze",
+        "ID-c12c660a-6b75-42fd-94f6-045215117f68",
+        "20261110T132010+0200",
+    ),
+    # Gdańsk, Jelitkowo
+    _route(
+        GALERIA,
+        "Pomorska 90A, Gdańsk",
+        18.579584,
+        54.41811,
+        _FULL,
+        GDANSK,
+        "Jelitkowo",
+        "ID-2315ef22-758c-4ae8-92a7-e47b964b2af1",
+        "20261110T134646+0200",
+    ),
+    # Gdańsk, Żabianka
+    _route(
+        GALERIA,
+        "Maurycego Beniowskiego 51a, Gdańsk",
+        18.575072,
+        54.414068,
+        _FULL,
+        GDANSK,
+        "Żabianka",
+        "ID-85c18004-328b-4790-84f3-ddb092580892",
+        "20261110T131951+0200",
+    ),
+    # Gdańsk, Oliwa
+    _route(
+        GALERIA,
+        "Opata Jacka Rybińskiego 5, Gdańsk",
+        18.565747,
+        54.410031,
+        _FULL,
+        GDANSK,
+        "Oliwa",
+        "ID-e49034e9-f610-40ed-bc07-cd5ec45f1207",
+        "20261110T134557+0200",
+    ),
+    _route(
+        GALERIA,
+        "Aleja Grunwaldzka 472A, Gdańsk",
+        18.570408,
+        54.402626,
+        _FULL,
+        GDANSK,
+        "Oliwa",
+        "ID-ae261142-a106-4501-a81c-c82cf62f8a14",
+        "20261110T134628+0200",
+    ),
+    _route(
+        GALERIA,
+        "Słoneczna 15, Gdańsk",
+        18.551926,
+        54.407156,
+        _FULL,
+        GDANSK,
+        "Oliwa",
+        "ID-d85bb37f-1850-4786-ba07-527483d79e4c",
+        "20261110T132359+0200",
+    ),
+    _route(
+        GALERIA,
+        "Jana i Macieja Kilarskich 8, Gdańsk",
+        18.561854,
+        54.415625,
+        _FULL,
+        GDANSK,
+        "Oliwa",
+        "ID-2c70a498-dbd0-4087-9e88-8bec9143be41",
+        "20261110T133645+0200",
+    ),
+    # Gdańsk, Piecki-Migowo
+    _route(
+        GALERIA,
+        "Trawki 13, Gdańsk",
+        18.574079,
+        54.379111,
+        _FULL,
+        GDANSK,
+        "Piecki-Migowo",
+        "ID-ba9a43b0-f2a8-471b-92e6-caa0a8de6ac7",
+        "20261110T133335+0200",
+    ),
+    _route(
+        GALERIA,
+        "Juliusza Słowackiego 113, Gdańsk",
+        18.563972,
+        54.372198,
+        _FULL,
+        GDANSK,
+        "Piecki-Migowo",
+        "ID-7cc67b95-4f97-4fd1-9271-88057caa28a5",
+        "20261110T131540+0200",
+    ),
+    _route(
+        GALERIA,
+        "Piotra Michałowskiego 50, Gdańsk",
+        18.567881,
+        54.385024,
+        _FULL,
+        GDANSK,
+        "Piecki-Migowo",
+        "ID-4fd620e2-e61b-421b-9182-586dbf7f5e08",
+        "20261110T131524+0200",
+    ),
+    # Gdańsk, Osowa
+    _route(
+        OSOWA,
+        "Spacerowa 48B, Gdańsk",
+        18.489553,
+        54.427706,
+        _FULL,
+        GDANSK,
+        "Osowa",
+        "ID-e8b5936f-7ab3-40bd-8a16-6204752cd2e3",
+        "20261110T133602+0200",
+    ),
+    _route(
+        OSOWA,
+        "Hery 16, Gdańsk",
+        18.476855,
+        54.42057,
+        _FULL,
+        GDANSK,
+        "Osowa",
+        "ID-439630ad-d45a-46f0-b61f-ad5b51ac433d",
+        "20261110T133121+0200",
+    ),
+    _route(
+        OSOWA,
+        "Herkulesa 46, Gdańsk",
+        18.48519,
+        54.42496,
+        _FULL,
+        GDANSK,
+        "Osowa",
+        "ID-6b9b3512-1c52-4b75-a6a4-8b71018200a6",
+        "20261110T131842+0200",
+    ),
+    # Gdańsk, Chełm
+    _route(
+        FORUM,
+        "Władysława Cieszyńskiego 4, Gdańsk",
+        18.605367,
+        54.337854,
+        _FULL,
+        GDANSK,
+        "Chełm",
+        "ID-ca7a4c3e-ab26-4fcd-b65d-1b7b98e0316a",
+        "20261110T134549+0200",
+    ),
+    _route(
+        FORUM,
+        "prof. Józefa Więckowskiego 9, Gdańsk",
+        18.614987,
+        54.333031,
+        _FULL,
+        GDANSK,
+        "Chełm",
+        "ID-b7ccf26f-290e-4a93-8fc3-689069f4b4f4",
+        "20261110T133926+0200",
+    ),
+    # Gdańsk, Ujeścisko-Łostowice
+    _route(
+        FORUM,
+        "Mariana Kołodzieja 20C, Gdańsk",
+        18.587623,
+        54.335567,
+        _FULL,
+        GDANSK,
+        "Ujeścisko-Łostowice",
+        "ID-41423265-6156-49bd-b679-8115b5ae0dae",
+        "20261110T133618+0200",
+    ),
+    _route(
+        FORUM,
+        "Warszawska 153, Gdańsk",
+        18.579504,
+        54.332242,
+        _FULL,
+        GDANSK,
+        "Ujeścisko-Łostowice",
+        "ID-0ba37ffc-543c-459c-a917-f75e584371bb",
+        "20261110T132250+0200",
+    ),
+    # Gdańsk, Żabianka-Wejhera
+    _route(
+        OSOWA,
+        "Józefa Czyżewskiego 31A, Gdańsk",
+        18.560717,
+        54.422163,
+        _FULL,
+        GDANSK,
+        "Żabianka-Wejhera",
+        "ID-143faa1f-851c-45e8-9d34-02d7b9d1b97f",
+        "20261110T133711+0200",
+    ),
+    # Gdańsk, Letnica
+    _route(
+        GALERIA,
+        "Mariana Chodackiego 21, Gdańsk",
+        18.656551,
+        54.385277,
+        _FULL,
+        GDANSK,
+        "Letnica",
+        "ID-f150aa7c-2ab5-4d55-a9b0-ce40e865b2ea",
+        "20261110T131538+0200",
+    ),
+    # Gdańsk, Młyniska
+    _route(
+        GALERIA,
+        "Narwicka 11, Gdańsk",
+        18.635712,
+        54.382638,
+        _FULL,
+        GDANSK,
+        "Młyniska",
+        "ID-542a7d2e-c39a-4628-8c3e-49735c9e7b4f",
+        "20261110T132523+0200",
+    ),
+    # Gdańsk, Stogi
+    _route(
+        FORUM,
+        "Kaczeńce 33, Gdańsk",
+        18.698801,
+        54.364618,
+        _FULL,
+        GDANSK,
+        "Stogi",
+        "ID-02842fe0-dfd9-49d1-ab87-4dff1abf0417",
+        "20261110T132020+0200",
+    ),
+    # Gdańsk, Śródmieście
+    _route(
+        FORUM,
+        "Podwale Grodzkie 8, Gdańsk",
+        18.646526,
+        54.355727,
+        _FULL,
+        GDANSK,
+        "Śródmieście",
+        "ID-633bb8e4-0940-410c-b9d9-804901884635",
+        "20261110T133853+0200",
+    ),
+    # Gdańsk, VII Dwór
+    _route(
+        GALERIA,
+        "Na Wzgórzu 29, Gdańsk",
+        18.601289,
+        54.368305,
+        _FULL,
+        GDANSK,
+        "VII Dwór",
+        "ID-8ce7414d-2b89-42aa-894b-212cbbcaf24e",
+        "20261110T133809+0200",
+    ),
+    # Gdańsk, Brętowo
+    _route(
+        GALERIA,
+        "Głogowska 15, Gdańsk",
+        18.574152,
+        54.391035,
+        _FULL,
+        GDANSK,
+        "Brętowo",
+        "ID-5c736297-89b7-4c79-9054-a6d2102026f7",
+        "20261110T133745+0200",
+    ),
+    # Gdańsk, Jasień
+    _route(
+        FORUM,
+        "Lawendowe Wzgórze 2, Gdańsk",
+        18.569648,
+        54.330054,
+        _FULL,
+        GDANSK,
+        "Jasień",
+        "ID-461af982-ec02-4f17-90aa-ebd25f967fa4",
+        "20261110T132056+0200",
+    ),
+    # Gdańsk, Matarnia
+    _route(
+        OSOWA,
+        "Bytowska 30, Gdańsk",
+        18.524447,
+        54.403497,
+        _FULL,
+        GDANSK,
+        "Matarnia",
+        "ID-27550e52-b070-4855-ae49-f2a09116ca5f",
+        "20261110T134653+0200",
+    ),
+    # Gdańsk, Kokoszki
+    _route(
+        OSOWA,
+        "Ikara 27, Gdańsk",
+        18.492914,
+        54.389158,
+        _FULL,
+        GDANSK,
+        "Kokoszki",
+        "ID-7ab29cf0-13ac-4638-9904-0a02a0c7af1a",
+        "20261110T133412+0200",
+    ),
+    # Gdańsk, Brzeźno
+    _route(
+        GALERIA,
+        "Bolesława Chrobrego 96E, Gdańsk",
+        18.618386,
+        54.398685,
+        _FULL,
+        GDANSK,
+        "Brzeźno",
+        "ID-f220333f-7998-486a-befe-00475100d7f3",
+        "20261110T134621+0200",
+    ),
+    # Gdańsk, Morena
+    _route(
+        GALERIA,
+        "Góralska 71C, Gdańsk",
+        18.556959,
+        54.380477,
+        _FULL,
+        GDANSK,
+        "Morena",
+        "ID-4ec71cc1-6ba3-46ce-a3c7-51155592819a",
+        "20261110T132638+0200",
+    ),
+    # Sopot, Górny Sopot
+    _route(
+        OSOWA,
+        "Stefana Żeromskiego 5, Sopot",
+        18.549996,
+        54.440214,
+        _FULL,
+        SOPOT,
+        "Górny Sopot",
+        "ID-8a7c3e18-a7f5-4a01-9f2f-30201c43bbed",
+        "20260810T105939+0200",
+    ),
+    _route(
+        OSOWA,
+        "23 Marca 94, Sopot",
+        18.539973,
+        54.448184,
+        _FULL,
+        SOPOT,
+        "Górny Sopot",
+        "ID-2bcce3d7-48b1-48ef-8650-4550b132de8c",
+        "20260810T110043+0200",
+    ),
+    # Sopot, Brodwino
+    _route(
+        OSOWA,
+        "Jana z Kolna 1, Sopot",
+        18.570034,
+        54.434146,
+        _FULL,
+        SOPOT,
+        "Brodwino",
+        "ID-f3eaa280-4b08-4813-9e2d-74b32961de46",
+        "20260810T105846+0200",
+    ),
+    _route(
+        OSOWA,
+        "Smolna 3d, Sopot",
+        18.560876,
+        54.426629,
+        _FULL,
+        SOPOT,
+        "Brodwino",
+        "ID-ac4b1b39-f9b3-413a-8e1b-ed1b21377bfe",
+        "20260810T110042+0200",
+    ),
+    # Sopot, Dolny Sopot
+    _route(
+        OSOWA,
+        "Aleja Niepodległości 760, Sopot",
+        18.560189,
+        54.440063,
+        _FULL,
+        SOPOT,
+        "Dolny Sopot",
+        "ID-57e17f56-2d6b-4915-88d5-1caad95c6306",
+        "20260810T110141+0200",
+    ),
+    # Sopot, Kamienny Potok
+    _route(
+        OSOWA,
+        "Obodrzyców 20, Sopot",
+        18.549702,
+        54.455933,
+        _FULL,
+        SOPOT,
+        "Kamienny Potok",
+        "ID-4ac28c88-a6a9-43c7-a78d-91e7e5deb0d6",
+        "20260810T110023+0200",
+    ),
+    # Gdynia, Śródmieście
+    _route(
+        RIVIERA,
+        "Skwer Kościuszki 13, Gdynia",
+        18.543929,
+        54.518828,
+        _FULL,
+        GDYNIA,
+        "Śródmieście",
+        "ID-75bbe14c-ab1a-40b2-b0ae-b013e27034a7",
+        "20261102T140643+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Podolska 12, Gdynia",
+        18.533283,
+        54.516027,
+        _FULL,
+        GDYNIA,
+        "Śródmieście",
+        "ID-657fef1c-0b79-4a7f-80b5-b8d13cd872ea",
+        "20261102T140433+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Bulwar Nadmorski im. Feliksa Nowowiejskiego 2, Gdynia",
+        18.550187,
+        54.513839,
+        _FULL,
+        GDYNIA,
+        "Śródmieście",
+        "ID-6a0e879f-6899-4023-b341-5a205976282f",
+        "20261102T140411+0200",
+    ),
+    # Gdynia, Kamienna Góra
+    _route(
+        RIVIERA,
+        "Wacława Tomaszewskiego 5, Gdynia",
+        18.539951,
+        54.525422,
+        _FULL,
+        GDYNIA,
+        "Kamienna Góra",
+        "ID-f491af3a-bd78-4218-8c3d-7b9170f45bbc",
+        "20261102T135459+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Dokerów 8, Gdynia",
+        18.529356,
+        54.532614,
+        _FULL,
+        GDYNIA,
+        "Kamienna Góra",
+        "ID-7f7d9aee-41e0-4296-a660-3c9c781785fb",
+        "20261102T140358+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Jana z Kolna 13, Gdynia",
+        18.539865,
+        54.523293,
+        _FULL,
+        GDYNIA,
+        "Kamienna Góra",
+        "ID-2ec3f412-f0dc-4036-8f8b-59e6842f023c",
+        "20261102T140531+0200",
+    ),
+    # Gdynia, Wzgórze Św. Maksymiliana
+    _route(
+        RIVIERA,
+        "Romualda Traugutta 9, Gdynia",
+        18.536397,
+        54.511514,
+        _FULL,
+        GDYNIA,
+        "Wzgórze Św. Maksymiliana",
+        "ID-37b60ee5-2608-4e56-88f4-87a338715c99",
+        "20261102T140606+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Wacława Sieroszewskiego 10, Gdynia",
+        18.548347,
+        54.510148,
+        _FULL,
+        GDYNIA,
+        "Wzgórze Św. Maksymiliana",
+        "ID-d2f20da6-e33c-4705-9c0b-382c467dbe05",
+        "20261102T135451+0200",
+    ),
+    # Gdynia, Grabówek
+    _route(
+        RIVIERA,
+        "Szczecińska 9, Gdynia",
+        18.519244,
+        54.517389,
+        _FULL,
+        GDYNIA,
+        "Grabówek",
+        "ID-ff72d0aa-d98b-43e0-9083-edd1a8163488",
+        "20261102T141214+0200",
+    ),
+    # Gdynia, Działki Leśne
+    _route(
+        RIVIERA,
+        "Janka Wiśniewskiego 19, Gdynia",
+        18.514478,
+        54.528826,
+        _FULL,
+        GDYNIA,
+        "Działki Leśne",
+        "ID-3afc5e6c-fec6-45fb-8876-6a0211fe33fa",
+        "20261102T135850+0200",
+    ),
+    # Gdynia, Redłowo
+    _route(
+        RIVIERA,
+        "Powstania Styczniowego 2, Gdynia",
+        18.556243,
+        54.490001,
+        _FULL,
+        GDYNIA,
+        "Redłowo",
+        "ID-5496fc5f-8c05-4c35-a237-755b14004b12",
+        "20261102T135749+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Bohaterów Starówki Warszawskiej 9, Gdynia",
+        18.548214,
+        54.494913,
+        _FULL,
+        GDYNIA,
+        "Redłowo",
+        "ID-17ebb10b-7f0b-483c-b908-7db37dca2253",
+        "20261102T140039+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Przemyska 12, Gdynia",
+        18.537821,
+        54.488006,
+        _FULL,
+        GDYNIA,
+        "Redłowo",
+        "ID-116159bb-6a53-4c48-a4ec-bcb91b807626",
+        "20261102T135916+0200",
+    ),
+    # Gdynia, Orłowo
+    _route(
+        RIVIERA,
+        "Świętopełka 31, Gdynia",
+        18.559149,
+        54.475002,
+        _FULL,
+        GDYNIA,
+        "Orłowo",
+        "ID-e7c77ce4-56b9-440f-a9b7-62a937f7800c",
+        "20261102T140947+0200",
+    ),
+    # Gdynia, Mały Kack
+    _route(
+        RIVIERA,
+        "Techniczna 36, Gdynia",
+        18.545014,
+        54.475563,
+        _FULL,
+        GDYNIA,
+        "Mały Kack",
+        "ID-a7cf1a21-f6f9-43dc-974d-3e9b8ab60da6",
+        "20261102T135847+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Adwokacka 58, Gdynia",
+        18.536448,
+        54.478635,
+        _FULL,
+        GDYNIA,
+        "Mały Kack",
+        "ID-d71cd2e6-cb85-4bd7-9ccb-81b7f1cd5710",
+        "20261102T135835+0200",
+    ),
+    # Gdynia, Wielki Kack
+    _route(
+        OSOWA,
+        "Solna 21, Gdynia",
+        18.497847,
+        54.464853,
+        _FULL,
+        GDYNIA,
+        "Wielki Kack",
+        "ID-3cdbdbda-a3d1-4695-8fab-48194ccd432f",
+        "20261102T140158+0200",
+    ),
+    _route(
+        OSOWA,
+        "Starodworcowa 41, Gdynia",
+        18.494325,
+        54.459896,
+        _FULL,
+        GDYNIA,
+        "Wielki Kack",
+        "ID-a8d2a0fd-1d24-4ca4-ac51-8e3a1a8564f6",
+        "20261102T141113+0200",
+    ),
+    # Gdynia, Chylonia
+    _route(
+        RIVIERA,
+        "Morska 301, Gdynia",
+        18.464847,
+        54.540197,
+        1.8,
+        GDYNIA,
+        "Chylonia",
+        "ID-1fe4e152-b396-4ef5-80ce-02902b8c4ecf",
+        "20261102T140902+0200",
+    ),
+    # Gdynia, Cisowa
+    _route(
+        RIVIERA,
+        "Jana Dantyszka 8, Gdynia",
+        18.489414,
+        54.535289,
+        _FULL,
+        GDYNIA,
+        "Cisowa",
+        "ID-d6add39e-6d6b-46d8-a6c7-1f3d15420b4c",
+        "20261102T140615+0200",
+    ),
+    _route(
+        RIVIERA,
+        "Gołębia 3, Gdynia",
+        18.500296,
+        54.541278,
+        _FULL,
+        GDYNIA,
+        "Cisowa",
+        "ID-99f153fd-860c-4f88-8223-6d4ffa4bc11e",
+        "20261102T135901+0200",
+    ),
+    # Gdynia, Chwarzno-Wiczlino
+    _route(
+        RIVIERA,
+        "Jemiołowa 83, Gdynia",
+        18.464859,
+        54.4749,
+        2.5,
+        GDYNIA,
+        "Chwarzno-Wiczlino",
+        "ID-a240763a-458a-41e6-befc-82000f1476c2",
+        "20261102T140759+0200",
+    ),
+    # Gdynia, Karwiny
+    _route(
+        RIVIERA,
+        "Pionierów 21, Gdynia",
+        18.504879,
+        54.495067,
+        _FULL,
+        GDYNIA,
+        "Karwiny",
+        "ID-b47c5e55-8cfa-494e-a420-c83561ee7456",
+        "20261102T140024+0200",
+    ),
 )

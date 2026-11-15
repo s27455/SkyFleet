@@ -3,7 +3,7 @@
 **Execution order:** 3 of 3  
 **Requirements:** #1–#5  
 **Risk:** Medium to high; may involve backend API contracts and simulation semantics.  
-**Status:** 021D-1 (D2, D3, D4, D5) implemented, verified and manually QA'd by the owner. D1 (Random Scenarios scheduler) is deferred to 021D-2 and not started.
+**Status:** 021D-1 (D2, D3, D4, D5) implemented, verified and manually QA'd by the owner. D1 (Random Scenarios scheduler) was delivered in 021D-2 (`021D-2-automatic-random-incidents.md`). Later changes: the D5 drone panel and inspector now show a single "Hub" row (the nearest Hub, name only; the assigned Hub stays in the lists and management), and the D4 catalog was replaced by verified official address points in 021E (`021E-verified-delivery-destinations.md`).
 
 ## Goal
 
