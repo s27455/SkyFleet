@@ -1,32 +1,51 @@
 # SkyFleet
 
-SkyFleet is an operations platform for a fictional autonomous drone delivery company in the Tricity
-area (Gdańsk, Sopot, Gdynia). Parcels are handed over at Mall Pickup Hubs and flown to customer
-addresses by a simulated drone fleet. Operators watch the fleet on a live map, manage orders and
-drones, respond to incidents, and can ask a read-only AI Copilot about the current fleet state.
+SkyFleet is a control center for a fictional drone delivery company operating in the Tricity area
+of Poland (Gdańsk, Sopot and Gdynia). Partner parcels are handed over at Mall Pickup Hubs and flown
+to customer addresses by a fleet of autonomous drones. The fleet runs in a continuous simulation.
 
-It was built as a full-stack recruitment project. The emphasis is on a clear architecture: the
-backend owns all operational state, a separate worker process runs the simulation, and dispatch and
-safety rules are deterministic and tested. The frontend only displays what the backend reports.
+The application shows the whole operation on a live map: orders arriving, drones taking off and
+landing, batteries charging and incidents unfolding. The operator decides how much runs on its own.
+Everything happens in the backend, so the simulation keeps running whether or not anyone has the
+dashboard open.
 
-## What it does
+SkyFleet is a full-stack recruitment project. It is built to show a clean, testable architecture
+behind a polished, map-first interface.
 
-- **Live operations map** (Mapbox GL JS): Hubs with docked-drone counts, drones in flight that move
-  smoothly between snapshots, and delivery destinations with their status.
-- **Mission lifecycle:** each order gets an eligibility check (payload, route length, battery with a
-  20% reserve, free place at the return Hub). The drone then takes off, delivers and returns to the
-  nearest Hub with a free place. If the planned Hub fills up during the flight, the drone diverts to
-  another one.
-- **Automation the operator can switch on:** order generation, automatic dispatch with fleet
-  rebalancing between Hubs, and random incidents. Docked drones charge automatically.
-- **Incidents:** drone failure with a simulated emergency landing and later ground recovery,
-  recipient unavailable (the parcel is returned to a Hub), an LPR medical helicopter with a moving
-  no-fly zone, a rain warning that grounds takeoffs, and order cancellation that recalls the drone.
-- **Operator tools:** drone and order management, manual drone relocation, an operational event log,
-  a Three.js drone viewer with simulated telemetry.
-- **AI Copilot (optional, off by default):** answers questions using a read-only snapshot of the
-  fleet. It has no tools and cannot change state. Access requires a server-side token, and request
-  rate and budget limits apply.
+## Features
+
+**A live operations map.** The dark Mapbox map shows the four Hubs with their docked-drone counts,
+drones in flight moving along their routes, and delivery destinations coloured by status. Selecting
+any Hub, drone or order opens a detail panel. A drone's panel includes a Three.js model and simulated
+telemetry.
+
+**Orders and fleet management.** You can create, edit, cancel and delete orders, add or remove
+drones, and move a docked drone to another Hub. Cancelling an order whose drone is already airborne
+recalls the drone.
+
+**Dispatch and missions.** With Auto Dispatch on, the backend matches ready orders with suitable
+docked drones. A drone is suitable when it can carry the parcel, the route is within range, the
+battery covers the trip plus a 20% reserve, and the return Hub has a free place. Each drone then
+takes off, delivers and returns to the nearest Hub with room. If that Hub fills up during the
+flight, the drone diverts to another one. The same pass rebalances idle drones between Hubs.
+Missions can also be assigned manually through the REST API and started from the dashboard.
+
+**A simulation you can switch on and off.** Order Simulation generates a steady stream of new
+orders. Docked drones charge automatically. Each automation has its own switch, so you can watch
+one mission in detail or let the whole network run.
+
+**Incidents and operational status.** From the Scenarios menu, or automatically with Random
+Incidents on, you can trigger:
+- a drone failure with a simulated emergency landing (a ground crew later recovers the drone)
+- an unavailable recipient (the parcel goes back to a Hub)
+- an LPR medical helicopter whose no-fly zone moves across the city and holds nearby drones
+- a rain warning that grounds every takeoff
+
+Alerts, an event timeline and backend and worker status indicators show what needs attention.
+
+**An optional AI Copilot.** Ask questions in plain English, such as "Which drones are low on
+battery?" or "Which Hub has the most drones ready to fly?". The answers are based on a read-only
+snapshot of the fleet's current state. The Copilot has no tools and cannot change anything.
 
 ## Tech stack
 
@@ -34,117 +53,102 @@ safety rules are deterministic and tested. The frontend only displays what the b
 - **Backend:** Python 3.13, FastAPI, Pydantic, SQLAlchemy 2, Alembic
 - **Simulation Worker:** a separate Python process that shares the backend's domain modules
 - **Database:** PostgreSQL 17
-- **AI:** Anthropic API through a single backend gateway
-- **Tooling:** uv, npm, Pytest, Vitest, Ruff, mypy (strict), oxlint, Prettier, Docker Compose
+- **AI:** Anthropic Claude, called only from the backend
+- **Quality and tooling:** Pytest, Vitest, Ruff, mypy (strict), oxlint, Prettier, uv, Docker Compose
 
-## Quick start (Docker Compose)
+## Quick start
 
-Requires only **Git** and **Docker Desktop** (start it first). No Python, Node.js or PostgreSQL is
-needed on the host. The commands are for Windows PowerShell.
+All you need is **Git** and **Docker Desktop**. Python, Node.js and PostgreSQL run inside the
+containers.
 
 ```powershell
 git clone https://github.com/s27455/SkyFleet.git
 cd SkyFleet
-Copy-Item .env.example .env      # Compose reads .env, not .env.example
+Copy-Item .env.example .env      # macOS/Linux: cp .env.example .env
 docker compose up --build
 ```
 
-The first build downloads base images and dependencies and can take several minutes. Compose then
-starts PostgreSQL and runs a one-shot `migrate` service: Alembic migrations, then the Hubs, 12 drones
-and 11 sample orders. Rows that already exist are never changed. After that it starts the API, the
-worker and the frontend.
+The included configuration is ready for a local demo, including the map. The first build takes a
+few minutes. After that, Compose creates the database schema, loads the Hubs, 12 drones and 11
+sample orders, and starts the API, the simulation worker and the frontend.
 
 - Dashboard: **http://localhost:5173**
-- API documentation (Swagger): **http://localhost:8000/docs**
+- API documentation: **http://localhost:8000/docs**
 
-Order Simulation, Auto Dispatch and Random Incidents start **off**. Switch them on in the dashboard
-to see the fleet operate on its own.
+The automations start switched off. Turn on **Order Simulation** and **Auto Dispatch** in the
+dashboard to see the fleet go to work, and add **Random Incidents** when you want something to go
+wrong.
 
-**Mapbox token.** `.env.example` includes a public demo Mapbox token, so the map works as soon as
-`.env` is copied. You can replace `VITE_MAPBOX_TOKEN` in `.env` with your own **public** (`pk.`)
-token from a free [Mapbox](https://account.mapbox.com) account. Never use a secret `sk.` token there.
-The token is built into the frontend, so run `docker compose up --build` after changing it.
+To stop, press `Ctrl+C` or run `docker compose down`. The data is kept in a Docker volume, so the
+next `docker compose up` continues where you left off. `docker compose down -v` starts from scratch.
 
-**Stopping.** Press `Ctrl+C` or run `docker compose down`. Data stays in the PostgreSQL volume
-`skyfleet-db`, and `docker compose up` starts again where you left off (add `--build` after pulling
-code changes). Only `docker compose down -v` deletes the data.
-
-**Troubleshooting**
-
-- *Port already allocated (5173, 8000 or 55432):* stop the program using it, for example a natively
-  running SkyFleet. Alternatively, set `FRONTEND_PORT`, `API_PORT` or `DB_PORT` in `.env` and run
+If something does not start:
+- *A port is already in use (5173, 8000 or 55432):* stop the program using it, or set
+  `FRONTEND_PORT`, `API_PORT` or `DB_PORT` in `.env` and run `docker compose up --build`.
+- *The map does not appear:* make sure `.env` was created from `.env.example`, then rebuild with
   `docker compose up --build`.
-- *"Map unavailable" or a blank map:* `.env` is missing, or `VITE_MAPBOX_TOKEN` in it is empty or
-  invalid. Fix it, then run `docker compose up --build`.
-- *Backend unreachable, or the API and worker did not start:* `docker compose ps` shows each service's
-  state. `docker compose logs migrate`, `docker compose logs api` and `docker compose logs worker` show
-  the cause.
-- *"The simulation worker is not running…":* check `docker compose logs worker`. In Docker the worker
-  starts automatically, so ignore the native `uv run` hint in that message.
+- *The dashboard cannot reach the backend:* `docker compose ps` shows each service's state, and
+  `docker compose logs migrate`, `docker compose logs api` and `docker compose logs worker` show the
+  reason.
 
 ## Architecture
 
 ```
-Browser (React)  --REST polling-->  FastAPI API  --+
-                                                   +-->  PostgreSQL
-                  Simulation Worker (own process) -+
+React frontend  --REST polling-->  FastAPI API  ----------+
+                                     |                    +--> PostgreSQL
+                                     +--> AI Copilot      |
+                                          (optional)      |
+                 Simulation Worker (separate process) ----+
 ```
 
-- **The backend is the source of truth.** Orders, drones, missions, Hub capacity, charging,
-  incidents and simulation state live in PostgreSQL. The API validates and changes them through
-  domain services; route handlers stay thin.
-- **The Simulation Worker runs independently.** It is a separate process that ticks every second. On
-  each tick it advances flights, charges drones, runs automatic dispatch and order generation,
-  triggers random incidents, and recovers failed drones. It does not need an open browser. Flight
-  progress is computed from stored schedules and the clock, so restarting the worker neither resets
-  nor invents progress.
-- **The backend layout is a modular monolith.** Each domain module (`hubs`, `drones`, `orders`,
-  `missions`, `dispatch`, `simulation`, `events`, `weather`, `ai`, `copilot`) has its own models,
-  repository and services. There are no microservices or message brokers.
-- **Deterministic rules, not AI, decide operations.** Eligibility, dispatch, landing capacity (checked
-  under a row lock on the Hub) and state transitions are plain, tested code. The LLM only explains
-  and summarises.
-- **The browser polls for real-time updates** (flights every 1 s, the rest every 2 s) instead of using
-  WebSocket, a deliberate MVP trade-off
-  ([ADR 0015](docs/decisions/0015-frontend-polling-instead-of-websocket.md)).
+The **frontend** displays state and sends operator commands. It holds no business logic and polls
+the API: flights every second, everything else every two seconds.
 
-The full design is in [`context/architecture-context.md`](context/architecture-context.md). The
-reasons behind individual decisions are recorded as ADRs in [`docs/decisions/`](docs/decisions/).
+The **FastAPI backend** owns the operational state. Route handlers stay thin. Each domain module
+(Hubs, drones, orders, missions, dispatch, simulation, events, weather, AI) has its own models and
+services, which makes the codebase a modular monolith rather than a set of services.
+
+The **Simulation Worker** runs in a separate process, independent of the API. Every second it
+advances flights, charges drones, and runs dispatch, order generation, random incidents and drone
+recovery. API requests never wait on the simulation, and the simulation never waits on a browser.
+Flight progress is calculated from stored schedules and the clock, so a restart neither loses nor
+invents progress.
+
+**PostgreSQL** is the single source of truth shared by both processes. Rules that must hold under
+concurrency are enforced there. For example, Hub capacity is checked under a row lock at landing,
+so two drones cannot take the last free place.
+
+**Operational decisions are deterministic.** Eligibility, dispatch, routing, energy and state
+transitions are ordinary, tested code. The **AI Copilot** sits alongside them: it receives a
+read-only snapshot and can only explain.
+
+The full design is in [`context/architecture-context.md`](context/architecture-context.md), and the
+reasons behind each decision are recorded as ADRs in [`docs/decisions/`](docs/decisions/).
 
 ## AI Copilot (optional)
 
-The Copilot is **disabled by default**, and the rest of the application works fully without it. The
-repository contains no Anthropic API key or other private credentials. To enable it, add these
-values to `.env`, then run `docker compose up -d api`:
-
-```
-SKYFLEET_AI_ENABLED=true
-ANTHROPIC_API_KEY=<your key>
-SKYFLEET_AI_ACCESS_TOKEN=<at least 32 characters; typed into the Copilot panel>
-```
-
-These values are passed to the API container only, never to the frontend. The backend enforces a
-request rate limit and a spending ceiling
-([ADR 0012](docs/decisions/0012-ai-foundation-and-cost-guardrails.md),
-[ADR 0014](docs/decisions/0014-ai-copilot-access-and-endpoint.md)).
+The Copilot is turned off in the Docker demo, and the rest of the application works fully without
+it. The repository does not include an Anthropic API key, so you need your own key to use it. Set
+`SKYFLEET_AI_ENABLED=true`, `ANTHROPIC_API_KEY` and `SKYFLEET_AI_ACCESS_TOKEN` in `.env`, then run
+`docker compose up -d api`. The access token must be at least 32 characters; you type it into the
+Copilot panel. These values reach the API container only, never the browser. The backend enforces a
+request rate limit and a spending ceiling. See
+[ADR 0012](docs/decisions/0012-ai-foundation-and-cost-guardrails.md) and
+[ADR 0014](docs/decisions/0014-ai-copilot-access-and-endpoint.md) for details.
 
 ## Documentation
 
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): native setup with hot reload, configuration, tests
-  and quality checks, a code map, and simulation reference values
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): native setup with hot reload, configuration, tests,
+  a code map and simulation reference values
 - [`context/project-overview.md`](context/project-overview.md): product vision and scope
-- [`context/business-rules.md`](context/business-rules.md): confirmed business rules and open
-  questions
+- [`context/business-rules.md`](context/business-rules.md): business rules behind the simulation
 - [`context/architecture-context.md`](context/architecture-context.md): system architecture
-- [`context/progress-tracker.md`](context/progress-tracker.md): roadmap, status and known limitations
 - [`docs/decisions/`](docs/decisions/): architecture decision records
-- [`docs/features/`](docs/features/): numbered feature specifications, each with its implementation
-  record
+- [`docs/features/`](docs/features/): feature specifications, each with its implementation record
 - [`docs/diagrams/skyfleet-main-process.svg`](docs/diagrams/skyfleet-main-process.svg): the main
-  delivery process (BPMN)
+  delivery process as a BPMN diagram
+- [`context/progress-tracker.md`](context/progress-tracker.md): project history and known
+  limitations
 
-SkyFleet was developed with Claude Code. [`CLAUDE.md`](CLAUDE.md),
-[`context/ai-workflow-rules.md`](context/ai-workflow-rules.md),
-[`context/code-standards.md`](context/code-standards.md) and
-[`context/ui-context.md`](context/ui-context.md) are the instructions and standards used during
-development.
+SkyFleet was built with Claude Code as a development partner. [`CLAUDE.md`](CLAUDE.md) and the
+other files in [`context/`](context/) are the instructions and standards that guided that work.
