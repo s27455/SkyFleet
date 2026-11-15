@@ -189,6 +189,8 @@ def test_the_migration_round_trips_and_leaves_the_other_modes_alone(temp_engine:
     tables_before = set(inspect(temp_engine).get_table_names()) - {
         "incident_scheduler_state",
         "incident_acknowledgements",
+        "ai_budget_state",  # Migration 0019 (Feature 024) is above 0016 as well
+        "ai_request_log",
     }
 
     command.downgrade(config, "0016")

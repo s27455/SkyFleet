@@ -386,7 +386,12 @@ def test_the_migration_round_trips_and_leaves_other_tables_alone(temp_engine: En
     config.set_main_option("sqlalchemy.url", temp_engine.url.render_as_string(hide_password=False))
     columns = {c["name"] for c in inspect(temp_engine).get_columns("incident_acknowledgements")}
     assert columns == {"mission_id", "acknowledged_at"}
-    tables_before = set(inspect(temp_engine).get_table_names()) - {"incident_acknowledgements"}
+    # Migration 0019 (Feature 024) sits above 0017, so its AI tables go with the same downgrade.
+    tables_before = set(inspect(temp_engine).get_table_names()) - {
+        "incident_acknowledgements",
+        "ai_budget_state",
+        "ai_request_log",
+    }
 
     with temp_engine.begin() as connection:  # the downgrade refuses while such events exist
         connection.execute(text("DELETE FROM incident_acknowledgements"))

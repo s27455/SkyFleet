@@ -10,6 +10,7 @@ from alembic.migration import MigrationContext
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 
+from app.ai import models as ai_models  # noqa: F401  (registers tables on Base.metadata)
 from app.db.session import Base
 from app.drones import models as drone_models  # noqa: F401  (registers tables on Base.metadata)
 from app.hubs import models as hub_models  # noqa: F401  (registers tables on Base.metadata)

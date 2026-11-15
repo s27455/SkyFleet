@@ -222,3 +222,58 @@ def temp_engine() -> Iterator[Engine]:
             assert name.startswith(prefix) and name != dev_url.database  # last line of defence
             connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
         admin.dispose()
+
+
+# --- Feature 024: no test may use real AI credentials or reach the Anthropic API ----------------
+
+_AI_ENVIRONMENT = (
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_PROFILE",
+    "ANTHROPIC_LOG",
+    "SKYFLEET_AI_ENABLED",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_real_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Applies to every test. Three independent guards:
+
+    1. the AI environment variables of the machine are removed for the test;
+    2. a real SDK client cannot be constructed (a test that needs the construction arguments
+       replaces the class with a recorder);
+    3. a connection to anything but this machine fails the test, so even a mistake cannot send a
+       request (the local PostgreSQL used by the opt-in tests stays reachable).
+
+    `Settings` read from the real `.env` could still carry a key; the AI tests build their settings
+    with `_env_file=None`, and guards 2 and 3 mean that key could not be used anyway.
+    """
+    import ipaddress
+    import socket
+
+    import anthropic
+
+    for name in _AI_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+
+    def refuse_client(*args: object, **kwargs: object) -> None:
+        raise AssertionError("tests must not create a real Anthropic client")
+
+    monkeypatch.setattr(anthropic.Anthropic, "__init__", refuse_client)
+    monkeypatch.setattr(anthropic.AsyncAnthropic, "__init__", refuse_client)
+
+    real_connect = socket.socket.connect
+
+    def guarded_connect(self: socket.socket, address: object) -> None:
+        if self.family in (socket.AF_INET, socket.AF_INET6) and isinstance(address, tuple):
+            host = str(address[0])
+            try:
+                local = ipaddress.ip_address(host).is_loopback or host == "localhost"
+            except ValueError:
+                local = host == "localhost"
+            if not local:
+                raise AssertionError(f"tests must not connect to the network (tried {host})")
+        real_connect(self, address)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)

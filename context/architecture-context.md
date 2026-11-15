@@ -146,6 +146,8 @@ Responsibilities:
 
 AI must not bypass domain rules or directly manipulate persistence.
 
+Foundation (Feature 024): `app/ai` is a self-contained module (a gateway, one SDK-bound transport, an allowlist of model and prices, a durable budget in `ai_budget_state` and `ai_request_log`). It imports no domain module, is not wired into any endpoint, worker or service yet, is disabled by default and gives the model no tools or data access. Every request reserves its worst-case cost in the database under a row lock before it is sent, within fixed limits (16 KiB input, 500 question characters, 400 output tokens, 10 per hour, 30 s apart, one in flight, USD 4 lifetime). See `docs/decisions/0012-ai-foundation-and-cost-guardrails.md`.
+
 ## 4. Backend Architecture
 
 Use a modular backend structure with clear separation of responsibilities.

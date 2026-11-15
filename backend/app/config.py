@@ -1,9 +1,10 @@
 """Typed application configuration loaded from environment variables and `.env`."""
 
+from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -91,6 +92,70 @@ class Settings(BaseSettings):
     drone_recovery_delay_seconds: float = Field(default=120.0, ge=0)
     drone_recovery_check_seconds: float = Field(default=5.0, gt=0)
     drone_recovery_batch_size: int = Field(default=3, ge=1)
+
+    # --- AI assistant foundation (Feature 024) ---------------------------------------------------
+    # Disabled by default. Nothing here is validated while AI is off, so a missing key never stops
+    # the API or the worker; `app.ai.readiness.config_problems` checks everything when AI is on and
+    # the gateway then refuses to run (fail closed) with a message that never contains a secret.
+    # The limits can only be tightened from here: values beyond the MVP maxima are reported as
+    # configuration problems, they are not accepted.
+    ai_enabled: bool = Field(
+        default=False, validation_alias=AliasChoices("SKYFLEET_AI_ENABLED", "ai_enabled")
+    )
+    # `repr=False` and `SecretStr`: the key is never printed, logged or dumped. It is read here
+    # (from the environment or `.env`) and handed to the client explicitly; the SDK's own
+    # environment lookup is never relied on.
+    anthropic_api_key: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices("ANTHROPIC_API_KEY", "anthropic_api_key"),
+    )
+    ai_model: str = Field(
+        default="claude-haiku-5-5", validation_alias=AliasChoices("SKYFLEET_AI_MODEL", "ai_model")
+    )
+    ai_max_input_bytes: int = Field(
+        default=16 * 1024,
+        validation_alias=AliasChoices("SKYFLEET_AI_MAX_INPUT_BYTES", "ai_max_input_bytes"),
+    )
+    ai_max_question_chars: int = Field(
+        default=500,
+        validation_alias=AliasChoices("SKYFLEET_AI_MAX_QUESTION_CHARS", "ai_max_question_chars"),
+    )
+    ai_max_output_tokens: int = Field(
+        default=400,
+        validation_alias=AliasChoices("SKYFLEET_AI_MAX_OUTPUT_TOKENS", "ai_max_output_tokens"),
+    )
+    ai_request_timeout_seconds: float = Field(
+        default=30.0,
+        validation_alias=AliasChoices(
+            "SKYFLEET_AI_REQUEST_TIMEOUT_SECONDS", "ai_request_timeout_seconds"
+        ),
+    )
+    ai_max_requests_per_hour: int = Field(
+        default=10,
+        validation_alias=AliasChoices(
+            "SKYFLEET_AI_MAX_REQUESTS_PER_HOUR", "ai_max_requests_per_hour"
+        ),
+    )
+    ai_min_interval_seconds: int = Field(
+        default=30,
+        validation_alias=AliasChoices(
+            "SKYFLEET_AI_MIN_INTERVAL_SECONDS", "ai_min_interval_seconds"
+        ),
+    )
+    # Internal lifetime ceiling (pessimistic reservations and unknown outcomes included) in USD.
+    ai_budget_ceiling_usd: Decimal = Field(
+        default=Decimal("4.00"),
+        validation_alias=AliasChoices("SKYFLEET_AI_BUDGET_CEILING_USD", "ai_budget_ceiling_usd"),
+    )
+    # After an authentication, permission, billing, spend-limit or invalid-request failure no new
+    # request is sent for this long, so a bad key or an empty balance is not hammered.
+    ai_error_backoff_seconds: int = Field(
+        default=900,
+        validation_alias=AliasChoices(
+            "SKYFLEET_AI_ERROR_BACKOFF_SECONDS", "ai_error_backoff_seconds"
+        ),
+    )
 
     # Feature 017A: how long a DELIVERED order stays in the active operational views, counted from
     # its persisted delivery time. The order itself is never deleted.
