@@ -136,6 +136,16 @@ request rate limit and a spending ceiling. See
 [ADR 0012](docs/decisions/0012-ai-foundation-and-cost-guardrails.md) and
 [ADR 0014](docs/decisions/0014-ai-copilot-access-and-endpoint.md) for details.
 
+## AI-assisted development
+
+SkyFleet was built with AI tools, and the workflow is documented openly. I used ChatGPT to work
+through requirements and technical options and to turn my decisions into structured feature
+briefs. Claude Code planned each feature against the codebase and carried out a substantial
+portion of the implementation, testing and documentation work. It worked within a fixed project context
+([`CLAUDE.md`](CLAUDE.md) and [`context/`](context/)) and followed custom skills with explicit
+approval gates. I reviewed the technical decisions and implementation plans, validated the
+application's behaviour and approved the outcomes. The full process is described in [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md).
+
 ## Documentation
 
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md): native setup with hot reload, configuration, tests,
@@ -149,6 +159,4 @@ request rate limit and a spending ceiling. See
   delivery process as a BPMN diagram
 - [`context/progress-tracker.md`](context/progress-tracker.md): project history and known
   limitations
-
-SkyFleet was built with Claude Code as a development partner. [`CLAUDE.md`](CLAUDE.md) and the
-other files in [`context/`](context/) are the instructions and standards that guided that work.
+- [`docs/AI_WORKFLOW.md`](docs/AI_WORKFLOW.md): how the project was built with AI assistance
