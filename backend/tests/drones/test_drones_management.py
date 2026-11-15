@@ -2,11 +2,13 @@
 
 from collections.abc import Callable
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.drones import service as drones_service
 from app.drones.models import Drone, DroneStatus
 from app.hubs.models import Hub
 from app.missions import service as missions_service
@@ -46,59 +48,90 @@ def _mission(seeded: Session, drone_id: str = "DRN-007") -> Mission:
 # --- create -----------------------------------------------------------------------------------
 
 
-def test_create_drone_is_visible_in_reads(client: TestClient, seeded: Session) -> None:
-    response = client.post("/api/drones", json={"id": "DRN-100", "hub_id": FORUM})
+def test_create_drone_generates_id_and_full_battery(client: TestClient, seeded: Session) -> None:
+    existing = {d.id for d in seeded.scalars(select(Drone))}
+    highest = max(int(i.removeprefix("DRN-")) for i in existing)
+
+    response = client.post("/api/drones", json={"hub_id": FORUM})
 
     assert response.status_code == 201
     body = response.json()
-    assert (body["id"], body["hub_id"], body["status"], body["battery_pct"]) == (
-        "DRN-100",
-        FORUM,
-        "IDLE",
-        100,
-    )
+    assert body["id"] == f"DRN-{highest + 1:03d}"
+    assert (body["hub_id"], body["status"], body["battery_pct"]) == (FORUM, "IDLE", 100)
     assert body["model"]["id"] == "SF-1"
     hub = seeded.get(Hub, FORUM)
     assert hub is not None
     assert (body["longitude"], body["latitude"]) == (hub.longitude, hub.latitude)
-    assert client.get("/api/drones/DRN-100").json() == body
-    assert "DRN-100" in [d["id"] for d in client.get("/api/drones").json()]
+    assert client.get(f"/api/drones/{body['id']}").json() == body
+    assert body["id"] in [d["id"] for d in client.get("/api/drones").json()]
 
 
-def test_create_drone_with_battery(client: TestClient, seeded: Session) -> None:
-    response = client.post(
-        "/api/drones", json={"id": "DRN-101", "hub_id": FORUM, "battery_pct": 42}
+def test_create_drone_ids_keep_counting_up(client: TestClient, seeded: Session) -> None:
+    first = client.post("/api/drones", json={"hub_id": FORUM}).json()["id"]
+    second = client.post("/api/drones", json={"hub_id": OSOWA}).json()["id"]
+
+    assert int(second.removeprefix("DRN-")) == int(first.removeprefix("DRN-")) + 1
+
+
+def test_create_drone_id_is_numeric_beyond_three_digits(
+    client: TestClient, seeded: Session, make_drone: Callable[..., Drone]
+) -> None:
+    hub = seeded.get(Hub, FORUM)
+    assert hub is not None
+    seeded.add(
+        make_drone(id="DRN-999", hub_id=FORUM, longitude=hub.longitude, latitude=hub.latitude)
     )
+    seeded.commit()
+
+    assert client.post("/api/drones", json={"hub_id": OSOWA}).json()["id"] == "DRN-1000"
+    assert client.post("/api/drones", json={"hub_id": OSOWA}).json()["id"] == "DRN-1001"
+
+
+def test_create_drone_retries_with_a_fresh_number_after_a_conflict(
+    client: TestClient, seeded: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = drones_service._next_drone_id
+    calls: list[str] = []
+
+    def conflicting_first(session: Session) -> str:
+        calls.append("x")
+        return "DRN-001" if len(calls) == 1 else real(session)  # first number is already taken
+
+    monkeypatch.setattr(drones_service, "_next_drone_id", conflicting_first)
+
+    response = client.post("/api/drones", json={"hub_id": FORUM})
 
     assert response.status_code == 201
-    assert response.json()["battery_pct"] == 42
-
-
-def test_create_rejects_duplicate_id(client: TestClient, seeded: Session) -> None:
-    response = client.post("/api/drones", json={"id": "DRN-001", "hub_id": FORUM})
-
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "DRONE_ALREADY_EXISTS"
+    assert response.json()["id"] != "DRN-001"
+    assert len(calls) == 2
+    assert len([d for d in client.get("/api/drones").json() if d["id"] == "DRN-001"]) == 1
 
 
 def test_create_rejects_unknown_hub(client: TestClient, seeded: Session) -> None:
-    response = client.post("/api/drones", json={"id": "DRN-100", "hub_id": "hub-nowhere"})
+    response = client.post("/api/drones", json={"hub_id": "hub-nowhere"})
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "HUB_NOT_FOUND"
+    assert len(client.get("/api/drones").json()) == len(_drone_ids(seeded))
 
 
-def test_create_rejects_invalid_values(client: TestClient, seeded: Session) -> None:
+def _drone_ids(session: Session) -> list[str]:
+    return list(session.scalars(select(Drone.id)))
+
+
+def test_create_rejects_any_field_but_the_hub(client: TestClient, seeded: Session) -> None:
+    before = len(_drone_ids(seeded))
     for payload in (
-        {"id": "DRN-100", "hub_id": FORUM, "battery_pct": 101},
-        {"id": "DRN-100", "hub_id": FORUM, "battery_pct": -1},
-        {"id": "bad id", "hub_id": FORUM},
-        {"id": "DRN-100", "hub_id": FORUM, "status": "IN_FLIGHT"},
-        {"id": "DRN-100", "hub_id": FORUM, "longitude": 18.0},
-        {"hub_id": FORUM},
+        {"hub_id": FORUM, "id": "DRN-100"},
+        {"hub_id": FORUM, "battery_pct": 42},
+        {"hub_id": FORUM, "battery_pct": 100},
+        {"hub_id": FORUM, "status": "IN_FLIGHT"},
+        {"hub_id": FORUM, "longitude": 18.0},
+        {"hub_id": ""},
+        {},
     ):
         assert client.post("/api/drones", json=payload).status_code == 422, payload
-    assert client.get("/api/drones/DRN-100").status_code == 404
+    assert len(client.get("/api/drones").json()) == before
 
 
 def test_create_rejects_full_hub(
@@ -106,11 +139,11 @@ def test_create_rejects_full_hub(
 ) -> None:
     _fill_hub(seeded, FORUM, make_drone)
 
-    response = client.post("/api/drones", json={"id": "DRN-100", "hub_id": FORUM})
+    response = client.post("/api/drones", json={"hub_id": FORUM})
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "HUB_FULL"
-    assert client.post("/api/drones", json={"id": "DRN-100", "hub_id": OSOWA}).status_code == 201
+    assert client.post("/api/drones", json={"hub_id": OSOWA}).status_code == 201
 
 
 # --- update -----------------------------------------------------------------------------------

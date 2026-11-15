@@ -29,6 +29,10 @@ def _http_error(error: service.OrderManagementError) -> HTTPException:
         return HTTPException(
             status_code=404, detail={"code": "HUB_NOT_FOUND", "message": str(error)}
         )
+    if isinstance(error, service.OrderNotServiceableError):
+        return HTTPException(
+            status_code=422, detail={"code": "ORDER_NOT_SERVICEABLE", "message": str(error)}
+        )
     codes: dict[type[service.OrderManagementError], str] = {
         service.OrderHasMissionsError: "ORDER_HAS_MISSIONS",
         service.OrderNotEditableError: "ORDER_NOT_EDITABLE",
@@ -75,9 +79,15 @@ def get_order(order_id: str, session: SessionDep) -> DeliveryOrder:
 
 
 @router.post("", response_model=OrderResponse, status_code=201)
-def create_order(body: OrderCreateRequest, session: SessionDep) -> DeliveryOrder:
+def create_order(
+    body: OrderCreateRequest, session: SessionDep, settings: SettingsDep
+) -> DeliveryOrder:
+    """Create an order. Without `origin_hub_id` the nearest Hub that can serve the destination is
+    chosen (422 `ORDER_NOT_SERVICEABLE` if none can); an explicit Hub is used as given."""
     try:
-        return service.create_order(session, body)
+        return service.create_order(
+            session, body, payload_energy_factor=settings.mission_payload_energy_factor
+        )
     except service.OrderManagementError as error:
         raise _http_error(error) from error
 

@@ -46,13 +46,60 @@ describe('DroneDetailPanel', () => {
     expect(screen.getByText('SkyFleet SF-1 Courier')).toBeInTheDocument()
     expect(valueOf('Status')).toHaveTextContent('Idle')
     expect(valueOf('Battery')).toHaveTextContent('90%')
-    expect(valueOf('Current Hub')).toHaveTextContent('Centrum Riviera')
+    expect(valueOf('Assigned Hub')).toHaveTextContent('Centrum Riviera')
   })
 
   it('falls back to the Hub id when the Hub is not available', () => {
     render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
 
-    expect(valueOf('Current Hub')).toHaveTextContent('hub-centrum-riviera')
+    expect(valueOf('Assigned Hub')).toHaveTextContent('hub-centrum-riviera')
+  })
+
+  it('shows the Nearest Hub separately from the Assigned Hub and follows the position', () => {
+    const FORUM: Hub = {
+      id: 'hub-forum-gdansk',
+      name: 'Forum Gdańsk',
+      address: 'x',
+      coordinates: [18.6531, 54.3487],
+      droneCapacity: 50,
+    }
+    const hubs = [HUB, FORUM]
+    // Assigned to Riviera, but flying close to Forum.
+    const flying = {
+      ...DRONE,
+      status: 'IN_FLIGHT' as const,
+      coordinates: [18.65, 54.35] as [number, number],
+    }
+    const { rerender } = render(
+      <DroneDetailPanel
+        drone={flying}
+        hub={HUB}
+        hubs={hubs}
+        markerSpread={false}
+        onClose={() => {}}
+      />,
+    )
+
+    expect(valueOf('Assigned Hub')).toHaveTextContent('Centrum Riviera')
+    expect(valueOf('Nearest Hub')).toHaveTextContent('Forum Gdańsk')
+
+    rerender(
+      <DroneDetailPanel
+        drone={{ ...flying, coordinates: [18.532, 54.5047] }}
+        hub={HUB}
+        hubs={hubs}
+        markerSpread={false}
+        onClose={() => {}}
+      />,
+    )
+    expect(valueOf('Nearest Hub')).toHaveTextContent('Centrum Riviera')
+    expect(valueOf('Assigned Hub')).toHaveTextContent('Centrum Riviera') // never changed
+  })
+
+  it('shows a dash for the Nearest Hub when no Hubs are known', () => {
+    render(<DroneDetailPanel drone={DRONE} markerSpread={false} onClose={() => {}} />)
+
+    expect(valueOf('Nearest Hub')).toHaveTextContent('—')
   })
 
   it('shows the model capabilities including the 3 kg payload', () => {

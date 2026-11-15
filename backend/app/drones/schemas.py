@@ -38,13 +38,12 @@ class DroneResponse(BaseModel):
 
 
 class DroneCreateRequest(BaseModel):
-    """Administrator-controlled fields only; status, position and model are set by the backend."""
+    """The initial Hub only. The id, the 100 % battery, status, position and model are set by the
+    backend; any other field (an id or a battery included) is rejected with 422."""
 
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(pattern=r"^DRN-\d{3,}$", max_length=32)
     hub_id: str = Field(min_length=1, max_length=64)
-    battery_pct: int = Field(default=100, ge=0, le=100)
 
 
 class RelocateRequest(BaseModel):

@@ -24,7 +24,7 @@ interface DroneFormProps {
   onCancel: () => void
 }
 
-/** Create a drone (id, Hub, battery) or edit its battery and Hub; the backend checks every rule. */
+/** Create a drone (the initial Hub only) or edit its battery and Hub; the backend checks every rule. */
 export function DroneForm({
   hubs,
   drone,
@@ -35,7 +35,6 @@ export function DroneForm({
   onCancel,
 }: DroneFormProps) {
   const { busy, error, run, clearError } = useAction()
-  const [id, setId] = useState('')
   const [hubId, setHubId] = useState(drone?.hubId ?? hubs[0]?.id ?? '')
   const [battery, setBattery] = useState(String(drone?.batteryPct ?? 100))
   const [localError, setLocalError] = useState<string | null>(null)
@@ -43,22 +42,21 @@ export function DroneForm({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     clearError()
-    const pct = battery.trim() === '' ? NaN : Number(battery)
-    if (!Number.isInteger(pct) || pct < 0 || pct > 100) {
-      return setLocalError('Battery must be a whole number from 0 to 100.')
-    }
     if (!hubId) return setLocalError('Choose a Hub.')
 
     let action: () => Promise<unknown>
     if (drone) {
+      const pct = battery.trim() === '' ? NaN : Number(battery)
+      if (!Number.isInteger(pct) || pct < 0 || pct > 100) {
+        return setLocalError('Battery must be a whole number from 0 to 100.')
+      }
       const changes: DroneChanges = {}
       if (pct !== drone.batteryPct) changes.batteryPct = pct
       if (hubId !== drone.hubId) changes.hubId = hubId
       if (Object.keys(changes).length === 0) return setLocalError('Nothing has changed.')
       action = () => onUpdate?.(changes) ?? Promise.resolve()
     } else {
-      if (id.trim() === '') return setLocalError('Enter a drone id, for example DRN-013.')
-      action = () => onCreate?.({ id: id.trim(), hubId, batteryPct: pct }) ?? Promise.resolve()
+      action = () => onCreate?.({ hubId }) ?? Promise.resolve()
     }
     setLocalError(null)
     if (await run(action)) onDone()
@@ -71,21 +69,9 @@ export function DroneForm({
       aria-label={drone ? `Edit drone ${drone.id}` : 'Create drone'}
       className="flex flex-col gap-3 rounded border border-line p-3"
     >
-      <div className="grid gap-3 sm:grid-cols-3">
-        {!drone && (
-          <label className={FIELD_LABEL_CLASS}>
-            Drone id (DRN- and digits)
-            <input
-              className={INPUT_CLASS}
-              value={id}
-              disabled={busy}
-              maxLength={32}
-              onChange={(event) => setId(event.target.value)}
-            />
-          </label>
-        )}
+      <div className="grid gap-3 sm:grid-cols-2">
         <label className={FIELD_LABEL_CLASS}>
-          Current Hub
+          {drone ? 'Current Hub' : 'Initial Hub'}
           <select
             className={INPUT_CLASS}
             value={hubId}
@@ -99,18 +85,25 @@ export function DroneForm({
             ))}
           </select>
         </label>
-        <label className={FIELD_LABEL_CLASS}>
-          Battery (%)
-          <input
-            className={INPUT_CLASS}
-            type="number"
-            step="1"
-            value={battery}
-            disabled={busy}
-            onChange={(event) => setBattery(event.target.value)}
-          />
-        </label>
+        {drone && (
+          <label className={FIELD_LABEL_CLASS}>
+            Battery (%)
+            <input
+              className={INPUT_CLASS}
+              type="number"
+              step="1"
+              value={battery}
+              disabled={busy}
+              onChange={(event) => setBattery(event.target.value)}
+            />
+          </label>
+        )}
       </div>
+      {!drone && (
+        <p className="text-xs text-fg-muted">
+          The drone id is generated automatically and the battery starts at 100%.
+        </p>
+      )}
       {drone && !canReassign && (
         <p className="text-xs text-fg-muted">
           The Hub can only be changed while the drone is idle at a Hub.

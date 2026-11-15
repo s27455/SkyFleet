@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.drones.models import Drone
+from app.drones.models import Drone, DroneModel
 from app.hubs.models import Hub
 from app.missions.models import ACTIVE_MISSION_STATUSES, Mission
 
@@ -40,6 +40,17 @@ def get_hub_for_update(session: Session, hub_id: str) -> Hub | None:
     statement = (
         select(Hub)
         .where(Hub.id == hub_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return session.scalars(statement).one_or_none()
+
+
+def get_model_for_update(session: Session, model_id: str) -> DroneModel | None:
+    """Fetch a drone model and lock its row (a no-op on SQLite): serialises drone creation."""
+    statement = (
+        select(DroneModel)
+        .where(DroneModel.id == model_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )

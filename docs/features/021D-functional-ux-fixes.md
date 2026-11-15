@@ -2,7 +2,8 @@
 
 **Execution order:** 3 of 3  
 **Requirements:** #1–#5  
-**Risk:** Medium to high; may involve backend API contracts and simulation semantics.
+**Risk:** Medium to high; may involve backend API contracts and simulation semantics.  
+**Status:** 021D-1 (D2, D3, D4, D5) implemented, verified and manually QA'd by the owner. D1 (Random Scenarios scheduler) is deferred to 021D-2 and not started.
 
 ## Goal
 

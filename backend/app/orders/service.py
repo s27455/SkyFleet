@@ -8,13 +8,16 @@ Nothing here creates or starts a mission.
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
+from app.drones.models import DroneModel
 from app.events.models import EventOrigin, EventType
 from app.events.service import append_event, delete_events_for_order
 from app.hubs.models import Hub
-from app.orders import repository
+from app.orders import feasibility, repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.schemas import OrderCreateRequest, OrderUpdateRequest
 
@@ -34,6 +37,13 @@ class OrderNotFoundError(OrderManagementError):
 class HubNotFoundError(OrderManagementError):
     def __init__(self, hub_id: str) -> None:
         super().__init__(f"Hub '{hub_id}' not found")
+
+
+class OrderNotServiceableError(OrderManagementError):
+    """No Hub can serve the destination (and parcel) under the planner's rules (HTTP 422)."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"No Hub can serve this order: {reason}")
 
 
 class OrderHasMissionsError(OrderManagementError):
@@ -69,22 +79,58 @@ def _ensure_modifiable(session: Session, order: DeliveryOrder) -> None:
         raise OrderNotEditableError(order.id, order.status)
 
 
+def _choose_origin_hub(
+    session: Session, data: OrderCreateRequest, payload_energy_factor: float | None
+) -> str:
+    """The nearest Hub that can serve the destination and parcel, or `OrderNotServiceableError`."""
+    hubs = list(session.scalars(select(Hub).order_by(Hub.id)))
+    model = session.scalars(select(DroneModel).order_by(DroneModel.id)).first()
+    if not hubs:
+        raise OrderNotServiceableError("no Hub exists")
+    if model is None:
+        raise OrderNotServiceableError(
+            "no drone model is configured, so the route cannot be checked"
+        )
+    factor = (
+        get_settings().mission_payload_energy_factor
+        if payload_energy_factor is None
+        else payload_energy_factor
+    )
+    hub, reason = feasibility.choose_origin_hub(
+        hubs,
+        model,
+        (data.destination_longitude, data.destination_latitude),
+        data.package_weight_kg,
+        factor,
+    )
+    if hub is None:
+        raise OrderNotServiceableError(reason or "no Hub can reach the destination")
+    return hub.id
+
+
 def create_order(
-    session: Session, data: OrderCreateRequest, origin: EventOrigin = EventOrigin.MANUAL
+    session: Session,
+    data: OrderCreateRequest,
+    origin: EventOrigin = EventOrigin.MANUAL,
+    *,
+    payload_energy_factor: float | None = None,
 ) -> DeliveryOrder:
     """Insert a `READY_FOR_PICKUP` order and its `ORDER_CREATED` event in one transaction.
 
     The destination is stored as given. `origin` is `MANUAL` for orders created through the API
-    and `AUTOMATIC` for simulated ones.
+    and `AUTOMATIC` for simulated ones. Without an `origin_hub_id` the origin Hub is the nearest
+    Hub that can serve the destination (`feasibility.choose_origin_hub`); it is stored on the order
+    and never reassigned. An explicit Hub is used as given.
     """
+    origin_hub_id = data.origin_hub_id or _choose_origin_hub(session, data, payload_energy_factor)
     for _ in range(MAX_ID_ATTEMPTS):
         order_id = new_order_id()
         try:
-            _require_hub(session, data.origin_hub_id)
+            _require_hub(session, origin_hub_id)
             session.add(
                 DeliveryOrder(
                     id=order_id,
-                    origin_hub_id=data.origin_hub_id,
+                    origin_hub_id=origin_hub_id,
                     destination_address=data.destination_address,
                     destination_longitude=data.destination_longitude,
                     destination_latitude=data.destination_latitude,
@@ -103,8 +149,8 @@ def create_order(
             session.commit()
         except IntegrityError:
             session.rollback()
-            if session.get(Hub, data.origin_hub_id) is None:
-                raise HubNotFoundError(data.origin_hub_id) from None
+            if session.get(Hub, origin_hub_id) is None:
+                raise HubNotFoundError(origin_hub_id) from None
             if repository.get_order(session, order_id) is not None:
                 continue  # the generated id collided; try another
             raise

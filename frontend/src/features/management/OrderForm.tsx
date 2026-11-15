@@ -43,7 +43,7 @@ export function OrderForm({ hubs, order, onSubmit, onDone, onCancel }: OrderForm
     const lng = parseNumber(longitude)
     const lat = parseNumber(latitude)
     const kg = parseNumber(weight)
-    if (!hubId) return setLocalError('Choose an origin Hub.')
+    if (order && !hubId) return setLocalError('Choose an origin Hub.')
     if (address.trim() === '') return setLocalError('Enter a delivery address.')
     if (lng === null || lat === null) {
       return setLocalError('Enter the delivery longitude and latitude as numbers.')
@@ -62,7 +62,8 @@ export function OrderForm({ hubs, order, onSubmit, onDone, onCancel }: OrderForm
     setLocalError(null)
     const ok = await run(() =>
       onSubmit({
-        originHubId: hubId,
+        // A new order names no Hub: the backend chooses the nearest one that can serve it.
+        ...(order ? { originHubId: hubId } : {}),
         destinationAddress: address.trim(),
         longitude: lng,
         latitude: lat,
@@ -80,21 +81,23 @@ export function OrderForm({ hubs, order, onSubmit, onDone, onCancel }: OrderForm
       className="flex flex-col gap-3 rounded border border-line p-3"
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className={FIELD_LABEL_CLASS}>
-          Origin Hub
-          <select
-            className={INPUT_CLASS}
-            value={hubId}
-            disabled={busy}
-            onChange={(event) => setHubId(event.target.value)}
-          >
-            {hubs.map((hub) => (
-              <option key={hub.id} value={hub.id}>
-                {hub.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {order && (
+          <label className={FIELD_LABEL_CLASS}>
+            Origin Hub
+            <select
+              className={INPUT_CLASS}
+              value={hubId}
+              disabled={busy}
+              onChange={(event) => setHubId(event.target.value)}
+            >
+              {hubs.map((hub) => (
+                <option key={hub.id} value={hub.id}>
+                  {hub.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className={FIELD_LABEL_CLASS}>
           Delivery address
           <input
@@ -139,6 +142,11 @@ export function OrderForm({ hubs, order, onSubmit, onDone, onCancel }: OrderForm
           />
         </label>
       </div>
+      {!order && (
+        <p className="text-xs text-fg-muted">
+          The origin Hub is chosen automatically: the nearest Hub that can serve the destination.
+        </p>
+      )}
       {message && (
         <p role="alert" className="text-sm text-status-critical">
           {message}

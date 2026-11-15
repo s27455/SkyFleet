@@ -93,9 +93,13 @@ export function getActiveOrders(signal?: AbortSignal): Promise<Order[]> {
   return readOrders('/api/orders?active=true', signal)
 }
 
-/** Fields the administrator provides for a new order (Feature 012 `POST /api/orders`). */
+/**
+ * Fields the administrator provides for an order (Feature 012 `POST /api/orders`). Without
+ * `originHubId` the backend picks the nearest Hub that can serve the destination (Feature 021D);
+ * the edit form can still name one.
+ */
 export interface OrderInput {
-  originHubId: string
+  originHubId?: string
   destinationAddress: string
   longitude: number
   latitude: number
@@ -110,7 +114,7 @@ const toOrderBody = (input: Partial<OrderInput>) => ({
   package_weight_kg: input.packageWeightKg,
 })
 
-/** Creates an order; the backend assigns the id and the READY_FOR_PICKUP status. */
+/** Creates an order; the backend assigns the id, the status and (if none is given) the origin Hub. */
 export async function createOrder(input: OrderInput): Promise<Order> {
   return toOrder(await apiSend<unknown>('POST', '/api/orders', toOrderBody(input)))
 }

@@ -9,6 +9,7 @@ import type { Mission } from '../../types/mission'
 import { EventTimeline } from '../events/EventTimeline'
 import { FlightSection } from '../flights/FlightSection'
 import { StartMissionControl } from '../missions/StartMissionControl'
+import { describeNearestHub } from '../hubs/nearestHub'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
 import { RelocateDroneControl } from './RelocateDroneControl'
 
@@ -107,7 +108,8 @@ export function DroneDetailPanel({
         <Row label="Battery">
           <span className="font-mono tabular-nums">{drone.batteryPct}%</span>
         </Row>
-        <Row label="Current Hub">{hub ? hub.name : drone.hubId}</Row>
+        <Row label="Assigned Hub">{hub ? hub.name : drone.hubId}</Row>
+        <Row label="Nearest Hub">{describeNearestHub(drone.coordinates, hubs)}</Row>
         <Row label="Stored position">
           <span className="font-mono text-xs tabular-nums">
             {latitude.toFixed(6)}, {longitude.toFixed(6)}

@@ -35,7 +35,9 @@ class OrderCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    origin_hub_id: str = Field(min_length=1, max_length=64)
+    # Optional (Feature 021D): without it the backend picks the nearest Hub that can serve the
+    # destination. An explicit Hub is honoured as before (and not checked for feasibility).
+    origin_hub_id: str | None = Field(default=None, min_length=1, max_length=64)
     destination_address: Address
     destination_longitude: Longitude
     destination_latitude: Latitude

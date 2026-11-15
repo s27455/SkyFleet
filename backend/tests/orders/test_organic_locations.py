@@ -14,8 +14,8 @@ from app.hubs.models import Hub
 from app.missions.energy import estimate_energy, has_enough_battery
 from app.missions.planning import evaluate_plan
 from app.missions.routing import Point, distance_km, hub_point, hubs_by_distance
-from app.orders import generator
-from app.orders.generator import generate_one_order, max_flyable_weight_kg
+from app.orders.feasibility import max_flyable_weight_kg
+from app.orders.generator import generate_one_order
 from app.orders.locations import (
     MIN_HUB_CLEARANCE_KM,
     MIN_POINT_SEPARATION_KM,
@@ -201,7 +201,7 @@ def test_every_generated_order_is_accepted_by_the_planner(seeded: Session) -> No
 
     for _ in range(120):
         order = generate_one_order(seeded, rng=rng)
-        assert order.destination_address.startswith("Delivery Point TC-")
+        assert not order.destination_address.startswith("Delivery Point")
         plan = evaluate_plan(
             order=order,
             drone=full[order.origin_hub_id],
@@ -215,20 +215,16 @@ def test_every_generated_order_is_accepted_by_the_planner(seeded: Session) -> No
         assert plan.eligible, (order.id, [r.code for r in plan.reasons])
 
 
-def test_a_batch_of_generated_orders_is_varied_and_keeps_existing_orders(seeded: Session) -> None:
+def test_a_batch_of_generated_orders_keeps_existing_orders(seeded: Session) -> None:
     before = {
         o.id: (o.destination_address, o.destination_longitude, o.package_weight_kg)
         for o in seeded.scalars(select(DeliveryOrder))
     }
     rng = random.Random(4)
 
-    created = [generate_one_order(seeded, rng=rng) for _ in range(60)]
+    created = [generate_one_order(seeded, rng=rng) for _ in range(30)]
 
-    points = {
-        (round(o.destination_longitude, 5), round(o.destination_latitude, 5)) for o in created
-    }
-    assert len(points) == 60  # no repeated point
-    assert len({o.destination_address for o in created}) == 60  # a label each
+    assert len({o.destination_address for o in created}) > 5  # varied, within the 16 routes
     assert len({o.origin_hub_id for o in created}) == 4
     assert len({o.package_weight_kg for o in created}) > 5
     after = {
@@ -238,14 +234,11 @@ def test_a_batch_of_generated_orders_is_varied_and_keeps_existing_orders(seeded:
     assert before.items() <= after.items()  # existing orders are untouched
 
 
-def test_the_generator_falls_back_to_the_catalog_when_nothing_can_be_checked(
-    session: Session,
-) -> None:
+def test_the_generator_works_when_nothing_can_be_checked(session: Session) -> None:
     from app.hubs.seed import seed_hubs
 
-    seed_hubs(session)  # Hubs but no drone model: feasibility cannot be checked
+    seed_hubs(session)  # Hubs but no drone model: the catalog needs neither
 
     order = generate_one_order(session, rng=random.Random(2))
 
     assert not order.destination_address.startswith("Delivery Point")
-    assert generator._organic_request(session, random.Random(2), FACTOR) is None

@@ -1,7 +1,6 @@
 """Order generator core (feature 015A): catalog validity, generation and the API action."""
 
 import random
-import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,11 +14,9 @@ from app.hubs.models import Hub
 from app.missions.energy import estimate_energy, has_enough_battery
 from app.missions.models import Mission
 from app.missions.routing import distance_km, hub_point, hubs_by_distance
-from app.orders import generator
 from app.orders.generator import generate_one_order, pick_weight_kg
 from app.orders.generator_catalog import ROUTE_CATALOG, CatalogRoute
 from app.orders.models import MAX_PACKAGE_WEIGHT_KG, DeliveryOrder, OrderStatus
-from app.orders.operating_area import contains
 from app.orders.service import HubNotFoundError
 
 SETTINGS = Settings()
@@ -68,13 +65,16 @@ def test_catalog_is_unique_and_covers_every_hub(seeded: Session) -> None:
 # --- service ----------------------------------------------------------------------------------
 
 
-@pytest.fixture
-def catalog_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make the organic sampler find nothing, so the catalog fallback is used."""
-    monkeypatch.setattr(generator, "sample_delivery", lambda *_args, **_kwargs: None)
+def _route_of(order: DeliveryOrder) -> CatalogRoute:
+    return next(
+        r
+        for r in ROUTE_CATALOG
+        if (r.origin_hub_id, r.destination_address)
+        == (order.origin_hub_id, order.destination_address)
+    )
 
 
-def test_generate_creates_one_ready_organic_order(seeded: Session) -> None:
+def test_generate_creates_one_ready_order_from_a_catalog_route(seeded: Session) -> None:
     before = _order_count(seeded)
 
     order = generate_one_order(seeded, rng=random.Random(1))
@@ -82,44 +82,63 @@ def test_generate_creates_one_ready_organic_order(seeded: Session) -> None:
     assert _order_count(seeded) == before + 1
     assert order.status == OrderStatus.READY_FOR_PICKUP.value
     assert order.id.startswith("ORD-")
-    assert re.fullmatch(r"Delivery Point TC-\d{4}", order.destination_address)
-    assert 0.2 <= order.package_weight_kg <= MAX_PACKAGE_WEIGHT_KG
-    assert contains((order.destination_longitude, order.destination_latitude))
-
-
-def test_the_catalog_is_only_a_fallback(seeded: Session, catalog_only: None) -> None:
-    order = generate_one_order(seeded, rng=random.Random(1))
-
-    route = next(
-        r
-        for r in ROUTE_CATALOG
-        if (r.origin_hub_id, r.destination_address)
-        == (order.origin_hub_id, order.destination_address)
-    )
+    route = _route_of(
+        order
+    )  # the address, its coordinates and the origin Hub are one catalog entry
     assert (order.destination_longitude, order.destination_latitude) == (
         route.longitude,
         route.latitude,
     )
     assert route.min_weight_kg <= order.package_weight_kg <= route.max_weight_kg
+    assert not order.destination_address.startswith("Delivery Point")
 
 
-def test_same_seed_gives_the_same_request_and_repeats_create_distinct_orders(
+def test_no_catalog_route_uses_a_synthetic_label() -> None:
+    for route in ROUTE_CATALOG:
+        assert not route.destination_address.startswith("Delivery Point")
+
+
+def _place(order: DeliveryOrder) -> tuple[float, float]:
+    return (round(order.destination_longitude, 6), round(order.destination_latitude, 6))
+
+
+def test_unused_routes_are_preferred_and_a_repeat_comes_only_when_all_are_in_use(
     seeded: Session,
 ) -> None:
-    first_request = generator._organic_request(seeded, random.Random(7), 0.5)
-    second_request = generator._organic_request(seeded, random.Random(7), 0.5)
-    assert first_request is not None and first_request == second_request
+    rng = random.Random(5)
+    in_use = {_place(o) for o in seeded.scalars(select(DeliveryOrder))}
+    all_places = {(round(r.longitude, 6), round(r.latitude, 6)) for r in ROUTE_CATALOG}
+    free_count = len(all_places - in_use)
+    assert 0 < free_count < len(all_places)  # the seed already uses part of the catalog
 
-    first = generate_one_order(seeded, rng=random.Random(7))
-    second = generate_one_order(seeded, rng=random.Random(7))
-    assert first.id != second.id
-    # The second order keeps clear of the first, which is still open, so it cannot be a repeat.
-    assert (first.destination_longitude, first.destination_latitude) != (
-        second.destination_longitude,
-        second.destination_latitude,
-    )
-    assert first.destination_address == "Delivery Point TC-0001"
-    assert second.destination_address == "Delivery Point TC-0002"  # labels keep counting up
+    created = [generate_one_order(seeded, rng=rng) for _ in range(free_count)]
+
+    assert {_place(o) for o in created} == all_places - in_use  # each new order took a free route
+    repeat = generate_one_order(seeded, rng=rng)  # every route is now in use: a repeat is allowed
+    assert _place(repeat) in all_places
+
+
+def test_a_route_of_a_closed_order_is_offered_again(seeded: Session) -> None:
+    for order in seeded.scalars(select(DeliveryOrder)):
+        order.status = OrderStatus.DELIVERED.value  # nothing is open any more
+    seeded.commit()
+    only = ROUTE_CATALOG[0]
+
+    order = generate_one_order(seeded, rng=random.Random(1), catalog=[only])
+
+    assert order.destination_address == only.destination_address
+
+
+def test_legacy_synthetic_labels_are_left_alone(seeded: Session) -> None:
+    legacy = seeded.scalars(select(DeliveryOrder)).first()
+    assert legacy is not None
+    legacy.destination_address = "Delivery Point TC-0042"
+    seeded.commit()
+
+    generate_one_order(seeded, rng=random.Random(2))
+
+    seeded.refresh(legacy)
+    assert legacy.destination_address == "Delivery Point TC-0042"
 
 
 def test_weights_stay_in_each_routes_range() -> None:
@@ -146,7 +165,7 @@ def test_generation_preserves_existing_orders(seeded: Session) -> None:
     assert len(after) == len(before) + 5
 
 
-def test_failed_generation_leaves_no_order(seeded: Session, catalog_only: None) -> None:
+def test_failed_generation_leaves_no_order(seeded: Session) -> None:
     before = _order_count(seeded)
 
     with pytest.raises(HubNotFoundError):

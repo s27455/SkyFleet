@@ -158,14 +158,67 @@ describe('OrdersManager', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create order' }))
 
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1))
-    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
-      origin_hub_id: 'hub-forum-gdansk',
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
+    expect(body).toEqual({
       destination_address: 'ul. Nowa 3',
       destination_longitude: 18.7,
       destination_latitude: 54.4,
       package_weight_kg: 1.2,
     })
+    expect(body).not.toHaveProperty('origin_hub_id') // the backend chooses it
     expect(screen.queryByRole('form', { name: 'Create order' })).not.toBeInTheDocument()
+  })
+
+  it('offers no origin Hub selector when creating, and explains the automatic choice', () => {
+    renderManager()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New order' }))
+
+    expect(screen.queryByLabelText('Origin Hub')).toBeNull()
+    expect(screen.getByText(/chosen automatically: the nearest Hub/)).toBeVisible()
+  })
+
+  it('keeps the origin Hub selector when editing and sends a changed Hub', async () => {
+    const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(ORDER_RESPONSES[0])))
+    renderManager()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit order ORD-004' }))
+    expect(screen.getByLabelText('Origin Hub')).toBeVisible()
+    fireEvent.change(screen.getByLabelText('Origin Hub'), {
+      target: { value: 'hub-centrum-riviera' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      origin_hub_id: 'hub-centrum-riviera',
+    })
+  })
+
+  it('shows the backend reason when no Hub can serve the order, and keeps the form', async () => {
+    stubFetch(() =>
+      Promise.resolve(
+        jsonResponse(
+          {
+            detail: {
+              code: 'ORDER_NOT_SERVICEABLE',
+              message:
+                'No Hub can serve this order: the route of 20.1 km exceeds the 14 km mission distance',
+            },
+          },
+          422,
+        ),
+      ),
+    )
+    const { onChanged } = renderManager()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New order' }))
+    fillForm()
+    fireEvent.click(screen.getByRole('button', { name: 'Create order' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('exceeds the 14 km mission distance')
+    expect(onChanged).not.toHaveBeenCalled()
+    expect(screen.getByRole('form', { name: 'Create order' })).toBeInTheDocument()
   })
 
   it('checks required fields locally without calling the backend', () => {

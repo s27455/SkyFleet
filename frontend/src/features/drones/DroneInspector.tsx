@@ -7,6 +7,7 @@ import { Drone3DViewer, type DronePartId } from '../drone3d'
 import { FlightSection } from '../flights/FlightSection'
 import { usePrefersReducedMotion } from '../flights/usePrefersReducedMotion'
 import { ORDER_STATUS_DISPLAY } from '../orders/orderStatus'
+import { describeNearestHub } from '../hubs/nearestHub'
 import { DRONE_STATUS_DISPLAY } from './droneStatus'
 import type { InspectorData, Lookup } from './inspectorData'
 import { useDialogFocus } from './useDialogFocus'
@@ -254,7 +255,8 @@ export function DroneInspector({
                     <span className="w-10 font-mono tabular-nums">{drone.batteryPct}%</span>
                   </span>
                 </Row>
-                <Row label="Current Hub">{hub ? hub.name : drone.hubId}</Row>
+                <Row label="Assigned Hub">{hub ? hub.name : drone.hubId}</Row>
+                <Row label="Nearest Hub">{describeNearestHub(drone.coordinates, hubs)}</Row>
                 <Row label="Stored position">
                   <span className="font-mono text-xs tabular-nums">
                     {latitude.toFixed(6)}, {longitude.toFixed(6)}

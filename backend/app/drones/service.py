@@ -6,9 +6,11 @@ target Hub row, so concurrent requests cannot overfill a Hub. Nothing here moves
 or edits mission history.
 """
 
+import re
 from collections import Counter
 from collections.abc import Sequence
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -89,40 +91,65 @@ def _ensure_not_busy(session: Session, drone: Drone) -> None:
         raise DroneBusyError(f"Drone '{drone.id}' has an active mission and cannot be changed")
 
 
+_DRONE_ID = re.compile(r"DRN-(\d{3,})")
+INITIAL_BATTERY_PCT = 100
+MAX_ID_ATTEMPTS = 3  # the lock below serialises creators; this only covers an unexpected conflict
+
+
+def _next_drone_id(session: Session) -> str:
+    """`DRN-NNN` one above the highest existing number (numeric, so DRN-999 < DRN-1000)."""
+    numbers = [
+        int(match.group(1))
+        for drone_id in session.scalars(select(Drone.id))
+        if (match := _DRONE_ID.fullmatch(drone_id))
+    ]
+    return f"DRN-{max(numbers, default=0) + 1:03d}"
+
+
 def create_drone(session: Session, data: DroneCreateRequest, settings: Settings) -> Drone:
-    """Add an IDLE SF-1 drone docked at an existing Hub that has a free place."""
-    try:
-        hub = repository.get_hub_for_update(session, data.hub_id)
-        if hub is None:
-            raise HubNotFoundError(data.hub_id)
-        if repository.get_drone(session, data.id) is not None:
-            raise DuplicateDroneError(data.id)
-        occupancy, _ = _occupancy(session, settings)
-        if occupancy[hub.id] >= hub.drone_capacity:
-            raise HubFullError(hub)
-        session.add(
-            Drone(
-                id=data.id,
-                model_id=SF1_MODEL_ID,
-                hub_id=hub.id,
-                status=DroneStatus.IDLE.value,
-                battery_pct=data.battery_pct,
-                longitude=hub.longitude,
-                latitude=hub.latitude,
+    """Add an IDLE SF-1 drone, fully charged, docked at an existing Hub that has a free place.
+
+    The operator chooses only the Hub. The id and the 100 % battery are decided here. Creators are
+    serialised by a lock on the SF-1 model row (taken after the Hub row, always in that order), so
+    the "highest number + 1" each one reads includes every earlier creator's committed drone. The
+    primary key stays the last guard: a conflict rolls back and tries again with a fresh number.
+    """
+    for _ in range(MAX_ID_ATTEMPTS):
+        drone_id = ""
+        try:
+            hub = repository.get_hub_for_update(session, data.hub_id)
+            if hub is None:
+                raise HubNotFoundError(data.hub_id)
+            occupancy, _ = _occupancy(session, settings)
+            if occupancy[hub.id] >= hub.drone_capacity:
+                raise HubFullError(hub)
+            if repository.get_model_for_update(session, SF1_MODEL_ID) is None:
+                raise InvalidChangeError(f"Drone model '{SF1_MODEL_ID}' is not configured")
+            drone_id = _next_drone_id(session)
+            session.add(
+                Drone(
+                    id=drone_id,
+                    model_id=SF1_MODEL_ID,
+                    hub_id=hub.id,
+                    status=DroneStatus.IDLE.value,
+                    battery_pct=INITIAL_BATTERY_PCT,
+                    longitude=hub.longitude,
+                    latitude=hub.latitude,
+                )
             )
-        )
-        session.commit()
-    except IntegrityError:
-        session.rollback()
-        if repository.get_drone(session, data.id) is not None:
-            raise DuplicateDroneError(data.id) from None
-        raise
-    except BaseException:
-        session.rollback()
-        raise
-    created = repository.get_drone(session, data.id)
-    assert created is not None
-    return created
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            if drone_id and repository.get_drone(session, drone_id) is not None:
+                continue  # another creator took this number: read the numbers again
+            raise
+        except BaseException:
+            session.rollback()
+            raise
+        created = repository.get_drone(session, drone_id)
+        assert created is not None
+        return created
+    raise DuplicateDroneError(drone_id)
 
 
 def update_drone(

@@ -90,29 +90,26 @@ describe('DronesManager', () => {
     expect(screen.getByText(/No drones yet/)).toBeInTheDocument()
   })
 
-  it('creates a drone from id, Hub and battery', async () => {
+  it('asks only for the initial Hub when creating, and sends only the Hub', async () => {
     const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(base, 201)))
     const { onChanged } = renderManager()
 
     fireEvent.click(button('New drone'))
-    fireEvent.change(screen.getByLabelText(/Drone id/), { target: { value: 'DRN-100' } })
-    fireEvent.change(screen.getByLabelText('Current Hub'), {
+    expect(screen.queryByLabelText(/Drone id/)).toBeNull()
+    expect(screen.queryByLabelText('Battery (%)')).toBeNull()
+    expect(screen.getByText(/generated automatically and the battery starts at 100%/)).toBeVisible()
+    fireEvent.change(screen.getByLabelText('Initial Hub'), {
       target: { value: 'hub-forum-gdansk' },
     })
-    fireEvent.change(screen.getByLabelText('Battery (%)'), { target: { value: '60' } })
     fireEvent.click(button('Create drone'))
 
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1))
     const [url, init] = fetchMock.mock.calls[0]
     expect(String(url)).toMatch(/\/api\/drones$/)
-    expect(JSON.parse(String(init?.body))).toEqual({
-      id: 'DRN-100',
-      hub_id: 'hub-forum-gdansk',
-      battery_pct: 60,
-    })
+    expect(JSON.parse(String(init?.body))).toEqual({ hub_id: 'hub-forum-gdansk' })
   })
 
-  it('shows the backend message when the Hub is full or the id is taken', async () => {
+  it('shows the backend message when the Hub is full', async () => {
     stubFetch(() =>
       Promise.resolve(
         jsonResponse({ detail: { code: 'HUB_FULL', message: "Hub 'x' has no free place" } }, 409),
@@ -121,7 +118,6 @@ describe('DronesManager', () => {
     const { onChanged } = renderManager()
 
     fireEvent.click(button('New drone'))
-    fireEvent.change(screen.getByLabelText(/Drone id/), { target: { value: 'DRN-100' } })
     fireEvent.click(button('Create drone'))
 
     expect(await screen.findByRole('alert')).toHaveTextContent("Hub 'x' has no free place")
@@ -129,17 +125,14 @@ describe('DronesManager', () => {
     expect(screen.getByRole('form', { name: 'Create drone' })).toBeInTheDocument()
   })
 
-  it('checks battery and id locally without calling the backend', () => {
+  it('still checks the battery locally when editing, without calling the backend', () => {
     const fetchMock = stubFetch(() => Promise.resolve(jsonResponse({})))
     renderManager()
 
-    fireEvent.click(button('New drone'))
-    fireEvent.click(button('Create drone'))
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter a drone id')
-
-    fireEvent.change(screen.getByLabelText(/Drone id/), { target: { value: 'DRN-100' } })
+    fireEvent.click(button('Edit drone DRN-001'))
     fireEvent.change(screen.getByLabelText('Battery (%)'), { target: { value: '101' } })
-    fireEvent.click(button('Create drone'))
+    fireEvent.click(button('Save changes'))
+
     expect(screen.getByRole('alert')).toHaveTextContent('whole number from 0 to 100')
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -150,7 +143,6 @@ describe('DronesManager', () => {
     renderManager()
 
     fireEvent.click(button('New drone'))
-    fireEvent.change(screen.getByLabelText(/Drone id/), { target: { value: 'DRN-100' } })
     const submit = button('Create drone')
     fireEvent.click(submit)
     fireEvent.click(submit)

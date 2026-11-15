@@ -93,22 +93,17 @@ export async function getDrones(signal?: AbortSignal): Promise<Drone[]> {
   return drones
 }
 
-/** Fields the administrator provides for a new drone (Feature 011 `POST /api/drones`). */
+/** The only field the operator provides for a new drone (Feature 021D `POST /api/drones`). */
 export interface DroneInput {
-  id: string
   hubId: string
-  batteryPct: number
 }
 
-/** Creates an IDLE drone docked at the given Hub; the backend rejects a duplicate id or full Hub. */
+/**
+ * Creates an IDLE drone at the given Hub. The backend generates the id and sets the battery to
+ * 100 %; it refuses an unknown or full Hub.
+ */
 export async function createDrone(input: DroneInput): Promise<Drone> {
-  return toDrone(
-    await apiSend<unknown>('POST', '/api/drones', {
-      id: input.id,
-      hub_id: input.hubId,
-      battery_pct: input.batteryPct,
-    }),
-  )
+  return toDrone(await apiSend<unknown>('POST', '/api/drones', { hub_id: input.hubId }))
 }
 
 /** The administrative changes the backend allows (`PATCH`); status is only IDLE or MAINTENANCE. */
