@@ -32,14 +32,15 @@ for PowerShell on Windows; start Docker Desktop first.
 ```powershell
 git clone https://github.com/s27455/SkyFleet.git
 cd SkyFleet
-Copy-Item .env.example .env      # then edit .env (next step)
+Copy-Item .env.example .env      # Compose reads .env (not .env.example)
 docker compose up --build
 ```
 
-1. **Mapbox token:** in `.env`, set `VITE_MAPBOX_TOKEN=pk.…`, a **public** token from a free
-   account at [mapbox.com](https://account.mapbox.com) (Tokens page). Without it everything works except
-   the map, which shows "Map unavailable". The token is built into the frontend, so rebuild after
-   changing it (`docker compose up --build`).
+1. **Mapbox token:** `.env.example` already includes a public demo Mapbox token (`pk.…`), so after
+   copying it to `.env` the map works with no further setup. You may replace `VITE_MAPBOX_TOKEN` in
+   `.env` with your own **public** token from a free account at
+   [mapbox.com](https://account.mapbox.com) (never a secret `sk.` token). The token is built into
+   the frontend, so rebuild after changing it (`docker compose up --build`).
 2. **First start:** the first build downloads base images and dependencies and can take several
    minutes. Compose then starts PostgreSQL, runs the one-shot `migrate` service (Alembic migrations,
    then the Hubs, drones and 11 sample orders; existing rows are never changed), and starts the API,
@@ -50,7 +51,8 @@ docker compose up --build
    PostgreSQL volume `skyfleet-db`; start again with `docker compose up` (add `--build` after pulling
    code changes). Only `docker compose down -v` deletes the data.
 
-**AI Copilot (optional):** off by default, and the app is fully usable without it. To enable it, set
+**AI Copilot (optional):** off by default, and the app is fully usable without it. The repository
+contains no Anthropic API key or other private credentials; you supply your own. To enable it, set
 `SKYFLEET_AI_ENABLED=true`, `ANTHROPIC_API_KEY` and `SKYFLEET_AI_ACCESS_TOKEN` (at least 32
 characters, typed into the Copilot panel) in `.env`, then `docker compose up -d api`. These values go to
 the API container only, never into the frontend.
@@ -61,7 +63,7 @@ the API container only, never into the frontend.
 |---|---|
 | `port is already allocated` / bind error on 5173, 8000 or 55432 | Stop whatever uses the port (e.g. a natively running SkyFleet), or set `FRONTEND_PORT`, `API_PORT` or `DB_PORT` in `.env` and run `docker compose up --build` |
 | `error during connect` / `docker daemon is not running` | Start Docker Desktop and wait until it reports "Engine running" |
-| Map shows "Map unavailable" | `VITE_MAPBOX_TOKEN` is missing or invalid in `.env`; fix it, then `docker compose up --build` |
+| Map shows "Map unavailable" or stays blank | `.env` is missing (copy `.env.example`) or `VITE_MAPBOX_TOKEN` in it is empty or invalid; fix it, then `docker compose up --build` |
 | Dashboard says the backend is unreachable | Check `docker compose ps` (api should be running) and `docker compose logs api` |
 | `migrate` exited with an error, so api and worker did not start | `docker compose logs migrate` shows the cause; fix it and run `docker compose up` again |
 | "The simulation worker is not running…" | Check `docker compose ps` and `docker compose logs worker`. In Docker the worker starts automatically; ignore the native `uv run` hint in that message |

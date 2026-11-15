@@ -573,8 +573,10 @@ export function MapView({
       <MapMessage role="alert">
         <p className="font-medium text-fg">Map unavailable</p>
         <p className="mt-1">
-          Set <code className="font-mono">VITE_MAPBOX_TOKEN</code> in{' '}
-          <code className="font-mono">frontend/.env.local</code> and restart the dev server.
+          Set a public <code className="font-mono">VITE_MAPBOX_TOKEN</code>. Docker: in the root{' '}
+          <code className="font-mono">.env</code>, then run{' '}
+          <code className="font-mono">docker compose up --build</code>. Native development: in{' '}
+          <code className="font-mono">frontend/.env.local</code>, then restart the dev server.
         </p>
       </MapMessage>
     )

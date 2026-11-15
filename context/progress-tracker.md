@@ -345,8 +345,9 @@ files, root `.env.example`, README "Quick Start — Docker". `api` and `worker` 
 `migrate` succeeds, so migrations never run twice. AI stays off unless configured. Verified locally
 in an isolated Compose project on alternate ports: clean build, migrations and seeds, API, CORS, worker
 heartbeat, frontend bundle pointing at the API, AI off, a 2 s clean shutdown, and data plus
-idempotent seeds after a restart. Not yet verified: a fresh clone on a second machine, and the map
-in a browser with a Mapbox token.
+idempotent seeds after a restart. The user confirmed a working deployment on a second Windows
+computer. The root `.env.example` ships a public demo Mapbox token, and the "Map unavailable" message
+covers both Docker and native setup.
 
 ### Objectives
 
@@ -357,7 +358,7 @@ in a browser with a Mapbox token.
 - [ ] Configure environment variables and secrets.
 - [ ] Ensure the simulation worker runs independently in the deployed environment.
 - [ ] Verify the public application URL.
-- [x] Prepare a Docker-based local setup if appropriate. (Docker Compose full stack; fresh-clone test on a second machine pending.)
+- [x] Prepare a Docker-based local setup if appropriate. (Docker Compose full stack; confirmed by the user on a second Windows computer.)
 - [ ] Complete the README.
 - [ ] Document the architecture and technology choices.
 - [ ] Document how AI was used during development.
