@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     order_sim_max_interval_seconds: float = Field(default=30.0, gt=0)
     order_sim_max_outstanding_orders: int = Field(default=20, ge=1)
 
+    # Automatic random incidents (Feature 021D-2), used only while Random Incidents is ON: one
+    # attempt after a random pause between the min and max seconds (real time), at most one
+    # incident per attempt, and a random cooldown per incident type after a SUCCESSFUL trigger.
+    # The weights bias which type is tried first (a drone failure grounds a drone, so it is rarer).
+    incident_sim_min_interval_seconds: float = Field(default=180.0, gt=0)
+    incident_sim_max_interval_seconds: float = Field(default=300.0, gt=0)
+    incident_sim_cooldown_min_seconds: float = Field(default=120.0, ge=0)
+    incident_sim_cooldown_max_seconds: float = Field(default=180.0, ge=0)
+    incident_sim_weight_lpr: float = Field(default=0.4, ge=0)
+    incident_sim_weight_recipient: float = Field(default=0.4, ge=0)
+    incident_sim_weight_failure: float = Field(default=0.2, ge=0)
+
     # Feature 017A: how long a DELIVERED order stays in the active operational views, counted from
     # its persisted delivery time. The order itself is never deleted.
     order_delivered_visibility_seconds: float = Field(default=120.0, gt=0)
@@ -95,6 +107,23 @@ class Settings(BaseSettings):
             raise ValueError(
                 "ORDER_SIM_MAX_INTERVAL_SECONDS must not be below ORDER_SIM_MIN_INTERVAL_SECONDS"
             )
+        if self.incident_sim_max_interval_seconds < self.incident_sim_min_interval_seconds:
+            raise ValueError(
+                "INCIDENT_SIM_MAX_INTERVAL_SECONDS must not be below "
+                "INCIDENT_SIM_MIN_INTERVAL_SECONDS"
+            )
+        if self.incident_sim_cooldown_max_seconds < self.incident_sim_cooldown_min_seconds:
+            raise ValueError(
+                "INCIDENT_SIM_COOLDOWN_MAX_SECONDS must not be below "
+                "INCIDENT_SIM_COOLDOWN_MIN_SECONDS"
+            )
+        if (
+            self.incident_sim_weight_lpr
+            + self.incident_sim_weight_recipient
+            + self.incident_sim_weight_failure
+            <= 0
+        ):
+            raise ValueError("At least one INCIDENT_SIM_WEIGHT_* must be above zero")
         return self
 
     @field_validator("cors_origins", mode="before")

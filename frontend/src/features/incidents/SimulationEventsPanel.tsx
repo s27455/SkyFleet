@@ -14,6 +14,9 @@ import type { Order } from '../../types/order'
 import { useAction } from '../management/useAction'
 import { CancelConfirmation } from '../orders/CancelOrderAction'
 import { ORDER_STATUS_DISPLAY, isCancellable } from '../orders/orderStatus'
+import type { RandomIncidentsStatus } from '../../types/randomIncidents'
+import type { PolledResource } from '../data/usePolledResource'
+import { RandomIncidentsControl } from './RandomIncidentsControl'
 
 function Icon({ children }: { children: ReactNode }) {
   return (
@@ -111,6 +114,11 @@ export interface SimulationEventsPanelProps {
    * the backend, so a menu around this panel does not close and lose it by accident.
    */
   onPendingChange?: (pending: boolean) => void
+  /**
+   * The shared poll of the Random Incidents state (Feature 021D-2), read once by `App`. Without it
+   * the switch is not shown (the panel then offers the manual scenarios only).
+   */
+  randomIncidents?: PolledResource<RandomIncidentsStatus>
 }
 
 /**
@@ -119,8 +127,8 @@ export interface SimulationEventsPanelProps {
  * (Feature 018C) asks the backend to fail one eligible flying drone; the backend chooses it.
  * "Recipient unavailable" (Feature 018D) marks one delivery on its way; the failure is pending until
  * the drone reaches the destination. "LPR helicopter" (Feature 018E) starts one helicopter pass
- * with a moving safety zone; only one runs at a time. The Random incidents switch is disabled for the same reason and does not claim that
- * incidents are being produced.
+ * with a moving safety zone; only one runs at a time. The Random incidents switch (Feature 021D-2) shows the backend's state and never promises an
+ * incident: the worker only makes attempts.
  */
 export function SimulationEventsPanel({
   selectedOrder = null,
@@ -134,6 +142,7 @@ export function SimulationEventsPanel({
   rainWarningActive = false,
   onRainWarningChanged,
   onPendingChange,
+  randomIncidents,
 }: SimulationEventsPanelProps) {
   const cancellation = useAction()
   const rainAction = useAction()
@@ -416,23 +425,7 @@ export function SimulationEventsPanel({
           Order {cancelled} cancelled.
         </p>
       )}
-      <div className="mt-3 flex items-start gap-2 text-xs text-fg-muted">
-        <button
-          type="button"
-          role="switch"
-          aria-checked="false"
-          aria-describedby="random-incidents-note"
-          disabled
-          className="mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-line px-0.5 opacity-60 disabled:cursor-not-allowed"
-        >
-          <span className="sr-only">Random incidents</span>
-          <span aria-hidden="true" className="size-3.5 rounded-full bg-fg-muted" />
-        </button>
-        <div>
-          <p className="text-sm text-fg">Random incidents</p>
-          <p id="random-incidents-note">Available when incident scenarios are enabled.</p>
-        </div>
-      </div>
+      {randomIncidents && <RandomIncidentsControl resource={randomIncidents} />}
     </section>
   )
 }

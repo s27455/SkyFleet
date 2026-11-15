@@ -56,6 +56,11 @@ Keep it a small contract, not a framework.
    worker, no client-side state machine), calling the same services. Moderate demo-friendly
    proposal, not activated: at most one random incident per 3 to 5 minutes, a 2 to 3 minute
    cooldown per incident type, never more than one active incident per mission.
+   *Update (Feature 021D-2):* implemented and operator-switched (default OFF, reset at worker
+   start); see `docs/features/021D-2-automatic-random-incidents.md` §18. It uses 3 to 5 minute
+   attempts, a 2 to 3 minute per-type cooldown after a successful trigger, and a 50% fleet guard
+   for drone failures. Overlap is enforced for automatic drone failures only, on the flight
+   columns (recall, handover), not with the active-incident row proposed in point 3.
 6. **Decide first, then build:** parcel custody, battery and route feasibility, and the order,
    mission and drone state machines. Cancellation must not erase history or resolve a drone
    failure; order, mission and drone states stay logically independent and consistent.

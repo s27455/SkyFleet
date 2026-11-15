@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../../test/hubFixtures'
 import { ORDER_RESPONSES } from '../../test/orderFixtures'
 import type { Order, OrderStatus } from '../../types/order'
+import type { RandomIncidentsStatus } from '../../types/randomIncidents'
+import type { PolledResource } from '../data/usePolledResource'
 import { SimulationEventsPanel } from './SimulationEventsPanel'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -22,6 +24,23 @@ const order = (status: OrderStatus): Order => ({
   updatedAt: '2026-11-11T21:53:08Z',
 })
 
+const OFF_STATUS: RandomIncidentsStatus = {
+  enabled: false,
+  workerRunning: true,
+  lastCheckAt: null,
+  lastOutcome: null,
+}
+
+function readyResource(data: RandomIncidentsStatus): PolledResource<RandomIncidentsStatus> {
+  return {
+    state: { status: 'ready', data },
+    stale: false,
+    receivedAt: null,
+    retry: vi.fn(),
+    refresh: vi.fn(),
+  }
+}
+
 const cancelButton = () => screen.getByRole('button', { name: /Cancel order/ })
 const confirmation = () => screen.getByRole('group', { name: 'Confirm cancellation' })
 
@@ -35,13 +54,20 @@ describe('SimulationEventsPanel', () => {
     expect(screen.queryByText(/Coming in/)).not.toBeInTheDocument()
   })
 
-  it('shows Random incidents off, disabled and honestly explained', () => {
+  it('shows no Random incidents switch without the shared status (manual scenarios only)', () => {
     render(<SimulationEventsPanel />)
 
+    expect(screen.queryByRole('switch', { name: 'Random incidents' })).toBeNull()
+    expect(screen.queryByText('Available when incident scenarios are enabled.')).toBeNull()
+  })
+
+  it('shows the real Random incidents switch from the shared status', () => {
+    render(<SimulationEventsPanel randomIncidents={readyResource(OFF_STATUS)} />)
+
     const toggle = screen.getByRole('switch', { name: 'Random incidents' })
-    expect(toggle).toBeDisabled()
+    expect(toggle).toBeEnabled() // no longer the disabled placeholder
     expect(toggle).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByText('Available when incident scenarios are enabled.')).toBeInTheDocument()
+    expect(screen.queryByText('Available when incident scenarios are enabled.')).toBeNull()
   })
 
   it('keeps Cancel order disabled, and calls nothing, without a selected order', () => {

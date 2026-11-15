@@ -17,12 +17,13 @@ handover, or the landing decision) the worker has not reached yet. Locks are tak
 order (flight, mission, order, drone); a candidate that changed in the meantime is skipped.
 """
 
+import math
 import random
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -64,6 +65,14 @@ class FailureStage(StrEnum):
     RELOCATION = "RELOCATION"  # an empty hub-to-hub relocation flight (019A)
 
 
+class FleetGuardError(Exception):
+    """An AUTOMATIC failure was refused because it would leave too few drones operational."""
+
+
+# Serialises automatic failures on PostgreSQL (see `_enforce_fleet_guard`); the number is arbitrary.
+_AUTOMATIC_FAILURE_LOCK_KEY = 0x5F1EE701
+
+
 class NoEligibleTargetError(Exception):
     def __init__(
         self, message: str = "No drone is flying a mission that a failure could interrupt"
@@ -80,8 +89,24 @@ class FailureResult:
     landing_position: tuple[float, float]
 
 
-def eligible_mission_ids(session: Session) -> list[str]:
-    """Mission ids of the flights that look eligible, in id order (rechecked under locks)."""
+def has_other_incident(flight: MissionFlight) -> bool:
+    """A recall, a pending or failed handover: another incident already affects this flight.
+
+    Only AUTOMATIC failures respect it (Feature 021D-2); a manual failure is allowed as before.
+    """
+    return (
+        flight.recalled_at is not None
+        or flight.recipient_unavailable_at is not None
+        or flight.handover_failed_at is not None
+    )
+
+
+def eligible_mission_ids(session: Session, *, exclude_incidents: bool = False) -> list[str]:
+    """Mission ids of the flights that look eligible, in id order (rechecked under locks).
+
+    `exclude_incidents` additionally skips flights another incident already affects (automatic
+    failures only; the manual path leaves it off).
+    """
     statement = (
         select(MissionFlight.mission_id)
         .join(Mission, Mission.id == MissionFlight.mission_id)
@@ -94,7 +119,63 @@ def eligible_mission_ids(session: Session) -> list[str]:
         )
         .order_by(MissionFlight.mission_id)
     )
+    if exclude_incidents:
+        statement = statement.where(
+            MissionFlight.recalled_at.is_(None),
+            MissionFlight.recipient_unavailable_at.is_(None),
+            MissionFlight.handover_failed_at.is_(None),
+        )
     return list(session.scalars(statement))
+
+
+def fleet_availability(session: Session) -> tuple[int, int]:
+    """(total drones, unavailable drones) as the automatic failure guard counts them.
+
+    Unavailable: in MAINTENANCE (a failed or grounded drone, or one an operator took out of
+    service: the status cannot tell them apart, so all count), or still in the short emergency
+    approach of a failure, when the drone is IN_FLIGHT but will be grounded in seconds.
+    """
+    approaching = (
+        select(Mission.drone_id)
+        .join(MissionFlight, MissionFlight.mission_id == Mission.id)
+        .where(MissionFlight.phase == FlightPhase.EMERGENCY_APPROACH.value)
+    )
+    total = session.scalar(select(func.count()).select_from(Drone)) or 0
+    unavailable = (
+        session.scalar(
+            select(func.count())
+            .select_from(Drone)
+            .where(or_(Drone.status == DroneStatus.MAINTENANCE.value, Drone.id.in_(approaching)))
+        )
+        or 0
+    )
+    return total, unavailable
+
+
+def _enforce_fleet_guard(session: Session) -> None:
+    """Refuse an automatic failure that would leave fewer than ceil(total / 2) drones operational.
+
+    The target is IN_FLIGHT and not failed, so it is operational now and the projection subtracts
+    one. Automatic failures are serialised here on PostgreSQL by a transaction-scoped advisory lock
+    taken before the count and held until the failure commits (or rolls back), so two overlapping
+    automatic attempts cannot both pass the count (the second one counts the first one's flight,
+    already in EMERGENCY_APPROACH). The lock is taken after the flight and drone locks; nothing
+    holding it waits for any other lock, so it cannot deadlock. SQLite has one writer. A MANUAL
+    failure never takes this lock and is never refused, so a manual failure racing an automatic one
+    can leave one drone fewer than the guard alone would allow.
+    """
+    if session.get_bind().dialect.name == "postgresql":
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"), {"key": _AUTOMATIC_FAILURE_LOCK_KEY}
+        )
+    total, unavailable = fleet_availability(session)
+    needed = math.ceil(total / 2)
+    operational_after = total - unavailable - 1
+    if operational_after < needed:
+        raise FleetGuardError(
+            f"Failing another drone would leave {max(operational_after, 0)} of {total} drones "
+            f"operational; at least {needed} must remain"
+        )
 
 
 def trigger_drone_failure(
@@ -104,21 +185,33 @@ def trigger_drone_failure(
     *,
     origin: EventOrigin = EventOrigin.MANUAL,
     rng: random.Random | None = None,
+    automatic_safety: bool = False,
 ) -> FailureResult:
-    """Fail one eligible flying drone; raises `NoEligibleTargetError`, changing nothing, if none."""
+    """Fail one eligible flying drone; raises `NoEligibleTargetError`, changing nothing, if none.
+
+    `automatic_safety` (Feature 021D-2, used by the random incident scheduler only) adds two rules
+    that the manual path does not have: a flight another incident already affects is not a
+    candidate, and the fleet guard applies (`FleetGuardError`, changing nothing). Both are checked
+    again under the flight, mission, order and drone locks.
+    """
     chooser = rng or _rng
-    candidates = eligible_mission_ids(session)
+    candidates = eligible_mission_ids(session, exclude_incidents=automatic_safety)
     session.rollback()  # end the read transaction; each candidate is rechecked under its locks
     chooser.shuffle(candidates)
     for mission_id in candidates:
-        result = _fail_flight(session, mission_id, now, settings, origin)
+        result = _fail_flight(session, mission_id, now, settings, origin, automatic_safety)
         if result is not None:
             return result
     raise NoEligibleTargetError
 
 
 def _fail_flight(
-    session: Session, mission_id: str, now: datetime, settings: Settings, origin: EventOrigin
+    session: Session,
+    mission_id: str,
+    now: datetime,
+    settings: Settings,
+    origin: EventOrigin,
+    automatic_safety: bool = False,
 ) -> FailureResult | None:
     try:
         flight = session.scalars(
@@ -146,9 +239,12 @@ def _fail_flight(
             or flight.failed_at is not None
             or mission.status != MissionStatus.IN_FLIGHT.value
             or drone.status != DroneStatus.IN_FLIGHT.value
+            or (automatic_safety and has_other_incident(flight))
         ):
             session.rollback()
             return None  # it changed since the candidate list was read
+        if automatic_safety:
+            _enforce_fleet_guard(session)
 
         started = as_utc(flight.started_at)
         elapsed = max((now - started).total_seconds(), 0.0)

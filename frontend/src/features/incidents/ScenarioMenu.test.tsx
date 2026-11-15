@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { jsonResponse } from '../../test/hubFixtures'
 import type { Order } from '../../types/order'
+import type { RandomIncidentsStatus } from '../../types/randomIncidents'
+import type { PolledResource } from '../data/usePolledResource'
 import { ScenarioMenu } from './ScenarioMenu'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -19,6 +21,26 @@ const ORDER: Order = {
   deliveryFailedAt: null,
   createdAt: '2026-11-11T21:53:08Z',
   updatedAt: '2026-11-11T21:53:08Z',
+}
+
+const STATUS_ON = {
+  enabled: true,
+  worker_running: true,
+  last_check_at: null,
+  last_outcome: null,
+}
+
+function readyStatus(enabled: boolean): PolledResource<RandomIncidentsStatus> {
+  return {
+    state: {
+      status: 'ready',
+      data: { enabled, workerRunning: true, lastCheckAt: null, lastOutcome: null },
+    },
+    stale: false,
+    receivedAt: null,
+    retry: vi.fn(),
+    refresh: vi.fn(),
+  }
 }
 
 const trigger = () => screen.getByRole('button', { name: /Scenarios/ })
@@ -128,12 +150,51 @@ describe('ScenarioMenu', () => {
     expect(String(fetchMock.mock.calls[0][0])).toMatch(/rain-warning\/activate$/)
   })
 
-  it('keeps the disabled Random incidents switch unchanged', () => {
-    render(<ScenarioMenu />)
+  it('shows the Random incidents switch inside the menu when the status is provided', () => {
+    render(<ScenarioMenu randomIncidents={readyStatus(false)} />)
+
+    expect(menu()).toContainElement(
+      screen.getByRole('switch', { name: 'Random incidents', hidden: true }),
+    )
     fireEvent.click(trigger())
 
-    expect(screen.getByRole('switch', { name: 'Random incidents' })).toBeDisabled()
-    expect(screen.getByText('Available when incident scenarios are enabled.')).toBeVisible()
+    const toggle = screen.getByRole('switch', { name: 'Random incidents' })
+    expect(toggle).toBeEnabled()
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(screen.queryByText('Available when incident scenarios are enabled.')).toBeNull()
+  })
+
+  it('shows the switch as ON when the backend says so, and keeps the manual scenarios', () => {
+    render(<ScenarioMenu randomIncidents={readyStatus(true)} />)
+    fireEvent.click(trigger())
+
+    expect(screen.getByRole('switch', { name: 'Random incidents' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: /LPR helicopter/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Activate Rain Warning/ })).toBeEnabled()
+  })
+
+  it('toggles Random incidents through the API and keeps the menu open', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve(jsonResponse({ ...STATUS_ON })),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const resource = readyStatus(false)
+    render(<ScenarioMenu randomIncidents={resource} />)
+    fireEvent.click(trigger())
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Random incidents' }))
+
+    await waitFor(() => expect(resource.refresh).toHaveBeenCalledTimes(1))
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/incidents\/random\/enable$/)
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true')
+    // The switch still follows the status it was given, not the click.
+    expect(screen.getByRole('switch', { name: 'Random incidents' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
   })
 
   it('marks the button while a rain warning is active', () => {

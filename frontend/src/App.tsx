@@ -39,6 +39,7 @@ import { ManagementPanel } from './features/management/ManagementPanel'
 import { OrdersManager } from './features/management/OrdersManager'
 import { useMissions } from './features/missions/useMissions'
 import { ScenarioMenu } from './features/incidents/ScenarioMenu'
+import { useRandomIncidents } from './features/incidents/useRandomIncidents'
 import { OrderSimulationPanel } from './features/orderSimulation/OrderSimulationPanel'
 import { OrderDetailPanel } from './features/orders/OrderDetailPanel'
 import { OrdersList } from './features/orders/OrdersList'
@@ -180,6 +181,7 @@ function App() {
   const canMarkRecipient = useMemo(() => flights.some(isRecipientTargetable), [flights])
   // The LPR helicopter (Feature 018E): the backend's scenario and which drones wait for it.
   const lprResource = useLpr()
+  const randomIncidents = useRandomIncidents() // one poll, read by the Scenarios menu
   const orderSimulation = useOrderSimulation() // one poll, shared by the header switch and Management
   const rainResource = useRainWarning()
   const rainWarningActive = rainResource.state.status === 'ready' && rainResource.state.data.active
@@ -365,6 +367,7 @@ function App() {
               onLprTriggered={refreshAfterIncident}
               rainWarningActive={rainWarningActive}
               onRainWarningChanged={refreshAfterIncident}
+              randomIncidents={randomIncidents}
             />
             <button
               type="button"

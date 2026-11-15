@@ -176,6 +176,16 @@ function stubBackend(
           jsonResponse({ active: false, activated_at: null, cleared_at: null, origin: null }),
         )
       }
+      if (url.endsWith('/api/incidents/random')) {
+        return Promise.resolve(
+          jsonResponse({
+            enabled: false,
+            worker_running: true,
+            last_check_at: null,
+            last_outcome: null,
+          }),
+        )
+      }
       return url.endsWith('/api/drones') ? dronesCalls() : hubsCalls()
     }),
   )
@@ -1566,5 +1576,91 @@ describe('App operations panel and header controls (Feature 021C)', () => {
     expect(eventReads.map(([url]) => String(url))).toEqual(
       expect.arrayContaining([expect.stringContaining('/api/events?order_id=ORD-004')]),
     )
+  })
+})
+
+describe('App Random incidents (Feature 021D-2)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const statusReads = () =>
+    vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/api/incidents/random'))
+
+  it('shows the backend state of Random incidents in the Scenarios menu, OFF by default', async () => {
+    stubBackend()
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Scenarios/ }))
+
+    const toggle = await screen.findByRole('switch', { name: 'Random incidents' })
+    expect(toggle).toBeEnabled()
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    expect(screen.queryByText('Available when incident scenarios are enabled.')).toBeNull()
+  })
+
+  it('polls the Random incidents status once, whether or not the menu is open', async () => {
+    const previous = POLL_INTERVALS_MS.fleet
+    POLL_INTERVALS_MS.fleet = 60_000 // no scheduled poll can fall inside this test
+    try {
+      stubBackend()
+      render(<App />)
+      await screen.findByRole('button', { name: /Scenarios/ })
+      await waitFor(() => expect(statusReads()).toHaveLength(1))
+
+      fireEvent.click(screen.getByRole('button', { name: /Scenarios/ }))
+      await screen.findByRole('switch', { name: 'Random incidents' })
+      fireEvent.click(screen.getByRole('button', { name: /Scenarios/ }))
+      fireEvent.click(screen.getByRole('button', { name: /Scenarios/ }))
+
+      expect(statusReads()).toHaveLength(1) // mounting or opening the menu adds no poll
+    } finally {
+      POLL_INTERVALS_MS.fleet = previous
+    }
+  })
+
+  it('enables Random incidents through the API and then shows what the server reports', async () => {
+    stubBackend()
+    const backend = globalThis.fetch as unknown as (url: string) => Promise<Response>
+    const server = { enabled: false }
+    const status = () => ({
+      enabled: server.enabled,
+      worker_running: true,
+      last_check_at: null,
+      last_outcome: null,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.endsWith('/api/incidents/random/enable')) {
+          server.enabled = true
+          return Promise.resolve(jsonResponse(status()))
+        }
+        if (url.endsWith('/api/incidents/random')) return Promise.resolve(jsonResponse(status()))
+        return backend(url)
+      }),
+    )
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: /Scenarios/ }))
+
+    fireEvent.click(await screen.findByRole('switch', { name: 'Random incidents' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Random incidents' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    )
+  })
+
+  it('keeps the manual scenarios working next to the new switch', async () => {
+    stubBackend()
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: /Scenarios/ }))
+
+    expect(await screen.findByRole('button', { name: /LPR helicopter/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /Activate Rain Warning/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: /Drone failure/ })).toBeVisible()
   })
 })

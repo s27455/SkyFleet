@@ -13,6 +13,11 @@ also charges docked drones below 100% (Feature 014D), whatever the dispatch mode
 It owns the automatic order generation loop too (Feature 015B), switched by its own Order Simulation
 mode: reset to OFF at startup, and while ON one order is created after each random pause. It is
 independent of the dispatch mode and of charging and flights.
+
+Random Incidents (Feature 021D-2) is a third independent mode with its own persisted state: reset
+to OFF at startup, and while ON the worker makes one attempt after each random real-time pause
+(`app.simulation.incident_scheduler`), triggering at most one incident through the existing
+incident services. It never stops the loop or the flight updates.
 """
 
 import logging
@@ -24,8 +29,9 @@ from app.config import Settings, get_settings
 from app.db.session import get_engine
 from app.dispatch import auto
 from app.orders import simulation as order_simulation
-from app.simulation import clock, engine
+from app.simulation import clock, engine, random_incidents
 from app.simulation.charging import ChargingState, charge_step
+from app.simulation.incident_scheduler import IncidentScheduler
 
 logger = logging.getLogger("skyfleet.worker")
 
@@ -43,6 +49,8 @@ def run_forever(settings: Settings) -> None:
     next_dispatch_at = 0.0
     orders_reset = False  # no order generation until the mode has been reset to OFF
     order_schedule = order_simulation.GenerationSchedule(settings)
+    incidents_reset = False  # no random incident until the mode has been reset to OFF
+    incident_scheduler = IncidentScheduler(settings)
     while True:
         tick_number += 1
         run_tick(tick_number)
@@ -78,6 +86,17 @@ def run_forever(settings: Settings) -> None:
                 order_simulation.run_generation_step(factory, settings, clock.utcnow())
         except Exception:  # order generation must never take the worker down
             logger.exception("Order generation step failed")
+
+        try:  # random incidents: their own mode, schedule, cooldowns and failure handling
+            if not incidents_reset:
+                with factory() as session:
+                    random_incidents.reset_to_off(session, clock.utcnow())
+                incidents_reset = True
+                logger.info("Random incidents are OFF")
+            elif incident_scheduler.poll(random_incidents.is_enabled(factory), time.monotonic()):
+                incident_scheduler.run_step(factory, clock.utcnow(), time.monotonic())
+        except Exception:  # incidents must never take the worker down
+            logger.exception("Random incident step failed")
         time.sleep(settings.sim_tick_seconds)
 
 

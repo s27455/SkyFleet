@@ -11,10 +11,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.errors import worker_unavailable
 from app.api.routes.missions import SettingsDep
 from app.db.session import get_session
 from app.events.models import EventOrigin
-from app.simulation import clock, lpr
+from app.simulation import clock, lpr, random_incidents
+from app.simulation import service as simulation_service
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import NoEligibleTargetError, trigger_drone_failure
 from app.simulation.models import LprScenario
@@ -22,6 +24,7 @@ from app.simulation.schemas import (
     DroneFailureResponse,
     LprScenarioResponse,
     LprStatusResponse,
+    RandomIncidentsStatus,
     RecipientUnavailableResponse,
 )
 from app.weather import service as weather
@@ -143,3 +146,27 @@ def clear_rain_warning(session: SessionDep) -> RainWarningResponse:
     """Allow takeoffs again (idempotent)."""
     status, changed = weather.clear(session, clock.utcnow(), EventOrigin.MANUAL)
     return _rain_response(status, changed)
+
+
+@router.get("/random", response_model=RandomIncidentsStatus)
+def random_incidents_status(session: SessionDep, settings: SettingsDep) -> RandomIncidentsStatus:
+    """The server's actual Random Incidents state (OFF by default) and its last attempt."""
+    return random_incidents.get_status(session, clock.utcnow(), settings)
+
+
+@router.post("/random/enable", response_model=RandomIncidentsStatus)
+def enable_random_incidents(session: SessionDep, settings: SettingsDep) -> RandomIncidentsStatus:
+    """Turn Random Incidents ON (idempotent); refused while no simulation worker is alive.
+
+    No incident follows immediately: the worker starts its first random pause.
+    """
+    try:
+        return random_incidents.enable(session, clock.utcnow(), settings)
+    except simulation_service.WorkerUnavailableError as error:
+        raise worker_unavailable(error) from error
+
+
+@router.post("/random/disable", response_model=RandomIncidentsStatus)
+def disable_random_incidents(session: SessionDep, settings: SettingsDep) -> RandomIncidentsStatus:
+    """Turn Random Incidents OFF (idempotent). An incident already in progress is not undone."""
+    return random_incidents.disable(session, clock.utcnow(), settings)

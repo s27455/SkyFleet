@@ -117,6 +117,18 @@ class LprStatusResponse(BaseModel):
     scenario: LprScenarioResponse | None
 
 
+class RandomIncidentsStatus(BaseModel):
+    """What the server is actually doing, never a client-side assumption (Feature 021D-2)."""
+
+    # True only while the mode is ON and the simulation worker (the loop's owner) is alive.
+    enabled: bool
+    worker_running: bool
+    # The last scheduled attempt and a short summary: an incident triggered, or why not. An attempt
+    # may be skipped, so an incident is never promised for every interval.
+    last_check_at: datetime | None
+    last_outcome: str | None
+
+
 class RelocationReasonCode(StrEnum):
     DRONE_ALREADY_ASSIGNED = "DRONE_ALREADY_ASSIGNED"
     DRONE_NOT_AVAILABLE = "DRONE_NOT_AVAILABLE"

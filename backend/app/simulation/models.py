@@ -12,12 +12,14 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
     Index,
     String,
+    false,
     func,
     text,
 )
@@ -136,6 +138,25 @@ class SimulationHeartbeat(Base):
 
 
 WORKER_HEARTBEAT = "simulation-worker"
+
+RANDOM_INCIDENTS = "random-incidents"
+
+
+class IncidentSchedulerState(Base):
+    """Persisted Random Incidents mode (Feature 021D-2), shared by the API (toggle) and the worker.
+
+    The single row `random-incidents`; a missing row means OFF, and the worker resets it to OFF
+    whenever it starts. It is independent of the Automatic Dispatch and Order Simulation modes. The
+    time and a short summary of the last scheduled attempt are kept here, not a log.
+    """
+
+    __tablename__ = "incident_scheduler_state"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    last_outcome: Mapped[str | None] = mapped_column(String(255), default=None)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class LprStatus(StrEnum):
