@@ -25,7 +25,7 @@ const emergency = (missionId: string, acknowledgedAt: string | null): Flight =>
   }) as unknown as Flight
 
 describe('buildNotices and acknowledgements (Feature 022)', () => {
-  it('keeps an acknowledged emergency in the Events notices: acknowledging only hides the overlay', () => {
+  it('lists every emergency it is given; the app passes only the unacknowledged ones', () => {
     const notices = buildNotices({
       ...NOTICE_BASE,
       emergencies: [emergency('A', '2026-11-15T10:05:00Z'), emergency('B', null)],

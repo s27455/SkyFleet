@@ -3,13 +3,33 @@ import { describe, expect, it, vi } from 'vitest'
 import { ASSIGNED_MISSION } from '../test/flightFixtures'
 import { jsonResponse } from '../test/hubFixtures'
 import { ApiError } from './client'
-import { StartMissionError, getMissions, startMission } from './missions'
+import { StartMissionError, getLiveMissions, getMissions, startMission } from './missions'
 
 function stubFetch(response: () => Promise<Response>) {
   const fetchMock = vi.fn((_url: string, _init?: RequestInit) => response())
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
+
+describe('getLiveMissions', () => {
+  it('getLiveMissions asks only for assigned, flying and emergency missions', async () => {
+    const fetchMock = stubFetch(() => Promise.resolve(jsonResponse([ASSIGNED_MISSION])))
+
+    const missions = await getLiveMissions()
+
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(
+      /\/api\/missions\?status=ASSIGNED&status=IN_FLIGHT&status=EMERGENCY$/,
+    )
+    expect(missions.map((mission) => mission.id)).toEqual([ASSIGNED_MISSION.id])
+  })
+
+  it('getLiveMissions rejects duplicate ids and a non-list answer like getMissions', async () => {
+    stubFetch(() => Promise.resolve(jsonResponse([ASSIGNED_MISSION, ASSIGNED_MISSION])))
+    await expect(getLiveMissions()).rejects.toThrow(/duplicate/)
+    stubFetch(() => Promise.resolve(jsonResponse({ not: 'a list' })))
+    await expect(getLiveMissions()).rejects.toBeInstanceOf(ApiError)
+  })
+})
 
 describe('getMissions', () => {
   it('requests the missions endpoint and maps each mission', async () => {

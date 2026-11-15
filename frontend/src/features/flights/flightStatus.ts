@@ -71,6 +71,20 @@ export const isRelocation = (flight: Flight) => flight.purpose === 'RELOCATION'
 export const isActiveFlight = (flight: Flight) => MOVING_PHASES.includes(flight.phase)
 
 /**
+ * An emergency alert that still needs the operator: the flight ended in an emergency and nobody
+ * acknowledged it. It is acknowledged once the server says so (`emergency.acknowledgedAt`) or once
+ * this page got the server's confirmation (`confirmedMissionIds`), which also covers an older
+ * flights answer that is still on its way. The map overlay and the Events tab use this one rule.
+ */
+export const isUnacknowledgedEmergency = (
+  flight: Flight,
+  confirmedMissionIds: ReadonlySet<string>,
+) =>
+  flight.emergency !== null &&
+  flight.emergency.acknowledgedAt === null &&
+  !confirmedMissionIds.has(flight.missionId)
+
+/**
  * Whether flying markers may glide between snapshots. They must not when the user prefers reduced
  * motion, when the worker stopped updating, or when the latest refresh failed: the data on screen
  * is then the last known and must not be moved on its own.

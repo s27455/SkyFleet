@@ -1,8 +1,9 @@
 """Delivery order endpoints: reads plus administrative create, update and delete."""
 
 from collections.abc import Sequence
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.api.deps import SessionDep, SettingsDep
 from app.common import clock
@@ -44,13 +45,27 @@ def _http_error(error: service.OrderManagementError) -> HTTPException:
 
 
 @router.get("", response_model=list[OrderResponse])
-def list_orders(session: SessionDep, active: bool = False) -> Sequence[DeliveryOrder]:
+def list_orders(
+    session: SessionDep,
+    active: bool = False,
+    limit: Annotated[int | None, Query(ge=1, le=repository.MAX_LIST_LIMIT)] = None,
+) -> Sequence[DeliveryOrder]:
     """All orders (full history), or with `?active=true` only those for the operational views.
 
     The active view hides a `DELIVERED` order once its visibility window has passed (Feature 017A).
+    `limit` keeps only the most recent N orders of the history (still listed oldest first); it
+    cannot be combined with `active`, which is already bounded.
     """
+    if active and limit is not None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "LIMIT_NOT_ALLOWED_WITH_ACTIVE",
+                "message": "limit applies to the full history; active=true is already bounded.",
+            },
+        )
     if not active:
-        return repository.list_orders(session)
+        return repository.list_orders(session, limit=limit)
     return repository.list_active_orders(
         session, clock.utcnow(), get_settings().order_delivered_visibility_seconds
     )

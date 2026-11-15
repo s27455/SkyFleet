@@ -33,6 +33,22 @@ describe('App Start Mission control', () => {
     ).toBeEnabled()
   })
 
+  it('polls only the live missions, never the whole mission history', async () => {
+    stubBackend(okHubs, okDrones, okOrders, { missions: assigned })
+
+    render(<App />)
+    await screen.findByRole('button', { name: 'Order marker ORD-001' })
+
+    const missionUrls = vi
+      .mocked(fetch)
+      .mock.calls.map(([url]) => String(url))
+      .filter((url) => url.includes('/api/missions'))
+    expect(missionUrls.length).toBeGreaterThan(0)
+    for (const url of missionUrls) {
+      expect(url).toMatch(/\/api\/missions\?status=ASSIGNED&status=IN_FLIGHT&status=EMERGENCY$/)
+    }
+  })
+
   it('is not offered for orders and drones without an assigned mission', async () => {
     stubBackend(okHubs, okDrones, okOrders, { missions: assigned })
 

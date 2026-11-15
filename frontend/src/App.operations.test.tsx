@@ -41,6 +41,25 @@ describe('App management area', () => {
     expect(screen.queryByRole('dialog', { name: 'Management' })).not.toBeInTheDocument()
   })
 
+  it('shows only the 200 most recent orders in All, asked of the backend and never the whole history', async () => {
+    const { allOrdersCalls, unexpectedCalls } = stubBackend()
+    render(<App />)
+    await waitFor(() => expect(hubMarkers()).toHaveLength(4))
+    fireEvent.click(screen.getByRole('button', { name: 'Management' }))
+    const dialog = screen.getByRole('dialog', { name: 'Management' })
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'All' }))
+
+    await waitFor(() => expect(allOrdersCalls).toHaveBeenCalled())
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.map(([url]) => String(url))
+        .some((url) => url.endsWith('/api/orders?limit=200')),
+    ).toBe(true)
+    expect(unexpectedCalls).toEqual([])
+  })
+
   it('shows the Order Simulation controls and refreshes the orders after Generate One Order', async () => {
     const { ordersCalls } = stubBackend()
     render(<App />)

@@ -6,13 +6,14 @@ import { DroneDetailPanel } from './features/drones/DroneDetailPanel'
 import { DroneInspector } from './features/drones/DroneInspector'
 import { resolveInspectorData } from './features/drones/inspectorData'
 import { useDrones } from './features/drones/useDrones'
-import { isActiveFlight } from './features/flights/flightStatus'
+import { isActiveFlight, isUnacknowledgedEmergency } from './features/flights/flightStatus'
 import { useLpr } from './features/lpr/useLpr'
 import { RainWarningBanner } from './features/weather/RainWarningBanner'
 import { TakeoffsSuspendedProvider } from './features/weather/TakeoffGate'
 import { useRainWarning } from './features/weather/useRainWarning'
 import { LiveDataNotices } from './features/flights/LiveDataNotices'
 import { useFlights } from './features/flights/useFlights'
+import { useEmergencyAcknowledgements } from './features/flights/useEmergencyAcknowledgements'
 import { useFlightView } from './features/flights/useFlightView'
 import { HubDetailPanel } from './features/hubs/HubDetailPanel'
 import { useHubs } from './features/hubs/useHubs'
@@ -215,10 +216,16 @@ function App() {
       },
     })
 
+  // Emergency alerts are acknowledged once; the map overlay and the Events tab share that state, so
+  // an acknowledged alert leaves both and does not come back with a later poll.
+  const acknowledgements = useEmergencyAcknowledgements(flightsResource.refresh)
+  const confirmedEmergencies = acknowledgements.confirmed
   const notices = useMemo(
     () =>
       buildNotices({
-        emergencies: flights.filter((flight) => flight.emergency),
+        emergencies: flights.filter((flight) =>
+          isUnacknowledgedEmergency(flight, confirmedEmergencies),
+        ),
         rainWarningActive,
         lprActive: lprScenario !== null,
         flightsUnavailable: flightsResource.state.status === 'error',
@@ -228,6 +235,7 @@ function App() {
       }),
     [
       flights,
+      confirmedEmergencies,
       rainWarningActive,
       lprScenario,
       flightsResource.state.status,
@@ -327,6 +335,7 @@ function App() {
             <LiveDataNotices
               flights={flightsResource}
               missions={missionsResource}
+              acknowledgements={acknowledgements}
               fleetStale={dronesResource.stale || ordersResource.stale}
               onRefreshFleet={() => {
                 refreshDrones()

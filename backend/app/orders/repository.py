@@ -19,10 +19,25 @@ _TERMINAL_STATUSES = [
 ]
 
 
-def list_orders(session: Session) -> Sequence[DeliveryOrder]:
-    """Return all orders in a stable order (creation time, then id)."""
-    statement = select(DeliveryOrder).order_by(DeliveryOrder.created_at, DeliveryOrder.id)
-    return session.scalars(statement).all()
+# The largest `limit` the orders list accepts (the history grows with every simulated order).
+MAX_LIST_LIMIT = 1000
+
+
+def list_orders(session: Session, *, limit: int | None = None) -> Sequence[DeliveryOrder]:
+    """Return orders in a stable order (creation time, then id), oldest first.
+
+    `limit` keeps only the most recent N (applied in SQL); they are still returned oldest first.
+    Without it the whole history is returned.
+    """
+    if limit is None:
+        statement = select(DeliveryOrder).order_by(DeliveryOrder.created_at, DeliveryOrder.id)
+        return session.scalars(statement).all()
+    newest = (
+        select(DeliveryOrder)
+        .order_by(DeliveryOrder.created_at.desc(), DeliveryOrder.id.desc())
+        .limit(limit)
+    )
+    return list(reversed(session.scalars(newest).all()))
 
 
 def list_active_orders(

@@ -23,7 +23,7 @@ Preserve the existing emergency-landing, mission, dispatch, charging, and hub-ca
 
 Claude Code must inspect the repository rather than assume the following details:
 
-- `LiveDataNotices`, Events tab, incident notification sources, event IDs and polling behavior.
+- `LiveDataNotices`, Events tab, incident notification sources, event IDs and polling behavior. (Follow-up 2026-11-15: the Events tab's current alerts now also drop an acknowledged emergency; see §Implementation "Unchanged on purpose".)
 - Manual and automatic drone-failure triggers, `origin=AUTOMATIC`, and the emergency-landing transition to `MAINTENANCE`.
 - Any existing recovery, repair, maintenance release, relocation, or return-to-hub logic.
 - `Drone`, `MissionFlight`, event records, hub docking/capacity and battery/charging rules.
@@ -38,7 +38,7 @@ If a compatible recovery mechanism already exists, reuse or repair it instead of
 ### 3.1 Operator experience
 
 - Every applicable incident notification in the map overlay provides a compact, accessible **Acknowledge** action (icon plus accessible label or text).
-- Acknowledging immediately removes that specific notification from the **active map overlay** once confirmed by the chosen persistence mechanism.
+- Acknowledging immediately removes that specific notification from the **active map overlay and from the active Events list** once confirmed by the chosen persistence mechanism (the Events part was added on 2026-11-15).
 - Acknowledgement does **not** dismiss unrelated notifications or change incident, flight, drone or mission state.
 - Unacknowledged critical alerts remain available; do not auto-dismiss them based on age.
 - Incident history remains accessible in Events and relevant mission/drone timelines.
@@ -128,7 +128,7 @@ Worker processing must be bounded, guarded against exceptions, safe under concur
 ### Notifications
 
 - [x] Each applicable incident alert has an accessible acknowledgement action.
-- [x] Acknowledging one alert removes only that alert from the map overlay.
+- [x] Acknowledging one alert removes only that alert from the map overlay and the active Events list.
 - [x] Acknowledgement survives refresh/polling according to the approved persistence scope.
 - [x] Original incidents, event history and mission timelines remain intact.
 - [x] A later incident on the same drone appears as a new alert.
@@ -188,7 +188,7 @@ Read this specification, relevant existing feature docs and ADRs, and the actual
 
 ### Approved at Gate A
 
-1. **Acknowledgements:** backend-persisted, in a dedicated `incident_acknowledgements` table keyed by `mission_id`; idempotent, survive refresh, hide only the matching emergency overlay alert; events, missions and history are never changed.
+1. **Acknowledgements:** backend-persisted, in a dedicated `incident_acknowledgements` table keyed by `mission_id`; idempotent, survive refresh, hide only the matching emergency alert (in the map overlay and, since 2026-11-15, in the Events tab's current alerts); events, missions and history are never changed.
 2. **Recovery event:** a new `DRONE_RECOVERED` event type with the unique key `DRONE_RECOVERED:<mission id>`. `DRONE_RELOCATION` is not reused.
 3. **Migration:** `0018` (acknowledgement table and the event-type CHECK). It is **created but not applied** to the development database; applying it needs a separate approval (Gate D).
 4. **Existing automatic failures:** the four current AUTOMATIC failures may be recovered once the recovery worker runs, after eligibility and event provenance are revalidated under locks, in bounded batches. Unrelated `MAINTENANCE` drones are never recovered.
@@ -222,7 +222,7 @@ Read this specification, relevant existing feature docs and ADRs, and the actual
 
 - **Alert acknowledgement** (`LiveDataNotices.tsx`, `useEmergencyAcknowledgements.ts`, `api/acknowledgements.ts`): every emergency row has its own **Acknowledge** button (a check icon on a phone, icon and text from the small breakpoint; 40 px minimum target; accessible name "Acknowledge emergency for <drone>"). It calls `POST /api/incidents/emergencies/{mission_id}/acknowledge` and hides the alert only after the backend confirms. While the request runs the button is disabled and `aria-busy`, and repeated clicks send no second request. A failure keeps the alert, shows "Could not acknowledge this alert: <reason> Try again." and the button can be pressed again.
 - **No reappearance:** an alert is hidden when `emergency.acknowledgedAt` from the flights answer is set, or when this page received the confirmation. The confirmed set lives as long as the page, so an older flights answer that arrives after the confirmation cannot bring the alert back. After a reload the server's `acknowledgedAt` is the source of truth. The summary count ("N more simulated emergencies") counts only open alerts, and a hidden alert makes room for the next one.
-- **Unchanged on purpose:** rain, LPR, worker and data-staleness notices; the Events tab and `buildNotices` (an acknowledged emergency stays in the Events notices, because acknowledging is not resolving); the emergency map marker (it still disappears when the drone leaves `MAINTENANCE`); incident history and drone and order activity.
+- **Unchanged on purpose:** rain, LPR, worker and data-staleness notices; `buildNotices` itself (it lists the emergencies it is given). Follow-up 2026-11-15: the app now passes it only unacknowledged emergencies, so a confirmed acknowledgement removes the alert from the Events tab's current alerts as well as from the overlay (one shared rule, `isUnacknowledgedEmergency`); a failed acknowledgement hides nothing, an unacknowledged alert is never hidden by age, and the acknowledged emergency stays stored and in the drone and order Activity; the emergency map marker (it still disappears when the drone leaves `MAINTENANCE`); incident history and drone and order activity.
 - **`DRONE_RECOVERED`** (`types/event.ts`, `EventTimeline.tsx`): added to the known event types, shown as "Drone recovered and returned to a Hub" with the backend's reason ("Drone recovered by ground crew and moved to <Hub>"), origin, mission and drone, in the drone activity (3 newest, newest first) and the order activity, in the API's order. An unknown type is still rejected.
 - **Flights parsing** (`api/flights.ts`, `types/flight.ts`): `FlightEmergency.acknowledgedAt` (null when absent, so an older backend still works); a zone-less timestamp is rejected.
 

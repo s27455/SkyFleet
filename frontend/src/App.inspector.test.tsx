@@ -117,7 +117,9 @@ describe('App drone inspector', () => {
       'aria-pressed',
       'true',
     )
-    expect(screen.getByRole('button', { name: 'Inspect Drone' })).toHaveFocus()
+    // Focus goes back in the dialog's effect cleanup, which React runs just AFTER the dialog has left
+    // the DOM; the test must wait for it instead of reading focus the moment the dialog is gone.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Inspect Drone' })).toHaveFocus())
     expect(screen.getByRole('banner')).not.toHaveAttribute('inert')
 
     // With the inspector gone, Escape closes the panel as before.

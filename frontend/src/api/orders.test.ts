@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { jsonResponse } from '../test/hubFixtures'
 import { ORDER_RESPONSES } from '../test/orderFixtures'
 import { ApiError } from './client'
-import { cancelOrder, generateOrder, getActiveOrders, getOrders } from './orders'
+import { cancelOrder, generateOrder, getActiveOrders, getOrders, getRecentOrders } from './orders'
 
 function stubFetch(response: () => Promise<Response>) {
   const fetchMock = vi.fn((_url: string) => response())
@@ -128,6 +128,24 @@ describe('delivered_at and the active scope (Feature 017A)', () => {
 
     expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders\?active=true$/)
     expect(String(fetchMock.mock.calls[1][0])).toMatch(/\/api\/orders$/)
+  })
+})
+
+describe('getRecentOrders', () => {
+  it('asks for a bounded slice of the history and validates it like the other readers', async () => {
+    const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(ORDER_RESPONSES)))
+
+    const orders = await getRecentOrders()
+
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders\?limit=200$/)
+    expect(orders).toHaveLength(ORDER_RESPONSES.length)
+  })
+
+  it('rejects duplicate ids and a non-list answer', async () => {
+    stubFetch(() => Promise.resolve(jsonResponse([ORDER_RESPONSES[0], ORDER_RESPONSES[0]])))
+    await expect(getRecentOrders()).rejects.toThrow(/duplicate/)
+    stubFetch(() => Promise.resolve(jsonResponse({ not: 'a list' })))
+    await expect(getRecentOrders()).rejects.toBeInstanceOf(ApiError)
   })
 })
 

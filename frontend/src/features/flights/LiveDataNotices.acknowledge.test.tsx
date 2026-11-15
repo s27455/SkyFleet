@@ -162,12 +162,17 @@ describe('LiveDataNotices acknowledgement', () => {
 
     fireEvent.click(ackButton('DRN-1'))
 
-    const alerts = await screen.findAllByRole('alert')
-    expect(
-      alerts.some((a) =>
-        /Could not acknowledge this alert: Internal problem\./.test(a.textContent ?? ''),
-      ),
-    ).toBe(true)
+    // The emergency alert is itself role="alert", so waiting for "any alert" returns at once; wait
+    // for the error message to appear in one of them.
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('alert')
+          .some((a) =>
+            /Could not acknowledge this alert: Internal problem\./.test(a.textContent ?? ''),
+          ),
+      ).toBe(true),
+    )
     expect(screen.getByText(/DRN-1 \(MIS-1\)/)).toBeInTheDocument() // never hidden on failure
     expect(ackButton('DRN-1')).toBeEnabled() // and it can be tried again
     expect(resource.refresh).not.toHaveBeenCalled()

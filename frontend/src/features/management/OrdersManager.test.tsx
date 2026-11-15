@@ -65,6 +65,29 @@ function fillForm() {
 }
 
 describe('OrdersManager', () => {
+  it('says when the All view shows only the latest orders of a longer history', async () => {
+    const latest = Array.from({ length: 200 }, (_, index) => ({
+      ...ORDER_RESPONSES[3],
+      id: `ORD-${String(1000 + index)}`,
+    }))
+    stubFetch(() => Promise.resolve(jsonResponse(latest)))
+    renderManager()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    expect(await screen.findByText('Showing the latest 200 orders.')).toBeInTheDocument()
+  })
+
+  it('does not show that note for a short history', async () => {
+    stubFetch(() => Promise.resolve(jsonResponse(ORDER_RESPONSES.slice(3, 5))))
+    renderManager()
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    expect(await screen.findByRole('heading', { name: 'All orders (2)' })).toBeInTheDocument()
+    expect(screen.queryByText(/Showing the latest/)).not.toBeInTheDocument()
+  })
+
   it('lists orders and disables Edit and Delete for ineligible ones', () => {
     renderManager()
 
@@ -112,7 +135,7 @@ describe('OrdersManager', () => {
     expect(screen.getByText(/No active orders/)).toBeInTheDocument()
   })
 
-  it('defaults to Active and reads the full history only after All is chosen', async () => {
+  it('defaults to Active and reads the recent history only after All is chosen', async () => {
     const history = [
       ...ORDER_RESPONSES.slice(3, 5),
       { ...ORDER_RESPONSES[5], status: 'DELIVERED', delivered_at: '2026-11-13T10:00:00Z' },
@@ -128,7 +151,8 @@ describe('OrdersManager', () => {
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
 
     expect(await screen.findByRole('heading', { name: 'All orders (4)' })).toBeInTheDocument()
-    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders$/)
+    // A bounded slice (the latest 200), never the whole history.
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/orders\?limit=200$/)
     expect(screen.getByText('ORD-007')).toBeInTheDocument() // legacy delivered order, still listed
     expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
 
@@ -305,6 +329,27 @@ describe('OrdersManager', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1))
     expect(fetchMock.mock.calls[0][1]?.method).toBe('DELETE')
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('hints only from the live missions: no history is requested, the backend decides the rest', async () => {
+    const fetchMock = stubFetch(() =>
+      Promise.resolve(
+        jsonResponse(
+          { detail: { code: 'ORDER_HAS_MISSIONS', message: 'Order is referenced by a mission' } },
+          409,
+        ),
+      ),
+    )
+    // ORD-005 only has a finished mission, which is not among the live ones the app polls.
+    render(<OrdersManager orders={ORDERS} hubs={HUBS} missions={[]} onChanged={vi.fn()} />)
+
+    expect(fetchMock).not.toHaveBeenCalled() // no mission history read on the way
+    expect(screen.getByRole('button', { name: 'Delete order ORD-005' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete order ORD-005' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete permanently' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Order is referenced by a mission')
   })
 
   it('shows the backend refusal when a delete is rejected', async () => {

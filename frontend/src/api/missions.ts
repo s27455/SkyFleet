@@ -52,9 +52,8 @@ function toMission(item: unknown): Mission {
   }
 }
 
-/** Fetches all missions. Rejects with `ApiError` on HTTP, network or data errors. */
-export async function getMissions(signal?: AbortSignal): Promise<Mission[]> {
-  const payload = await apiGet<unknown>('/api/missions', signal)
+async function readMissions(path: string, signal?: AbortSignal): Promise<Mission[]> {
+  const payload = await apiGet<unknown>(path, signal)
   if (!Array.isArray(payload)) invalid('response is not a list')
 
   const missions = payload.map(toMission)
@@ -62,6 +61,24 @@ export async function getMissions(signal?: AbortSignal): Promise<Mission[]> {
     invalid('duplicate mission ids')
   }
   return missions
+}
+
+/**
+ * Fetches the whole mission history, which grows with every simulated order (thousands of rows).
+ * Nothing in the app polls it; use `getLiveMissions` for polling and `getRecentMissions` for hints.
+ * Rejects with `ApiError` on HTTP, network or data errors.
+ */
+export function getMissions(signal?: AbortSignal): Promise<Mission[]> {
+  return readMissions('/api/missions', signal)
+}
+
+/**
+ * Fetches the missions the live views still need: the assigned and flying ones, and the ones that
+ * ended in an emergency (their flights stay listed by `/api/flights`). The backend filters in SQL,
+ * so this stays small however long the simulation has run. This is the one the dashboard polls.
+ */
+export function getLiveMissions(signal?: AbortSignal): Promise<Mission[]> {
+  return readMissions('/api/missions?status=ASSIGNED&status=IN_FLIGHT&status=EMERGENCY', signal)
 }
 
 export type StartMissionFailure =

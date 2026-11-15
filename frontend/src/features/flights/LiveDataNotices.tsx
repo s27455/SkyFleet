@@ -3,7 +3,7 @@ import { useId, useState, useSyncExternalStore } from 'react'
 import type { PolledResource } from '../data/usePolledResource'
 import type { Flight, FlightsSnapshot } from '../../types/flight'
 import type { Mission } from '../../types/mission'
-import { EMERGENCY_REASON_TEXT, isActiveFlight } from './flightStatus'
+import { EMERGENCY_REASON_TEXT, isActiveFlight, isUnacknowledgedEmergency } from './flightStatus'
 import { useEmergencyAcknowledgements } from './useEmergencyAcknowledgements'
 
 const NOTICE_CLASS =
@@ -114,6 +114,11 @@ interface LiveDataNoticesProps {
   /** True when drones or orders could not be refreshed and older data is still shown. */
   fleetStale?: boolean
   onRefreshFleet?: () => void
+  /**
+   * The acknowledgement state, when the caller owns it (the app shares it with the Events tab, so
+   * an acknowledged alert disappears from both). Without it the component keeps its own.
+   */
+  acknowledgements?: ReturnType<typeof useEmergencyAcknowledgements>
 }
 
 /**
@@ -126,18 +131,15 @@ export function LiveDataNotices({
   missions,
   fleetStale = false,
   onRefreshFleet,
+  acknowledgements,
 }: LiveDataNoticesProps) {
   const snapshot = flights.state.status === 'ready' ? flights.state.data : null
-  const { confirmed, pending, failed, acknowledge } = useEmergencyAcknowledgements(flights.refresh)
+  const own = useEmergencyAcknowledgements(flights.refresh)
+  const { confirmed, pending, failed, acknowledge } = acknowledgements ?? own
   // An alert is hidden once the server reports it acknowledged, or once this page got the
   // confirmation (which also covers an older flights answer that is still on its way).
   const emergencies =
-    snapshot?.flights.filter(
-      (flight) =>
-        flight.emergency !== null &&
-        flight.emergency.acknowledgedAt === null &&
-        !confirmed.has(flight.missionId),
-    ) ?? []
+    snapshot?.flights.filter((flight) => isUnacknowledgedEmergency(flight, confirmed)) ?? []
   const flying = snapshot?.flights.some(isActiveFlight) ?? false
   const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => false)
   const shown = narrow ? MAX_EMERGENCY_ALERTS_NARROW : MAX_EMERGENCY_ALERTS

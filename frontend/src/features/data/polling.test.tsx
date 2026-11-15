@@ -57,4 +57,27 @@ describe('the live hooks use those intervals', () => {
     expect(calls.orders).toBe(2)
     expect(calls.missions).toBe(2)
   })
+
+  it('poll the live missions and the active orders, never the full history', async () => {
+    POLL_INTERVALS_MS.fleet = 2000
+    const urls = new Set<string>()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        urls.add(url.replace(/^https?:\/\/[^/]+/, ''))
+        return Promise.resolve(jsonResponse([]))
+      }),
+    )
+
+    renderHook(() => {
+      useOrders()
+      useMissions()
+    })
+    await vi.advanceTimersByTimeAsync(6000)
+
+    expect([...urls].sort()).toEqual([
+      '/api/missions?status=ASSIGNED&status=IN_FLIGHT&status=EMERGENCY',
+      '/api/orders?active=true',
+    ])
+  })
 })

@@ -84,6 +84,17 @@ export function getOrders(signal?: AbortSignal): Promise<Order[]> {
   return readOrders('/api/orders', signal)
 }
 
+/** How many of the most recent orders the Management "All" view shows. */
+export const RECENT_ORDERS_LIMIT = 200
+
+/**
+ * Fetches the most recent orders of the history (any status), oldest first. The full history grows
+ * with every simulated order, so the "All" view reads this bounded slice instead of `getOrders`.
+ */
+export function getRecentOrders(signal?: AbortSignal): Promise<Order[]> {
+  return readOrders(`/api/orders?limit=${RECENT_ORDERS_LIMIT}`, signal)
+}
+
 /**
  * Fetches the orders for the active operational views (Feature 017A). The backend decides which
  * delivered orders have expired, from their stored delivery time and its own clock, so the client

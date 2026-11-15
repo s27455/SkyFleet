@@ -1,4 +1,4 @@
-import { getActiveOrders, getOrders } from '../../api/orders'
+import { getActiveOrders, getRecentOrders } from '../../api/orders'
 import { POLL_INTERVALS_MS } from '../data/polling'
 import { usePolledResource } from '../data/usePolledResource'
 
@@ -10,7 +10,7 @@ export function useOrders() {
   return usePolledResource(getActiveOrders, POLL_INTERVALS_MS.fleet)
 }
 
-/** The full order history; only mounted while the operator asks for all orders. */
+/** The most recent orders of the history; only mounted while the operator asks for all orders. */
 export function useAllOrders() {
-  return usePolledResource(getOrders, POLL_INTERVALS_MS.fleet)
+  return usePolledResource(getRecentOrders, POLL_INTERVALS_MS.fleet)
 }

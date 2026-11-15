@@ -12,10 +12,29 @@ from app.orders.models import DeliveryOrder
 
 _ACTIVE = [status.value for status in ACTIVE_MISSION_STATUSES]
 
+# The largest `limit` the missions list accepts (the history grows with every simulated order).
+MAX_LIST_LIMIT = 1000
 
-def list_missions(session: Session) -> Sequence[Mission]:
-    """Return all missions in a stable order (creation time, then id)."""
-    return session.scalars(select(Mission).order_by(Mission.created_at, Mission.id)).all()
+
+def list_missions(
+    session: Session,
+    *,
+    statuses: Sequence[str] | None = None,
+    limit: int | None = None,
+) -> Sequence[Mission]:
+    """Return missions in a stable order (creation time, then id), oldest first.
+
+    `statuses` keeps only missions in those states. `limit` keeps only the most recent N (after the
+    status filter); they are still returned oldest first. Both are applied in SQL. Without either
+    the whole history is returned.
+    """
+    statement = select(Mission)
+    if statuses is not None:
+        statement = statement.where(Mission.status.in_(statuses))
+    if limit is None:
+        return session.scalars(statement.order_by(Mission.created_at, Mission.id)).all()
+    newest = statement.order_by(Mission.created_at.desc(), Mission.id.desc()).limit(limit)
+    return list(reversed(session.scalars(newest).all()))
 
 
 def get_mission(session: Session, mission_id: str) -> Mission | None:

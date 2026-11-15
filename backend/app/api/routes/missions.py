@@ -9,7 +9,7 @@ from app.api.deps import SessionDep, SettingsDep
 from app.api.errors import rain_warning_active
 from app.common import clock
 from app.missions import repository, service
-from app.missions.models import Mission
+from app.missions.models import Mission, MissionStatus
 from app.missions.schemas import MissionCreateRequest, MissionResponse, PlanResponse
 from app.simulation import service as simulation_service
 from app.weather.service import RainWarningActiveError
@@ -56,8 +56,18 @@ def create_mission(
 
 
 @router.get("", response_model=list[MissionResponse])
-def list_missions(session: SessionDep) -> Sequence[Mission]:
-    return repository.list_missions(session)
+def list_missions(
+    session: SessionDep,
+    status: Annotated[list[MissionStatus] | None, Query()] = None,
+    limit: Annotated[int | None, Query(ge=1, le=repository.MAX_LIST_LIMIT)] = None,
+) -> Sequence[Mission]:
+    """Missions, oldest first. The history is large, so callers should filter.
+
+    `status` (repeatable) keeps only missions in those states; `limit` keeps only the most recent N
+    (still listed oldest first). Without either, the full history is returned.
+    """
+    statuses = None if status is None else [item.value for item in status]
+    return repository.list_missions(session, statuses=statuses, limit=limit)
 
 
 @router.get("/{mission_id}", response_model=MissionResponse)

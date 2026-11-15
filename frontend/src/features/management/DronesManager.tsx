@@ -44,6 +44,8 @@ export function DronesManager({ drones, hubs, missions, onChanged }: DronesManag
       new Set(missions.filter((m) => ACTIVE_MISSION_STATUSES.has(m.status)).map((m) => m.droneId)),
     [missions],
   )
+  // The hints use the polled live missions only. A drone with finished missions is still offered
+  // for deletion, and the backend refuses with its message (DRONE_HAS_HISTORY), shown below.
   const anyMissionDrones = useMemo(() => new Set(missions.map((m) => m.droneId)), [missions])
 
   const canChange = (drone: Drone) =>

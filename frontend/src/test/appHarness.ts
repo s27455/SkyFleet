@@ -41,6 +41,9 @@ export interface Handlers {
   start?: Handler
 }
 
+/** The one missions request the app polls: the live ones only, never the whole history. */
+export const LIVE_MISSIONS_QUERY = '/api/missions?status=ASSIGNED&status=IN_FLIGHT&status=EMERGENCY'
+
 export function stubBackend(
   hubsHandler: Handler = okHubs,
   dronesHandler: Handler = okDrones,
@@ -56,6 +59,10 @@ export function stubBackend(
   const startCalls = vi.fn(more.start ?? okStart)
   const copilotStatusCalls = vi.fn()
   const copilotAskCalls = vi.fn()
+  // Requests for the unbounded lists (a bare /api/missions or /api/orders, or a mission history):
+  // the app must never make them, so they fail loudly here instead of being answered like the
+  // bounded ones.
+  const unexpectedCalls: string[] = []
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
@@ -95,9 +102,13 @@ export function stubBackend(
       }
       if (url.endsWith('/start')) return startCalls()
       if (url.endsWith('/api/orders?active=true')) return ordersCalls()
-      if (url.endsWith('/api/orders')) return allOrdersCalls()
+      if (url.endsWith('/api/orders?limit=200')) return allOrdersCalls()
       if (url.endsWith('/api/flights')) return flightsCalls()
-      if (url.endsWith('/api/missions')) return missionsCalls()
+      if (url.endsWith(LIVE_MISSIONS_QUERY)) return missionsCalls()
+      if (/\/api\/(missions|orders)(\?|$)/.test(url)) {
+        unexpectedCalls.push(url)
+        return Promise.resolve(jsonResponse({ detail: 'unexpected list request' }, 500))
+      }
       if (url.endsWith('/api/incidents/lpr')) {
         return Promise.resolve(
           jsonResponse({ server_time: '2026-11-13T12:00:00Z', scenario: null }),
@@ -131,6 +142,7 @@ export function stubBackend(
     startCalls,
     copilotStatusCalls,
     copilotAskCalls,
+    unexpectedCalls,
   }
 }
 

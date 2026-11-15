@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 
-import { createOrder, deleteOrder, updateOrder } from '../../api/orders'
+import { RECENT_ORDERS_LIMIT, createOrder, deleteOrder, updateOrder } from '../../api/orders'
 import { StatusIndicator } from '../../components/ui/StatusIndicator'
 import type { Hub } from '../../types/hub'
 import type { Mission } from '../../types/mission'
@@ -33,7 +33,7 @@ type Scope = 'active' | 'all'
 
 /**
  * Orders administration (Feature 012 API). Shows the active orders by default; the Active / All
- * switch (Feature 017A) also reaches the full history of delivered orders. The history is read
+ * switch (Feature 017A) also reaches the most recent orders of the history (a bounded slice). It is read
  * only while "All" is chosen.
  */
 export function OrdersManager(props: OrdersManagerProps) {
@@ -47,7 +47,7 @@ interface ScopedProps extends OrdersManagerProps {
   onScopeChange: (scope: Scope) => void
 }
 
-/** Reads the whole history (own polling) and hands it to the same table as the active view. */
+/** Reads the most recent orders (own polling) and hands them to the same table as the active view. */
 function AllOrdersManager(props: ScopedProps) {
   const all = useAllOrders()
   if (all.state.status === 'loading') {
@@ -80,7 +80,14 @@ function AllOrdersManager(props: ScopedProps) {
     props.onChanged()
     all.refresh()
   }
-  return <OrdersAdmin {...props} orders={all.state.data} onChanged={onChanged} />
+  return (
+    <>
+      {all.state.data.length >= RECENT_ORDERS_LIMIT && (
+        <p className="text-xs text-fg-muted">Showing the latest {RECENT_ORDERS_LIMIT} orders.</p>
+      )}
+      <OrdersAdmin {...props} orders={all.state.data} onChanged={onChanged} />
+    </>
+  )
 }
 
 /**
@@ -101,6 +108,9 @@ function OrdersAdmin({
   const [mode, setMode] = useState<Mode>({ kind: 'none' })
   const deletion = useAction()
   const hubNames = useMemo(() => new Map(hubs.map((hub) => [hub.id, hub.name])), [hubs])
+  // The hint uses the polled live missions only. An order whose mission already finished or was
+  // cancelled is still offered for edit and deletion, and the backend refuses with its message
+  // (ORDER_HAS_MISSIONS), shown below.
   const ordersWithMissions = useMemo(
     () =>
       new Set(missions.flatMap((mission) => (mission.orderId === null ? [] : [mission.orderId]))),
