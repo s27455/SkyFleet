@@ -335,7 +335,18 @@ A coherent, stable application that demonstrates the main SkyFleet workflow with
 ## Phase 10 — Deployment & Recruitment Submission
 
 **Priority:** Critical  
-**Status:** Not started
+**Status:** In progress — Docker Compose local setup implemented (2026-11-15).
+
+Docker Compose setup: `docker compose up --build` runs `db` (unchanged PostgreSQL 17 service and
+`skyfleet-db` volume), a one-shot `migrate` (`alembic upgrade head` plus the idempotent Hub, drone and
+order seeds), `api` (uvicorn, port 8000), `worker` and `frontend` (Vite build served by
+`vite preview`, port 5173). Files: `backend/Dockerfile`, `frontend/Dockerfile`, their `.dockerignore`
+files, root `.env.example`, README "Quick Start — Docker". `api` and `worker` start only after
+`migrate` succeeds, so migrations never run twice. AI stays off unless configured. Verified locally
+in an isolated Compose project on alternate ports: clean build, migrations and seeds, API, CORS, worker
+heartbeat, frontend bundle pointing at the API, AI off, a 2 s clean shutdown, and data plus
+idempotent seeds after a restart. Not yet verified: a fresh clone on a second machine, and the map
+in a browser with a Mapbox token.
 
 ### Objectives
 
@@ -346,7 +357,7 @@ A coherent, stable application that demonstrates the main SkyFleet workflow with
 - [ ] Configure environment variables and secrets.
 - [ ] Ensure the simulation worker runs independently in the deployed environment.
 - [ ] Verify the public application URL.
-- [ ] Prepare a Docker-based local setup if appropriate.
+- [x] Prepare a Docker-based local setup if appropriate. (Docker Compose full stack; fresh-clone test on a second machine pending.)
 - [ ] Complete the README.
 - [ ] Document the architecture and technology choices.
 - [ ] Document how AI was used during development.

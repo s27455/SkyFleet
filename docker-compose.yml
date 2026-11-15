@@ -1,6 +1,25 @@
-# Standard local development database (PostgreSQL 17). The API, worker and frontend run natively
-# for fast reloads. Host port 55432 -> container 5432, so it never collides with a PostgreSQL
-# installed on Windows (which uses 5432). Data lives in the named volume `skyfleet-db`.
+# SkyFleet with Docker Compose.
+#
+# Full stack (no Python/Node needed on the host):  docker compose up --build
+#   db -> migrate (one-shot: migrations + idempotent seeds) -> api + worker; frontend.
+#   Frontend http://localhost:5173, API http://localhost:8000 (docs at /docs).
+#
+# Database only, for native development:  docker compose up -d db
+#   Host port 55432 -> container 5432, so it never collides with a PostgreSQL installed on Windows
+#   (which uses 5432). Data lives in the named volume `skyfleet-db` (kept by `docker compose down`).
+#
+# Optional settings come from a root `.env` (see `.env.example`); nothing is required except the
+# public Mapbox token for the map.
+
+# Built once (by `migrate`); `api` and `worker` reuse the same local image.
+x-backend: &backend
+  image: skyfleet-backend
+  pull_policy: never
+  init: true # forwards Docker's stop signal, so every process exits promptly on `down`
+  environment: &backend-env
+    DATABASE_URL: postgresql+psycopg://skyfleet:skyfleet@db:5432/skyfleet
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
 services:
   db:
     image: postgres:17-alpine
@@ -9,7 +28,7 @@ services:
       POSTGRES_PASSWORD: skyfleet # local-only development credential
       POSTGRES_DB: skyfleet
     ports:
-      - "55432:5432"
+      - "${DB_PORT:-55432}:5432"
     volumes:
       - skyfleet-db:/var/lib/postgresql/data
     healthcheck:
@@ -17,6 +36,62 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # One-shot initialisation. Safe on every start: Alembic only applies missing migrations and the
+  # seeds only insert missing Hubs, drones and sample orders (existing rows are never changed).
+  migrate:
+    <<: *backend
+    build: ./backend
+    command: >-
+      sh -c "alembic upgrade head
+      && python -m app.hubs.seed
+      && python -m app.drones.seed
+      && python -m app.orders.seed"
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *backend
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *backend-env
+      # The browser's origin: the frontend's host-published port.
+      CORS_ORIGINS: http://localhost:${FRONTEND_PORT:-5173}
+      # AI Copilot: optional and OFF by default. Backend only, never passed to the frontend.
+      SKYFLEET_AI_ENABLED: ${SKYFLEET_AI_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SKYFLEET_AI_ACCESS_TOKEN: ${SKYFLEET_AI_ACCESS_TOKEN:-}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *backend
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Public values only (bundled into the browser). The browser runs on the host.
+        VITE_API_BASE_URL: http://localhost:${API_PORT:-8000}
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN:-}
+    image: skyfleet-frontend
+    init: true
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    restart: unless-stopped
+    depends_on:
+      - api
 
 volumes:
   skyfleet-db:

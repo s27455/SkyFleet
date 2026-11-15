@@ -23,6 +23,53 @@ The backend owns all operational state; the frontend only displays it. The worke
 of any browser session. Details: [`architecture-context.md`](context/architecture-context.md) and
 [`docs/decisions/`](docs/decisions/).
 
+## Quick Start — Docker
+
+Runs the whole application (database, API, Simulation Worker, frontend) with only **Git** and
+**Docker Desktop** installed. No Python, Node.js or PostgreSQL is needed on the host. Commands are
+for PowerShell on Windows; start Docker Desktop first.
+
+```powershell
+git clone https://github.com/s27455/SkyFleet.git
+cd SkyFleet
+Copy-Item .env.example .env      # then edit .env (next step)
+docker compose up --build
+```
+
+1. **Mapbox token:** in `.env`, set `VITE_MAPBOX_TOKEN=pk.…`, a **public** token from a free
+   account at [mapbox.com](https://account.mapbox.com) (Tokens page). Without it everything works except
+   the map, which shows "Map unavailable". The token is built into the frontend, so rebuild after
+   changing it (`docker compose up --build`).
+2. **First start:** the first build downloads base images and dependencies and can take several
+   minutes. Compose then starts PostgreSQL, runs the one-shot `migrate` service (Alembic migrations,
+   then the Hubs, drones and 11 sample orders; existing rows are never changed), and starts the API,
+   the worker and the frontend.
+3. **Open:** the dashboard at **http://localhost:5173** and the API docs at **http://localhost:8000/docs**.
+   Order Simulation, Auto Dispatch and Random Incidents start OFF; switch them on in the dashboard.
+4. **Stop:** `Ctrl+C`, or `docker compose down` (from another terminal). Data is kept in the
+   PostgreSQL volume `skyfleet-db`; start again with `docker compose up` (add `--build` after pulling
+   code changes). Only `docker compose down -v` deletes the data.
+
+**AI Copilot (optional):** off by default, and the app is fully usable without it. To enable it, set
+`SKYFLEET_AI_ENABLED=true`, `ANTHROPIC_API_KEY` and `SKYFLEET_AI_ACCESS_TOKEN` (at least 32
+characters, typed into the Copilot panel) in `.env`, then `docker compose up -d api`. These values go to
+the API container only, never into the frontend.
+
+**Troubleshooting**
+
+| Symptom | Fix |
+|---|---|
+| `port is already allocated` / bind error on 5173, 8000 or 55432 | Stop whatever uses the port (e.g. a natively running SkyFleet), or set `FRONTEND_PORT`, `API_PORT` or `DB_PORT` in `.env` and run `docker compose up --build` |
+| `error during connect` / `docker daemon is not running` | Start Docker Desktop and wait until it reports "Engine running" |
+| Map shows "Map unavailable" | `VITE_MAPBOX_TOKEN` is missing or invalid in `.env`; fix it, then `docker compose up --build` |
+| Dashboard says the backend is unreachable | Check `docker compose ps` (api should be running) and `docker compose logs api` |
+| `migrate` exited with an error, so api and worker did not start | `docker compose logs migrate` shows the cause; fix it and run `docker compose up` again |
+| "The simulation worker is not running…" | Check `docker compose ps` and `docker compose logs worker`. In Docker the worker starts automatically; ignore the native `uv run` hint in that message |
+
+The sections below describe the **native development setup** (hot reload), which only uses Docker
+for the database (`docker compose up -d db`). Stop the full Docker stack before running natively,
+because both use ports 8000 and 5173.
+
 ## Prerequisites
 
 - **Node.js 24** (with npm)

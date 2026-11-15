@@ -1,0 +1,8 @@
+# Keep host-specific and secret files out of the image (Windows node_modules would break Linux).
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+Dockerfile
+.dockerignore

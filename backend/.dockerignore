@@ -1,0 +1,12 @@
+# Keep host-specific and secret files out of the image (the Windows .venv would break Linux).
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+.env.*
+tests/
+Dockerfile
+.dockerignore
