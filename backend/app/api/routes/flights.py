@@ -1,16 +1,14 @@
 """Read-only flight endpoint for REST polling."""
 
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from app.api.routes.missions import SettingsDep
-from app.db.session import get_session
+from app.api.deps import SessionDep, SettingsDep
+from app.common import clock
 from app.missions.models import Mission
-from app.simulation import acknowledgements, clock, heartbeat, lpr
+from app.simulation import acknowledgements, heartbeat, lpr
 from app.simulation.engine import rounded_pct
 from app.simulation.models import FlightPhase, MissionFlight
 from app.simulation.schemas import (
@@ -21,8 +19,6 @@ from app.simulation.schemas import (
 )
 
 router = APIRouter(prefix="/flights", tags=["flights"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 def _as_flight_response(

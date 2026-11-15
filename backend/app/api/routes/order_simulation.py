@@ -4,22 +4,16 @@ Independent of Automatic Dispatch. The simulation worker owns the generation loo
 only read and change the stored mode.
 """
 
-from typing import Annotated
+from fastapi import APIRouter
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-
+from app.api.deps import SessionDep, SettingsDep
 from app.api.errors import worker_unavailable
-from app.api.routes.missions import SettingsDep
-from app.db.session import get_session
+from app.common import clock
 from app.orders import simulation
 from app.orders.schemas import OrderSimulationStatus
-from app.simulation import clock
 from app.simulation import service as simulation_service
 
 router = APIRouter(prefix="/orders/simulation", tags=["order-simulation"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("/status", response_model=OrderSimulationStatus)

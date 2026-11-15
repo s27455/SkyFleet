@@ -3,17 +3,14 @@
 from collections.abc import Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, Query
 
-from app.db.session import get_session
+from app.api.deps import SessionDep
 from app.events import repository
 from app.events.models import OperationalEvent
 from app.events.schemas import EventResponse
 
 router = APIRouter(prefix="/events", tags=["events"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("", response_model=list[EventResponse])

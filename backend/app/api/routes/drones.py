@@ -3,12 +3,11 @@
 from collections.abc import Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, Query, Response
 
+from app.api.deps import SessionDep, SettingsDep
 from app.api.errors import rain_warning_active, worker_unavailable
-from app.config import Settings
-from app.db.session import get_session
+from app.common import clock
 from app.drones import repository, service
 from app.drones.models import Drone
 from app.drones.schemas import (
@@ -18,22 +17,12 @@ from app.drones.schemas import (
     RelocateRequest,
 )
 from app.missions.service import DroneNotFoundError as MissionDroneNotFoundError
-from app.simulation import clock, relocation
+from app.simulation import relocation
 from app.simulation import service as simulation_service
 from app.simulation.schemas import RelocationPlanResponse, RelocationResponse
 from app.weather.service import RainWarningActiveError
 
 router = APIRouter(prefix="/drones", tags=["drones"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
-
-
-def get_app_settings(request: Request) -> Settings:
-    settings: Settings = request.app.state.settings
-    return settings
-
-
-SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
 def _http_error(error: service.DroneManagementError) -> HTTPException:

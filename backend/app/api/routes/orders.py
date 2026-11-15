@@ -1,22 +1,17 @@
 """Delivery order endpoints: reads plus administrative create, update and delete."""
 
 from collections.abc import Sequence
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, Response
 
-from app.api.routes.missions import SettingsDep
+from app.api.deps import SessionDep, SettingsDep
+from app.common import clock
 from app.config import get_settings
-from app.db.session import get_session
 from app.orders import cancellation, generator, repository, service
 from app.orders.models import DeliveryOrder
 from app.orders.schemas import OrderCreateRequest, OrderResponse, OrderUpdateRequest
-from app.simulation import clock
 
 router = APIRouter(prefix="/orders", tags=["orders"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 def _http_error(error: service.OrderManagementError) -> HTTPException:

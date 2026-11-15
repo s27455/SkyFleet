@@ -6,16 +6,14 @@ backend chooses an eligible target, performs the real transition and records the
 """
 
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
+from app.api.deps import SessionDep, SettingsDep
 from app.api.errors import worker_unavailable
-from app.api.routes.missions import SettingsDep
-from app.db.session import get_session
+from app.common import clock
 from app.events.models import EventOrigin
-from app.simulation import acknowledgements, clock, lpr, random_incidents
+from app.simulation import acknowledgements, lpr, random_incidents
 from app.simulation import service as simulation_service
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import NoEligibleTargetError, trigger_drone_failure
@@ -32,8 +30,6 @@ from app.weather import service as weather
 from app.weather.schemas import RainWarningResponse
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.post("/drone-failure", response_model=DroneFailureResponse)

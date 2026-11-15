@@ -1,19 +1,15 @@
 """Read-only Hub endpoints."""
 
 from collections.abc import Sequence
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
-from app.db.session import get_session
+from app.api.deps import SessionDep
 from app.hubs import repository
 from app.hubs.models import Hub
 from app.hubs.schemas import HubResponse
 
 router = APIRouter(prefix="/hubs", tags=["hubs"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("", response_model=list[HubResponse])

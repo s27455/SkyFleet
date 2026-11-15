@@ -1,13 +1,10 @@
 """Dispatch endpoints: read-only recommendations (014A) and explicit execution (014B)."""
 
-from typing import Annotated
+from fastapi import APIRouter, HTTPException
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
+from app.api.deps import SessionDep, SettingsDep
 from app.api.errors import rain_warning_active, worker_unavailable
-from app.api.routes.missions import SettingsDep
-from app.db.session import get_session
+from app.common import clock
 from app.dispatch import auto, service
 from app.dispatch.schemas import (
     AutoDispatchStatus,
@@ -17,13 +14,10 @@ from app.dispatch.schemas import (
 from app.missions import service as missions_service
 from app.missions.models import Mission
 from app.missions.schemas import MissionResponse
-from app.simulation import clock
 from app.simulation import service as simulation_service
 from app.weather.service import RainWarningActiveError
 
 router = APIRouter(prefix="/dispatch", tags=["dispatch"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)

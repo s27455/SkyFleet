@@ -3,30 +3,18 @@
 from collections.abc import Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException, Query
 
+from app.api.deps import SessionDep, SettingsDep
 from app.api.errors import rain_warning_active
-from app.config import Settings
-from app.db.session import get_session
+from app.common import clock
 from app.missions import repository, service
 from app.missions.models import Mission
 from app.missions.schemas import MissionCreateRequest, MissionResponse, PlanResponse
-from app.simulation import clock
 from app.simulation import service as simulation_service
 from app.weather.service import RainWarningActiveError
 
 router = APIRouter(prefix="/missions", tags=["missions"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
-
-
-def get_app_settings(request: Request) -> Settings:
-    settings: Settings = request.app.state.settings
-    return settings
-
-
-SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 
 
 def _not_found(error: service.MissionError) -> HTTPException:
