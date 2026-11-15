@@ -341,7 +341,7 @@ Docker Compose setup: `docker compose up --build` runs `db` (unchanged PostgreSQ
 `skyfleet-db` volume), a one-shot `migrate` (`alembic upgrade head` plus the idempotent Hub, drone and
 order seeds), `api` (uvicorn, port 8000), `worker` and `frontend` (Vite build served by
 `vite preview`, port 5173). Files: `backend/Dockerfile`, `frontend/Dockerfile`, their `.dockerignore`
-files, root `.env.example`, README "Quick Start — Docker". `api` and `worker` start only after
+files, root `.env.example`, README "Quick start (Docker Compose)". `api` and `worker` start only after
 `migrate` succeeds, so migrations never run twice. AI stays off unless configured. Verified locally
 in an isolated Compose project on alternate ports: clean build, migrations and seeds, API, CORS, worker
 heartbeat, frontend bundle pointing at the API, AI off, a 2 s clean shutdown, and data plus
@@ -359,7 +359,7 @@ covers both Docker and native setup.
 - [ ] Ensure the simulation worker runs independently in the deployed environment.
 - [ ] Verify the public application URL.
 - [x] Prepare a Docker-based local setup if appropriate. (Docker Compose full stack; confirmed by the user on a second Windows computer.)
-- [ ] Complete the README.
+- [x] Complete the README. (Condensed to a recruiter-facing landing page; native setup, configuration, tests and the code map moved to `docs/DEVELOPMENT.md`, 2026-11-15.)
 - [ ] Document the architecture and technology choices.
 - [ ] Document how AI was used during development.
 - [ ] Include `CLAUDE.md` and other required project instructions.
