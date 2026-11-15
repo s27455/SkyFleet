@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common import clock
 from app.config import Settings
 from app.dispatch import auto
 from app.dispatch import service as dispatch_service
@@ -22,7 +23,7 @@ from app.missions import service as missions_service
 from app.missions.models import Mission, MissionPurpose, MissionStatus
 from app.orders import cancellation
 from app.orders.models import DeliveryOrder, OrderStatus
-from app.simulation import clock, engine
+from app.simulation import engine
 from app.simulation.failure import trigger_drone_failure
 from app.simulation.heartbeat import record_heartbeat
 from app.simulation.models import FlightPhase, MissionFlight
@@ -205,7 +206,7 @@ def test_a_warning_that_wins_the_race_after_the_assignment_leaves_no_stranded_mi
 ) -> None:
     """The warning activates between the dispatch's early check and the takeoff itself."""
     _rain(session_factory, True)
-    monkeypatch.setattr(dispatch_service.weather, "is_active", lambda session: False)
+    monkeypatch.setattr(weather, "is_active", lambda session: False)
 
     with pytest.raises(RainWarningActiveError):
         dispatch_service.execute_dispatch(live, ORDER, DRONE, NOW, sim_settings)
