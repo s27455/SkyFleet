@@ -30,11 +30,12 @@ import time
 
 from sqlalchemy.orm import sessionmaker
 
+from app.common import clock
 from app.config import Settings, get_settings
 from app.db.session import get_engine
 from app.dispatch import auto
 from app.orders import simulation as order_simulation
-from app.simulation import clock, engine, random_incidents
+from app.simulation import engine, random_incidents
 from app.simulation.charging import ChargingState, charge_step
 from app.simulation.incident_scheduler import IncidentScheduler
 from app.simulation.recovery import RecoveryState, run_recovery_step

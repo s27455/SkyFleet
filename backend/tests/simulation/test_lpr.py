@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common import clock
+from app.common.clock import as_utc
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.events import repository as event_repository
@@ -18,8 +20,7 @@ from app.missions.models import Mission, MissionStatus
 from app.missions.routing import distance_km
 from app.orders import cancellation, repository
 from app.orders.models import DeliveryOrder, OrderStatus
-from app.simulation import clock, engine, lpr
-from app.simulation.clock import as_utc
+from app.simulation import engine, lpr
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import trigger_drone_failure
 from app.simulation.flight import LegKind, leg_from_dict, state_at

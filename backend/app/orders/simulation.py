@@ -21,13 +21,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.orders import repository
 from app.orders.generator import generate_one_order
 from app.orders.models import ORDER_SIMULATION, OrderSimulationState
 from app.orders.schemas import OrderSimulationStatus
 from app.simulation import heartbeat
-from app.simulation.clock import as_utc
 from app.simulation.service import WorkerUnavailableError
 
 logger = logging.getLogger("skyfleet.orders")

@@ -10,7 +10,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.simulation.clock import as_utc
+from app.common.clock import as_utc
 from app.simulation.models import WORKER_HEARTBEAT, SimulationHeartbeat
 
 

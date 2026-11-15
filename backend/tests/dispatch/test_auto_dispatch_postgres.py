@@ -13,11 +13,11 @@ import pytest
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common import clock
 from app.config import Settings
 from app.dispatch import auto
 from app.dispatch.models import DispatchAutoState
 from app.missions.models import ACTIVE_MISSION_STATUSES, Mission
-from app.simulation import clock
 from app.simulation.heartbeat import record_heartbeat
 
 pytestmark = pytest.mark.postgres

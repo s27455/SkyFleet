@@ -26,6 +26,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.events.models import EventOrigin, EventType
@@ -38,7 +39,6 @@ from app.missions.routing import hub_point, nearest_reachable_hub
 from app.orders import repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.service import OrderManagementError, OrderNotFoundError
-from app.simulation.clock import as_utc
 from app.simulation.engine import write_snapshot
 from app.simulation.flight import (
     delivery_leg,

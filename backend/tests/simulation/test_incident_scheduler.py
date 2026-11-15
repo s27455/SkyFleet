@@ -13,10 +13,11 @@ from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app import worker
+from app.common import clock
 from app.config import Settings
 from app.dispatch.models import DispatchAutoState
 from app.events.models import OperationalEvent
-from app.simulation import clock, random_incidents
+from app.simulation import random_incidents
 from app.simulation.heartbeat import record_heartbeat
 from app.simulation.incident_scheduler import (
     ERROR_OUTCOME,

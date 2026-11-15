@@ -7,13 +7,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.common import clock
 from app.config import Settings
 from app.dispatch import service as dispatch_service
 from app.drones.models import Drone, DroneStatus
 from app.missions import service as missions_service
 from app.missions.models import Mission, MissionStatus
 from app.orders.models import DeliveryOrder, OrderStatus
-from app.simulation import clock
 from app.simulation import service as simulation_service
 from app.simulation.heartbeat import record_heartbeat
 

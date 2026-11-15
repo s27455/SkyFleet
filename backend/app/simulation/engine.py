@@ -32,6 +32,7 @@ from typing import Protocol
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.events.models import EventOrigin, EventType
@@ -44,7 +45,6 @@ from app.missions.presence import hub_occupancy
 from app.missions.routing import Point, distance_km, hub_point, nearest_reachable_hub
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.simulation import lpr
-from app.simulation.clock import as_utc
 from app.simulation.flight import (
     FlightState,
     Leg,

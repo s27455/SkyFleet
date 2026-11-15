@@ -23,7 +23,7 @@ ALLOWED_IMPORTS: dict[str, set[str]] = {
         "OrderSimulationState",
         "OrderStatus",
     },
-    "app.simulation.clock": {"as_utc", "utcnow"},
+    "app.common.clock": {"as_utc", "utcnow"},
     "app.simulation.heartbeat": {"is_fresh", "last_heartbeat"},
     "app.simulation.lpr": {"active_scenario", "is_yielding"},
     "app.simulation.models": {

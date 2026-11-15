@@ -15,12 +15,12 @@ import pytest
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common import clock
 from app.config import Settings
 from app.dispatch import service
 from app.drones.models import Drone, DroneStatus
 from app.missions import service as missions_service
 from app.missions.models import ACTIVE_MISSION_STATUSES, Mission
-from app.simulation import clock
 from app.simulation.heartbeat import record_heartbeat
 
 pytestmark = pytest.mark.postgres

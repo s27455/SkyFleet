@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from app.simulation.clock import as_utc
+from app.common.clock import as_utc
 
 
 class EventResponse(BaseModel):

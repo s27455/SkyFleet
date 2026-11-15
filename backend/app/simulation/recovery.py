@@ -35,6 +35,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import Exists, exists, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session, sessionmaker
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.drones.repository import get_drone_for_update
@@ -45,7 +46,6 @@ from app.missions.capacity import has_free_place
 from app.missions.models import Mission, MissionStatus
 from app.missions.presence import hub_occupancy
 from app.missions.routing import hub_point, hubs_by_distance
-from app.simulation.clock import as_utc
 from app.simulation.models import EmergencyReason, FlightPhase, MissionFlight
 
 logger = logging.getLogger("skyfleet.recovery")

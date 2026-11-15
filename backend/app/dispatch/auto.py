@@ -22,6 +22,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.dispatch.models import AUTO_DISPATCH, DispatchAutoState
 from app.dispatch.rebalancing import run_rebalancing
@@ -29,7 +30,6 @@ from app.dispatch.schemas import AutoDispatchStatus
 from app.dispatch.service import DispatchStartFailedError, execute_dispatch, recommend_for_session
 from app.missions.service import MissionError
 from app.simulation import heartbeat
-from app.simulation.clock import as_utc
 from app.simulation.service import WorkerUnavailableError
 from app.weather import service as weather
 

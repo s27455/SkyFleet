@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import sessionmaker
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.events.models import EventType, OperationalEvent
 from app.missions import service as missions_service
@@ -24,7 +25,6 @@ from app.orders.service import OrderManagementError
 from app.simulation import engine as sim_engine
 from app.simulation import lpr
 from app.simulation import service as simulation_service
-from app.simulation.clock import as_utc
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import NoEligibleTargetError, trigger_drone_failure
 from app.simulation.flight import leg_from_dict

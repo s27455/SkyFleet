@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
-from app.simulation.clock import as_utc
+from app.common.clock import as_utc
 
 
 class RainWarningResponse(BaseModel):

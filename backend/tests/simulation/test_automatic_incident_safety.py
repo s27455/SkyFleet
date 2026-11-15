@@ -13,11 +13,12 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common import clock
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.events.models import EventOrigin, OperationalEvent
 from app.orders import cancellation
-from app.simulation import clock, failure, random_incidents
+from app.simulation import failure, random_incidents
 from app.simulation.failed_delivery import trigger_recipient_unavailable
 from app.simulation.failure import (
     FleetGuardError,

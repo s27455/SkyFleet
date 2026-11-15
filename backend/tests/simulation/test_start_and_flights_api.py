@@ -8,12 +8,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common import clock
 from app.config import Settings
 from app.drones.models import Drone
 from app.hubs.models import Hub
 from app.missions.presence import hub_occupancy
 from app.orders.models import DeliveryOrder
-from app.simulation import clock, engine
+from app.simulation import engine
 from app.simulation.heartbeat import record_heartbeat
 
 NOW = datetime(2026, 11, 12, 10, 0, 0, tzinfo=UTC)

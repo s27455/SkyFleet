@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.hubs.models import Hub
@@ -19,7 +20,6 @@ from app.orders import repository as order_repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.simulation import engine
 from app.simulation.charging import ChargingState, charge_step
-from app.simulation.clock import as_utc
 from app.simulation.flight import leg_from_dict
 from app.simulation.heartbeat import last_heartbeat
 from app.simulation.models import EmergencyReason, FlightPhase, MissionFlight

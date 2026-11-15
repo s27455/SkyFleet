@@ -21,10 +21,10 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from app.common.clock import as_utc
 from app.events.models import EventOrigin, EventType
 from app.events.service import append_event
 from app.missions.service import MissionError
-from app.simulation.clock import as_utc
 from app.weather.models import RAIN_WARNING, WeatherState
 
 REASON_ACTIVATED = "Rain warning activated: new takeoffs are suspended"

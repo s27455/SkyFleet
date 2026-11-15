@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common import clock
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.events import repository as event_repository
@@ -20,7 +21,7 @@ from app.missions.routing import hub_point, hubs_by_distance
 from app.orders import cancellation, repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.service import OrderNotFoundError
-from app.simulation import clock, engine
+from app.simulation import engine
 from app.simulation.flight import LegKind, leg_from_dict
 from app.simulation.models import EmergencyReason, FlightPhase, MissionFlight
 

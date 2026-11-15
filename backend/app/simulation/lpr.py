@@ -29,11 +29,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.events.models import EventOrigin, EventType
 from app.events.service import append_event
 from app.missions.routing import Point
-from app.simulation.clock import as_utc
 from app.simulation.flight import Leg, LegKind, hold_legs, lerp, position_at
 from app.simulation.models import LprScenario, LprStatus
 

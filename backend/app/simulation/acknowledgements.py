@@ -17,7 +17,7 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from app.simulation.clock import as_utc
+from app.common.clock import as_utc
 from app.simulation.models import IncidentAcknowledgement, MissionFlight
 
 

@@ -26,6 +26,7 @@ from enum import StrEnum
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.events.models import EventOrigin, EventType
@@ -33,7 +34,6 @@ from app.events.service import append_event
 from app.missions import repository as mission_repository
 from app.missions.energy import consumption_rates
 from app.missions.models import Mission, MissionPurpose, MissionStatus
-from app.simulation.clock import as_utc
 from app.simulation.engine import write_snapshot
 from app.simulation.flight import (
     delivery_leg,

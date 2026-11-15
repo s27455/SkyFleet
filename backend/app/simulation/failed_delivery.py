@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.drones.models import Drone, DroneStatus
 from app.events.models import EventOrigin
@@ -33,7 +34,6 @@ from app.missions.energy import consumption_rates
 from app.missions.models import Mission, MissionStatus
 from app.missions.routing import nearest_reachable_hub
 from app.orders.models import DeliveryOrder, OrderStatus
-from app.simulation.clock import as_utc
 from app.simulation.failure import NoEligibleTargetError
 from app.simulation.flight import delivery_leg, leg_from_dict, state_at
 from app.simulation.models import FlightPhase, MissionFlight

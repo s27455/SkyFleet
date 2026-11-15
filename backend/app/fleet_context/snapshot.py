@@ -38,6 +38,7 @@ from typing import Any
 from sqlalchemy import and_, event, exists, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common.clock import as_utc, utcnow
 from app.config import Settings
 from app.dispatch.models import AUTO_DISPATCH, DispatchAutoState
 from app.dispatch.service import active_claims, available_drones_by_hub
@@ -76,7 +77,6 @@ from app.hubs.repository import list_hubs
 from app.missions.models import ACTIVE_MISSION_STATUSES, Mission
 from app.missions.presence import docked_hub, hub_occupancy
 from app.orders.models import ORDER_SIMULATION, DeliveryOrder, OrderSimulationState, OrderStatus
-from app.simulation.clock import as_utc, utcnow
 from app.simulation.heartbeat import is_fresh, last_heartbeat
 from app.simulation.lpr import active_scenario, is_yielding
 from app.simulation.models import (

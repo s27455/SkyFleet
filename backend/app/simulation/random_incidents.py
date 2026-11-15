@@ -13,9 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.common.clock import as_utc
 from app.config import Settings
 from app.simulation import heartbeat
-from app.simulation.clock import as_utc
 from app.simulation.models import RANDOM_INCIDENTS, IncidentSchedulerState
 from app.simulation.schemas import RandomIncidentsStatus
 from app.simulation.service import WorkerUnavailableError

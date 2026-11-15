@@ -6,12 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.common import clock
 from app.hubs.seed import seed_hubs
 from app.orders import repository
 from app.orders.models import DeliveryOrder, OrderStatus
 from app.orders.seed import seed_orders
 from app.orders.visibility import is_order_active
-from app.simulation import clock
 
 NOW = datetime(2026, 11, 13, 12, 0, 0, tzinfo=UTC)
 WINDOW = 120.0
