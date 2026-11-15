@@ -274,12 +274,13 @@ Keep API communication organized and consistent.
 
 ### 5.4 Real-Time Updates
 
-Handle WebSocket communication in an organized way.
+The MVP uses REST polling, not WebSocket (`docs/decisions/0015-frontend-polling-instead-of-websocket.md`). Handle polling in an organized way.
 
-- Reuse a shared connection management approach where appropriate.
-- Handle connection errors and reconnection behavior.
-- Avoid creating unnecessary duplicate connections.
-- Clean up subscriptions when components or services no longer need them.
+- Use the shared polling hook and `POLL_INTERVALS_MS` (`frontend/src/features/data/`) instead of ad-hoc timers.
+- Show loading, error and stale-data states; a failed or timed-out read must not leave the data silently frozen.
+- Avoid duplicate pollers for the same resource.
+- Stop timers and cancel pending requests when components unmount.
+- If WebSocket is ever added, follow the earlier guidance: a shared connection, reconnection handling, no duplicate connections, and cleanup of subscriptions.
 - Apply incoming updates consistently to the frontend state.
 
 Real-time messages should update the displayed backend state, not create an independent simulation.

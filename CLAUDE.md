@@ -76,13 +76,15 @@ The intended technology stack is:
 - Separate Simulation Worker process.
 - Pytest.
 - REST API.
-- WebSocket for real-time updates.
+- REST polling for real-time updates in the MVP (WebSocket is not implemented; see `docs/decisions/0015-frontend-polling-instead-of-websocket.md`).
 
 ### AI
 
 - LLM integration through controlled backend tools.
 - Fleet Operations Agent.
 - Human approval for state-changing AI-assisted actions.
+
+Current state (Feature 026): the AI Copilot is a read-only question-and-answer chat. The backend sends the model a read-only fleet snapshot as data; the model has no tools and there is no state-changing AI action. Tools and approved actions remain a design target (`context/architecture-context.md` §11, ADR 0014).
 
 Database (decided): PostgreSQL 17 in Docker Compose, published on host port 55432 (container 5432), with the named volume `skyfleet-db`. The backend runs natively on Windows and connects via `localhost:55432`. Never modify, stop, or use the Windows PostgreSQL instance on port 5432. See `docs/decisions/0001-postgresql-database.md`.
 
@@ -124,7 +126,7 @@ Do not introduce microservices, message brokers, Kubernetes, or distributed infr
 
 The Simulation Worker must operate independently of the frontend.
 
-An open browser or active WebSocket connection must never be required for simulation execution.
+An open browser or an active polling client must never be required for simulation execution.
 
 ### Deterministic Business Logic
 
@@ -205,7 +207,7 @@ The main interface should remain map-first and focused on operational awareness.
 
 ## 8. Backend Rules
 
-- Use FastAPI for HTTP and WebSocket interfaces.
+- Use FastAPI for HTTP interfaces (WebSocket is not used in the MVP, ADR 0015).
 - Keep API route handlers thin.
 - Place business logic in appropriate domain or application services.
 - Validate incoming data.

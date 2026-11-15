@@ -36,7 +36,8 @@ The following technologies define the intended implementation direction.
 - Mapbox GL JS for interactive maps.
 - A suitable React state management solution, selected according to actual application complexity.
 - REST API communication with the backend.
-- WebSocket communication for real-time operational updates.
+- Polling of REST endpoints for real-time operational updates (`frontend/src/features/data/polling.ts`; WebSocket is not implemented, see `docs/decisions/0015-frontend-polling-instead-of-websocket.md`).
+- Three.js / React Three Fiber for the drone 3D viewer (`docs/decisions/0003-threejs-drone-viewer.md`).
 
 ### Backend
 
@@ -158,7 +159,7 @@ Use a modular backend structure with clear separation of responsibilities.
 
 A logical organization may look like:
 
-- `api/` — REST endpoints, request handling, and WebSocket interfaces.
+- `api/` — REST endpoints and request handling (no WebSocket interface, see ADR 0015).
 - `domains/` — business entities, rules, and domain operations.
 - `simulation/` — simulation lifecycle and runtime components.
 - `ai/` — LLM integration, agent orchestration, and tool definitions.
@@ -279,7 +280,7 @@ Events provide an auditable history of state changes and operational decisions.
 
 The final entity attributes, relationships, and state definitions should be specified when implementing each domain.
 
-Implemented foundation (Feature 018A): the append-only `operational_events` table with a read-only `GET /api/events`; only `ORDER_CREATED` is emitted so far. See `docs/decisions/0004-incident-event-foundation.md`.
+Implemented foundation (Feature 018A): the append-only `operational_events` table with a read-only `GET /api/events`. The event types currently defined in `app/events/models.py` (`EventType`, enforced by a database CHECK constraint) are `ORDER_CREATED`, `ORDER_CANCELLED`, `DRONE_FAILURE`, `RECIPIENT_UNAVAILABLE`, `LPR_TRANSIT`, `DRONE_RELOCATION` (`details.phase` STARTED or COMPLETED), `RAIN_WARNING_ACTIVATED`, `RAIN_WARNING_CLEARED` and `DRONE_RECOVERED`; the origin is `SYSTEM`, `AUTOMATIC` or `MANUAL`. There are no events yet for dispatch, mission start, collection or charging. See `docs/decisions/0004-incident-event-foundation.md`.
 
 Weather restriction (Feature 020): `app/weather` holds one persisted global rain warning. Every takeoff transaction (`start_mission`, `start_relocation`) calls `weather.lock_for_takeoff` first; activation serialises against it with a row lock, and airborne flights never consult it. See `docs/decisions/0011-rain-warning-flight-grounding.md`.
 
@@ -381,6 +382,8 @@ Do not implement real flight physics, hardware control, or unnecessary external 
 
 Use domain events where they provide meaningful separation between operational processes.
 
+The persisted events actually implemented are listed in section 5 (System Event); the names below are illustrative examples of the intended style, not the implemented list.
+
 Examples:
 
 - `OrderCreated`
@@ -413,11 +416,11 @@ Use REST endpoints for:
 
 Follow consistent resource naming, HTTP methods, response structures, validation, and error handling.
 
-### WebSocket
+### Real-time updates: REST polling (MVP)
 
-Use WebSocket for real-time operational updates.
+The frontend keeps its view current by polling REST endpoints (flights about every 1 s, drones, orders and missions about every 2 s). WebSocket is **not implemented**; this is an approved MVP decision with trade-offs and revisit conditions in `docs/decisions/0015-frontend-polling-instead-of-websocket.md`, which supersedes the WebSocket part of ADR 0002. The worker still talks to the API only through the database.
 
-Potential updates include:
+Updates the polled resources carry include:
 
 - Drone position changes.
 - Telemetry updates.
@@ -427,13 +430,15 @@ Potential updates include:
 - Hub status changes.
 - Simulation status.
 
-The backend remains the source of truth. WebSocket messages communicate changes; they do not transfer ownership of operational logic to the frontend.
+The backend remains the source of truth. Polled responses show state; they do not transfer ownership of operational logic to the frontend. If server push is ever added, its messages must follow the same rule.
 
 ## 11. AI Operations Architecture
 
 SkyFleet includes one primary Fleet Operations Agent.
 
-The agent interacts with the application through explicitly defined backend tools.
+**Current state (Feature 026):** the implemented Copilot is a read-only question-and-answer chat. The backend builds a fleet snapshot (`app/fleet_context`) and sends it to the model as data in a single request. The model has **no tools**, can call nothing, and there is **no state-changing AI action**. The tool lists below are a design target, not implemented behavior.
+
+The agent is intended to interact with the application through explicitly defined backend tools.
 
 Potential read-only tools:
 
@@ -479,7 +484,7 @@ AI is an investigation and decision-support layer, not a safety controller.
 
 The frontend is a presentation and interaction layer.
 
-It communicates with the backend through REST and WebSocket interfaces.
+It communicates with the backend through REST endpoints, polled at fixed intervals (ADR 0015).
 
 ### Frontend Responsibilities
 

@@ -1,6 +1,12 @@
 # ADR 0002 — Worker-to-frontend real-time updates via DB polling
 
-**Status:** Accepted in principle (2026-11-11); implemented in Phase 7
+**Status:** Accepted in principle (2026-11-11); partly superseded by [ADR 0015](0015-frontend-polling-instead-of-websocket.md) (2026-11-15)
+
+> **Superseded part:** the API-side broadcaster and the WebSocket push to the browser (second bullet
+> of the Decision) were never built; the frontend polls REST endpoints instead (ADR 0015). **Still
+> valid:** the worker persists state and events to the database and communicates with the API only
+> through it; simulation control is stored in database state read by the worker. The text below is
+> kept unchanged as historical context.
 
 ## Context
 

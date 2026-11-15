@@ -4,13 +4,17 @@
 operating across the Tricity area (Gdańsk, Sopot, Gdynia), with a map-first operations dashboard, a
 backend-owned continuously running simulation, and an AI Fleet Operations Agent.
 
-> Status: **Phase 1 — runnable skeleton.** See [`progress-tracker.md`](context/progress-tracker.md).
+> Status: **MVP in progress.** The map, Hubs, drones, orders, missions, dispatch, the continuously running
+> simulation worker, incidents and a read-only AI Copilot are implemented; testing, polish and deployment
+> remain (Phases 9-10). Real-time updates use REST polling, not WebSocket
+> ([ADR 0015](docs/decisions/0015-frontend-polling-instead-of-websocket.md)). See
+> [`progress-tracker.md`](context/progress-tracker.md) for the detailed status.
 
 ## Architecture at a glance
 
 | Part | Tech | Location |
 |---|---|---|
-| Frontend (operations dashboard) | React, TypeScript, Vite, Tailwind CSS v4 (Mapbox GL JS in Phase 2) | `frontend/` |
+| Frontend (operations dashboard) | React, TypeScript, Vite, Tailwind CSS v4, Mapbox GL JS, Three.js (drone 3D viewer) | `frontend/` |
 | Backend API | Python 3.13, FastAPI, Pydantic | `backend/app/main.py` |
 | Simulation Worker | Separate Python process sharing backend modules | `backend/app/worker.py` |
 | Database | PostgreSQL 17 via Docker Compose (host port 55432) | `docker-compose.yml` |
@@ -24,7 +28,7 @@ of any browser session. Details: [`architecture-context.md`](context/architectur
 - **Node.js 24** (with npm)
 - **Python 3.13**
 - **[uv](https://docs.astral.sh/uv/)** — Python dependency manager (`winget install astral-sh.uv`)
-- **Docker** — only needed from Phase 3 (database)
+- **Docker** — runs the PostgreSQL database (Docker Desktop on Windows)
 
 ## First-time setup
 
@@ -361,20 +365,65 @@ Real `.env` / `.env.local` files are git-ignored and must never be committed.
 | `DATABASE_URL` | backend | SQLAlchemy URL; defaults to the Docker Compose PostgreSQL (`postgresql+psycopg://skyfleet:skyfleet@localhost:55432/skyfleet`) |
 | `LOG_LEVEL` | backend | Python logging level |
 | `VITE_API_BASE_URL` | frontend | Backend base URL |
-| `VITE_MAPBOX_TOKEN` | frontend | *(Phase 2)* **Public** Mapbox token (`pk.…`), URL-restricted |
+| `VITE_MAPBOX_TOKEN` | frontend | **Public** Mapbox token (`pk.…`), URL-restricted |
 
 Anything prefixed `VITE_` is bundled into the browser, so only public values belong there. The Mapbox
 token is public by design and should be restricted to the app's URLs in the Mapbox dashboard.
 
-## Repository layout
+## Where things live
 
-```
-backend/    FastAPI app (app/), Simulation Worker (app/worker.py), tests/
-frontend/   React app: src/api (HTTP client), src/types (API contracts),
-            src/features (feature modules), src/components/ui (shared UI)
-context/    Project context documents (business rules, overview, architecture, standards, UI, workflow, progress)
-docs/       Architecture decision records (decisions/), task specs (tasks/), BPMN diagrams (diagrams/)
-```
+Top level: `backend/` (Python API and worker), `frontend/` (React app), `context/` (the seven
+source-of-truth documents), `docs/` (`decisions/` ADRs, `features/` per-feature specs with their
+implementation records, `diagrams/` BPMN), `docker-compose.yml` (PostgreSQL).
+
+### Backend (`backend/`)
+
+| Path | Responsibility | More |
+|---|---|---|
+| `app/main.py` | FastAPI app; registers the routers under `/api` | |
+| `app/api/routes/` | Thin HTTP handlers (hubs, drones, orders, missions, flights, dispatch, events, incidents, order simulation, copilot, health); no business logic | |
+| `app/worker.py` | Entry point of the Simulation Worker (separate process, writes a heartbeat) | [Feature 010](docs/features/010-Flight%20Simulation.md) |
+| `app/simulation/` | Worker logic: engine tick, flight, charging, failures and recovery, failed delivery, LPR helicopter, relocation, random incidents | [ADR 0004](docs/decisions/0004-incident-event-foundation.md)-[0009](docs/decisions/0009-manual-drone-relocation.md) |
+| `app/hubs/`, `app/drones/`, `app/orders/` | Entities, repositories, services, seeds; `orders/` also holds the order generator, delivery destinations, feasibility and cancellation | [ADR 0005](docs/decisions/0005-order-cancellation-and-recall.md) |
+| `app/missions/` | Mission planning, routing, energy, Hub capacity and presence, takeoff | [Feature 009](docs/features/009-mission-planning-assignment.md) |
+| `app/dispatch/` | Deterministic dispatch recommendation and execution, automatic mode, fleet rebalancing | [ADR 0010](docs/decisions/0010-automatic-fleet-rebalancing.md) |
+| `app/events/` | Append-only `operational_events` and `GET /api/events` | [ADR 0004](docs/decisions/0004-incident-event-foundation.md) |
+| `app/weather/` | The global rain warning and the takeoff check | [ADR 0011](docs/decisions/0011-rain-warning-flight-grounding.md) |
+| `app/ai/` | AI gateway, one provider transport, model and price allowlist, durable budget; no domain imports | [ADR 0012](docs/decisions/0012-ai-foundation-and-cost-guardrails.md) |
+| `app/fleet_context/` | Read-only snapshot of the present fleet state, rendered as JSON for the model | [ADR 0013](docs/decisions/0013-fleet-context-read-only-intelligence.md) |
+| `app/copilot/` | Access control and orchestration for the authenticated Copilot endpoint | [ADR 0014](docs/decisions/0014-ai-copilot-access-and-endpoint.md) |
+| `app/db/`, `app/config.py` | Database session, settings from environment variables | [ADR 0001](docs/decisions/0001-postgresql-database.md) |
+| `migrations/` | Alembic migrations (`alembic upgrade head`) | |
+| `tests/` | Pytest, one folder per module, plus `unit/` and `integration/`; PostgreSQL tests are opt-in (`-m postgres`) | |
+
+### Frontend (`frontend/src/`)
+
+| Path | Responsibility |
+|---|---|
+| `api/` | Typed HTTP client and one module per backend resource (`client.ts`, `flights.ts`, `copilot.ts`, ...) |
+| `features/data/` | Shared polling and request hooks; intervals in `polling.ts` ([ADR 0015](docs/decisions/0015-frontend-polling-instead-of-websocket.md)) |
+| `features/map/`, `hubs/`, `drones/`, `orders/`, `flights/`, `missions/` | Map layers, markers and detail panels for each entity |
+| `features/operations/` | The Operations panel and its tabs (lists, events, Copilot) |
+| `features/copilot/` | Copilot chat tab; state lives above the tabs and the token is kept in memory only |
+| `features/dispatch/`, `orderSimulation/`, `incidents/`, `weather/`, `lpr/` | Simulation controls, scenarios and incident displays |
+| `features/management/` | Drone and order management tables |
+| `features/drone3d/`, `telemetry/` | Three.js drone viewer ([ADR 0003](docs/decisions/0003-threejs-drone-viewer.md)) and simulated telemetry panel |
+| `features/system-status/` | Backend and worker status display |
+| `components/ui/`, `types/` | Shared UI pieces; API contract types |
+
+### Data flow in one paragraph
+
+The Simulation Worker changes state in PostgreSQL on its own; the API reads and validates through the
+same modules; the browser polls REST endpoints and renders what it receives. The worker never needs an
+open browser. The Copilot sends a read-only fleet snapshot to the model and has no tools, so it cannot
+change any state.
+
+### Finding the reasoning behind a behavior
+
+1. [`business-rules.md`](context/business-rules.md) for what the business confirmed.
+2. The ADR in `docs/decisions/` for why it was built that way.
+3. The feature spec in `docs/features/` (numbered; each ends with an implementation record).
+4. [`progress-tracker.md`](context/progress-tracker.md) for status and known limits.
 
 ## Project documentation
 
@@ -385,4 +434,6 @@ docs/       Architecture decision records (decisions/), task specs (tasks/), BPM
 - [`ui-context.md`](context/ui-context.md) — UI/UX direction
 - [`ai-workflow-rules.md`](context/ai-workflow-rules.md) — AI-assisted development workflow
 - [`progress-tracker.md`](context/progress-tracker.md) — roadmap and status
+- [`docs/decisions/`](docs/decisions/) — architecture decision records (0001-0015)
+- [`docs/features/`](docs/features/) — per-feature specifications and implementation records
 - [`CLAUDE.md`](CLAUDE.md) — Claude Code project instructions
