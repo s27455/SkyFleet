@@ -149,3 +149,86 @@ describe('EventTimeline for a drone (Feature 019A)', () => {
     expect(await screen.findByText('No recorded activity for this drone.')).toBeInTheDocument()
   })
 })
+
+describe('EventTimeline for a drone shows only the latest three', () => {
+  const drone = (id: number, occurredAt: string) => ({
+    ...EVENT,
+    id,
+    event_type: 'DRONE_RELOCATION',
+    order_id: null,
+    drone_id: 'DRN-010',
+    occurred_at: occurredAt,
+    reason: `record ${id}`,
+  })
+
+  async function show(events: ReturnType<typeof drone>[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse(events))),
+    )
+    render(<EventTimeline droneId="DRN-010" />)
+  }
+
+  it('shows one and three records as they are', async () => {
+    await show([drone(1, '2026-11-13T10:00:00Z')])
+    expect(await screen.findAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('shows three records newest first', async () => {
+    await show([
+      drone(1, '2026-11-13T10:00:00Z'),
+      drone(2, '2026-11-13T10:01:00Z'),
+      drone(3, '2026-11-13T10:02:00Z'),
+    ])
+    const items = await screen.findAllByRole('listitem')
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringContaining('record 3'),
+      expect.stringContaining('record 2'),
+      expect.stringContaining('record 1'),
+    ])
+  })
+
+  it('drops older records beyond three and adds no "showing N" message', async () => {
+    await show([
+      drone(1, '2026-11-13T10:00:00Z'),
+      drone(2, '2026-11-13T10:01:00Z'),
+      drone(3, '2026-11-13T10:02:00Z'),
+      drone(4, '2026-11-13T10:03:00Z'),
+      drone(5, '2026-11-13T10:04:00Z'),
+    ])
+    const items = await screen.findAllByRole('listitem')
+    expect(items).toHaveLength(3)
+    expect(items[0]).toHaveTextContent('record 5')
+    expect(items[2]).toHaveTextContent('record 3')
+    expect(screen.queryByText(/record 1/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/showing/i)).not.toBeInTheDocument()
+  })
+
+  it('puts the later id first when two records share a timestamp', async () => {
+    await show([
+      drone(7, '2026-11-13T10:00:00Z'),
+      drone(8, '2026-11-13T10:00:00Z'),
+      drone(6, '2026-11-13T09:00:00Z'),
+      drone(5, '2026-11-13T08:00:00Z'),
+    ])
+    const items = await screen.findAllByRole('listitem')
+    expect(items[0]).toHaveTextContent('record 8')
+    expect(items[1]).toHaveTextContent('record 7')
+    expect(items[2]).toHaveTextContent('record 6')
+  })
+
+  it('keeps an order timeline in full and oldest first', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          jsonResponse([1, 2, 3, 4].map((id) => ({ ...EVENT, id, reason: `record ${id}` }))),
+        ),
+      ),
+    )
+    render(<EventTimeline orderId="ORD-1" />)
+    const items = await screen.findAllByRole('listitem')
+    expect(items).toHaveLength(4)
+    expect(items[0]).toHaveTextContent('record 1')
+  })
+})

@@ -906,6 +906,8 @@ describe('App live flights', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Simulated emergency: DRN-010 (MIS-AAAA0001)')
+    expect(alert).not.toHaveTextContent('out of service') // compact until expanded
+    fireEvent.click(within(alert).getByRole('button', { name: 'Show details for DRN-010' }))
     expect(alert).toHaveTextContent('every Hub it could reach was full')
     expect(alert).toHaveTextContent('out of service')
     expect(alert).toHaveTextContent('already delivered')

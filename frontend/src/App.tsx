@@ -348,7 +348,7 @@ function App() {
             showEmergency={emergencyPoints.length > 0}
             showLpr={lprScenario !== null}
           />
-          <div className="absolute inset-x-3 top-3 z-20 flex flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80">
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex max-h-[calc(100%-1.5rem)] min-h-0 flex-col gap-2 sm:inset-x-auto sm:right-3 sm:w-80 [&>*]:pointer-events-auto">
             <ResourceStatusBanner
               resource="hub"
               state={hubsResource.state}

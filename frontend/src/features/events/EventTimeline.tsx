@@ -45,24 +45,46 @@ function OrderActivity({ orderId, refreshKey }: { orderId: string; refreshKey: n
   return <Timeline resource={useOrderEvents(orderId)} refreshKey={refreshKey} subject="order" />
 }
 
+/** A drone's panel shows only its latest events, newest first; the history stays in the backend. */
+export const DRONE_ACTIVITY_LIMIT = 3
+
 function DroneActivity({ droneId, refreshKey }: { droneId: string; refreshKey: number }) {
-  return <Timeline resource={useDroneEvents(droneId)} refreshKey={refreshKey} subject="drone" />
+  return (
+    <Timeline
+      resource={useDroneEvents(droneId)}
+      refreshKey={refreshKey}
+      subject="drone"
+      newestFirstLimit={DRONE_ACTIVITY_LIMIT}
+    />
+  )
 }
 
 function Timeline({
   resource,
   refreshKey,
   subject,
+  newestFirstLimit,
 }: {
   resource: ReturnType<typeof useOrderEvents>
   refreshKey: number
   subject: 'order' | 'drone'
+  newestFirstLimit?: number
 }) {
   const { state, stale, retry, refresh } = resource
   const firstKey = useRef(refreshKey)
   useEffect(() => {
     if (refreshKey !== firstKey.current) refresh()
   }, [refreshKey, refresh])
+
+  // Recency is the backend's own order: occurred_at, then id (a tie shows the later record first).
+  const events =
+    state.status === 'ready' && newestFirstLimit !== undefined
+      ? [...state.data]
+          .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt) || b.id - a.id)
+          .slice(0, newestFirstLimit)
+      : state.status === 'ready'
+        ? state.data
+        : []
 
   return (
     <section aria-label="Activity" className="mt-3 border-t border-line pt-3">
@@ -85,7 +107,7 @@ function Timeline({
       )}
       {state.status === 'ready' && state.data.length > 0 && (
         <ol className="mt-2 space-y-2 text-sm">
-          {state.data.map((event) => (
+          {events.map((event) => (
             <li key={event.id}>
               <p>{EVENT_DESCRIPTIONS[event.type]}</p>
               <p className="text-xs text-fg-muted">

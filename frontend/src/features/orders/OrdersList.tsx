@@ -37,7 +37,7 @@ export function OrdersList({
   return (
     <section
       aria-label="Orders"
-      className={`rounded-lg border border-line bg-surface text-sm shadow-lg ${
+      className={`flex min-h-0 shrink flex-col rounded-lg border border-line bg-surface text-sm shadow-lg ${
         hideOnNarrow ? 'max-sm:hidden' : ''
       }`}
     >
@@ -46,7 +46,7 @@ export function OrdersList({
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         onClick={() => setOpen((value) => !value)}
-        className="flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-3 text-left font-medium hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-accent"
+        className="flex min-h-10 w-full shrink-0 items-center justify-between gap-3 rounded-lg px-3 text-left font-medium hover:bg-surface-raised focus-visible:outline-2 focus-visible:outline-accent"
       >
         <span>Orders ({orders.length})</span>
         <span aria-hidden="true" className="text-fg-muted">
@@ -57,7 +57,7 @@ export function OrdersList({
       {open && (
         <ul
           id={listId}
-          className="max-h-[28dvh] overflow-y-auto border-t border-line sm:max-h-[50dvh]"
+          className="max-h-[40dvh] min-h-0 overflow-y-auto overscroll-contain border-t border-line sm:max-h-[60dvh]"
         >
           {orders.map((order) => {
             const selected = order.id === selectedOrderId
