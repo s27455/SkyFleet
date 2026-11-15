@@ -27,7 +27,7 @@ def test_serialization_is_deterministic_and_compact() -> None:
     assert first == second
     assert ": " not in first and ", " not in first  # compact separators, no whitespace
     assert "\n" not in first
-    assert json.loads(first)["schema_version"] == "1"
+    assert json.loads(first)["schema_version"] == "2"
 
 
 def test_what_the_model_must_not_miss_comes_first() -> None:

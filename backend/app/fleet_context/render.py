@@ -15,10 +15,11 @@ important end, and re-measured, until it fits:
   4. flagged drone rows, least urgent first
   5. active incidents, oldest first
 
-The summary, simulation block, limitations, `omitted` and the operational warnings are never
-dropped. Every removal is recorded in `omitted` and, through `apply_omissions`, as a
-`*_OMITTED:n` limitation with `truncated` true and `data_status` degraded, so nothing is ever
-omitted silently. If it still does not fit with every list empty, the request is refused.
+The summary, simulation block, limitations, `omitted`, `named_drones` and the operational
+warnings are never dropped. Every removal is recorded in `omitted` and, through
+`apply_omissions`, as a `*_OMITTED:n` limitation with `truncated` true and `data_status`
+degraded, so nothing is ever omitted silently. If it still does not fit with every list
+empty, the request is refused.
 """
 
 import json

@@ -48,6 +48,8 @@ import { OrdersList } from './features/orders/OrdersList'
 import { OrderGenerationControl } from './features/orderSimulation/OrderGenerationControl'
 import { useOrderSimulation } from './features/orderSimulation/useOrderSimulation'
 import { DronesList } from './features/operations/DronesList'
+import { CopilotTab } from './features/copilot/CopilotTab'
+import { useCopilot } from './features/copilot/useCopilot'
 import { EventsTab } from './features/operations/EventsTab'
 import { HubsList } from './features/operations/HubsList'
 import { buildNotices } from './features/operations/notices'
@@ -95,6 +97,9 @@ function App() {
   // The Operations panel follows the selection (even while it is closed); the operator can still
   // switch tabs by hand without touching the selection.
   const [operationsTab, setOperationsTab] = useState<OperationsTab>('orders')
+  // Feature 026: the Copilot's state lives here, above the tabs, so switching tabs (or a map
+  // selection that does) never loses a draft, an answer or a request still on its way.
+  const copilot = useCopilot()
   const selectHub = useCallback((id: string) => {
     setSelection({ kind: 'hub', id })
     setOperationsTab('hubs')
@@ -489,6 +494,7 @@ function App() {
                 hubs: `Hubs (${hubs.length})`,
                 orders: `Orders (${orders.length})`,
                 events: 'Events',
+                copilot: 'Copilot',
               }}
               hideOnNarrow={selection !== null}
             >
@@ -516,6 +522,7 @@ function App() {
                   onSelectOrder={focusOrder}
                 />
               )}
+              {operationsTab === 'copilot' && <CopilotTab copilot={copilot} />}
               {operationsTab === 'events' && (
                 <EventsTab
                   notices={notices}

@@ -156,6 +156,14 @@ class Settings(BaseSettings):
             "SKYFLEET_AI_ERROR_BACKOFF_SECONDS", "ai_error_backoff_seconds"
         ),
     )
+    # Feature 026: the operator token the AI Copilot endpoint requires (Bearer). It lives only in
+    # the server's Git-ignored `.env`, never in the frontend; at least 32 characters, or the
+    # Copilot refuses everybody (see `app.copilot.access`). `repr=False`: never printed.
+    ai_access_token: SecretStr | None = Field(
+        default=None,
+        repr=False,
+        validation_alias=AliasChoices("SKYFLEET_AI_ACCESS_TOKEN", "ai_access_token"),
+    )
 
     # Feature 017A: how long a DELIVERED order stays in the active operational views, counted from
     # its persisted delivery time. The order itself is never deleted.

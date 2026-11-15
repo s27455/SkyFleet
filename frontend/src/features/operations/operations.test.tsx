@@ -35,6 +35,7 @@ const LABELS = {
   hubs: 'Hubs (1)',
   orders: 'Orders (0)',
   events: 'Events',
+  copilot: 'Copilot',
 } as const
 
 function Panel({ initial = 'orders' as OperationsTab }) {
@@ -50,7 +51,7 @@ function Panel({ initial = 'orders' as OperationsTab }) {
 }
 
 describe('OperationsPanel', () => {
-  it('is closed by default and shows the four tabs once opened', () => {
+  it('is closed by default and shows the five tabs once opened', () => {
     render(<Panel />)
     expect(screen.getByRole('button', { name: 'Operations' })).toHaveAttribute(
       'aria-expanded',
@@ -65,6 +66,7 @@ describe('OperationsPanel', () => {
       'Hubs (1)',
       'Orders (0)',
       'Events',
+      'Copilot',
     ])
     expect(screen.getByRole('tab', { name: 'Orders (0)' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tabpanel')).toHaveClass('overflow-y-auto')
@@ -93,15 +95,15 @@ describe('OperationsPanel', () => {
     expect(tab('Hubs (1)')).toHaveFocus()
 
     fireEvent.keyDown(tab('Hubs (1)'), { key: 'End' })
-    expect(tab('Events')).toHaveAttribute('aria-selected', 'true')
+    expect(tab('Copilot')).toHaveAttribute('aria-selected', 'true')
 
-    fireEvent.keyDown(tab('Events'), { key: 'ArrowRight' }) // wraps around
+    fireEvent.keyDown(tab('Copilot'), { key: 'ArrowRight' }) // wraps around
     expect(tab('Drones (1)')).toHaveAttribute('aria-selected', 'true')
 
     fireEvent.keyDown(tab('Drones (1)'), { key: 'ArrowLeft' })
-    expect(tab('Events')).toHaveAttribute('aria-selected', 'true')
+    expect(tab('Copilot')).toHaveAttribute('aria-selected', 'true')
 
-    fireEvent.keyDown(tab('Events'), { key: 'Home' })
+    fireEvent.keyDown(tab('Copilot'), { key: 'Home' })
     expect(tab('Drones (1)')).toHaveAttribute('aria-selected', 'true')
   })
 

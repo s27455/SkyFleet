@@ -39,12 +39,12 @@ ALLOWED_IMPORTS: dict[str, set[str]] = {
 }
 # Only these two modules talk to the AI package, and only through these names.
 AI_IMPORTS: dict[str, set[str]] = {
-    "app.ai.errors": {"AiError", "AiDisabledError"},
+    "app.ai.errors": {"AiError", "AiDisabledError", "InvalidQuestionError"},
     "app.ai.gateway": {"AiGateway"},
     "app.ai.request": {"SYSTEM_PROMPT", "build_user_content", "prepare_request"},
     "app.ai.types": {"AiAnswer"},
 }
-AI_IMPORTERS = {"errors.py", "service.py"}
+AI_IMPORTERS = {"errors.py", "question.py", "service.py"}
 SQLALCHEMY_ALLOWED = {
     "sqlalchemy": {"and_", "event", "exists", "func", "select", "text"},
     "sqlalchemy.orm": {"Session", "sessionmaker"},
@@ -148,7 +148,7 @@ def test_the_snapshot_transaction_is_read_only_repeatable_read_with_a_timeout() 
     assert ".commit(" not in source and "session.rollback()" in source
 
 
-def test_nothing_else_in_the_application_imports_the_package_yet() -> None:
+def test_only_the_copilot_service_imports_the_package() -> None:
     importers = [
         path.relative_to(APP).as_posix()
         for path in python_files(APP)
@@ -158,7 +158,8 @@ def test_nothing_else_in_the_application_imports_the_package_yet() -> None:
         )
     ]
 
-    assert importers == []  # no route, no worker, no service: Feature 026 will be the first caller
+    # Feature 026: the Copilot service is the first caller. No route, no worker, nothing else.
+    assert importers == ["copilot/service.py"]
 
 
 def test_only_the_orchestrator_and_its_errors_talk_to_the_ai_package() -> None:

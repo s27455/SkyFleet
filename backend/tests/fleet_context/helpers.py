@@ -18,6 +18,7 @@ from app.fleet_context.schemas import (
     HubRow,
     Incident,
     IncidentKind,
+    NamedDrone,
     Omitted,
     OperationalWarning,
     OrdersHistory,
@@ -66,6 +67,7 @@ def hand_context(
     recovered: int = 0,
     warnings: bool = False,
     limitations: tuple[str, ...] = (),
+    named: tuple[NamedDrone, ...] = (),
 ) -> FleetContext:
     """A synthetic context. The first `flagged` drones carry a flag (flagged rows come first)."""
     rows = [drone_row(i, flagged=i <= flagged) for i in range(1, drones + 1)]
@@ -76,6 +78,7 @@ def hand_context(
         limitations=list(limitations),
         truncated=False,
         omitted=Omitted(),
+        named_drones=list(named),
         simulation=Simulation(
             worker_running=True,
             worker_heartbeat_age_s=0,

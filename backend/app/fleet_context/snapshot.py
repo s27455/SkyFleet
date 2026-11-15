@@ -30,7 +30,7 @@ coordinates, event reasons or mode summaries are included.
 """
 
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any
@@ -61,6 +61,7 @@ from app.fleet_context.schemas import (
     Incident,
     IncidentKind,
     Limitation,
+    NamedDrone,
     Omitted,
     OperationalWarning,
     OrdersHistory,
@@ -165,19 +166,31 @@ def iso(moment: datetime) -> str:
 
 
 def build_fleet_context(
-    factory: sessionmaker[Session], settings: Settings, now: datetime | None = None
+    factory: sessionmaker[Session],
+    settings: Settings,
+    now: datetime | None = None,
+    named_drones: Sequence[str] = (),
 ) -> FleetContext:
-    """The snapshot of the present, or an exception (the caller fails closed)."""
+    """The snapshot of the present, or an exception (the caller fails closed).
+
+    `named_drones` are canonical drone ids taken from the question: they are ranked right after
+    the flagged drones and reported in `named_drones` (exists, listed). No extra query is made.
+    """
     captured = as_utc(now or utcnow()).replace(microsecond=0)
     with read_only_snapshot(factory) as session:
-        return _assemble(session, settings, captured)
+        return _assemble(session, settings, captured, named_drones)
 
 
 def _enabled(row: Any) -> bool:
     return bool(row.enabled) if row is not None else False
 
 
-def _assemble(session: Session, settings: Settings, captured: datetime) -> FleetContext:
+def _assemble(
+    session: Session,
+    settings: Settings,
+    captured: datetime,
+    named_drones: Sequence[str] = (),
+) -> FleetContext:
     cleaner = _Cleaner()
     limitations: list[str] = []
     radius = settings.hub_dock_proximity_m
@@ -205,6 +218,8 @@ def _assemble(session: Session, settings: Settings, captured: datetime) -> Fleet
         .order_by(Drone.id)
     ).all()
     drones = [drone for drone, _ in drone_rows]
+    existing_ids = {drone.id for drone in drones}
+    named_set = set(named_drones)
     reserve = {drone.id: pct for drone, pct in drone_rows}
     _, active_drone_ids = active_claims(session)
     occupancy = hub_occupancy(drones, hubs, radius)
@@ -287,7 +302,7 @@ def _assemble(session: Session, settings: Settings, captured: datetime) -> Fleet
             )
         )
 
-    # the roster: flagged drones first, then drones in flight or on a mission, then the rest
+    # the roster: flagged, named in the question, in flight or on a mission, then the rest
     status_counts = {status.value: 0 for status in DroneStatus}
     roster: list[tuple[tuple[int, int, str], DroneRow]] = []
     for drone in drones:
@@ -319,18 +334,21 @@ def _assemble(session: Session, settings: Settings, captured: datetime) -> Fleet
             ),
             flags=flags,
         )
-        # Roster priority (deterministic): 0 flagged drones, by flag urgency; 1 other drones in
-        # flight or holding an active mission (ASSIGNED or IN_FLIGHT); 2 all the rest. Ties by id.
+        # Roster priority (deterministic): 0 flagged drones, by flag urgency; 1 other drones the
+        # operator named in the question; 2 other drones in flight or holding an active mission
+        # (ASSIGNED or IN_FLIGHT); 3 all the rest. Ties by id.
         if flags:
             key = (0, FLAG_PRIORITY.index(flags[0]), row.id)
+        elif drone.id in named_set:
+            key = (1, 0, row.id)
         elif (
             drone.status == DroneStatus.IN_FLIGHT.value
             or drone.id in active_drone_ids
             or drone.id in flight_of
         ):
-            key = (1, 0, row.id)
-        else:
             key = (2, 0, row.id)
+        else:
+            key = (3, 0, row.id)
         roster.append((key, row))
     if "OTHER" in status_counts:
         limitations.append(Limitation.UNKNOWN_DRONE_STATUS.value)
@@ -368,6 +386,9 @@ def _assemble(session: Session, settings: Settings, captured: datetime) -> Fleet
         limitations=limitations,
         truncated=False,
         omitted=Omitted(),
+        named_drones=[
+            NamedDrone(id=name, exists=name in existing_ids, listed=False) for name in named_drones
+        ],
         simulation=simulation,
         summary=Summary(
             drones_total=len(drones),

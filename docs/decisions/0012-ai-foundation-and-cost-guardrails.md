@@ -1,6 +1,6 @@
 # 0012 — AI foundation and cost guardrails (Feature 024)
 
-**Status:** Accepted for the MVP and implemented. The foundation is tested offline and on PostgreSQL; AI is **disabled by default** and nothing calls it. One real smoke request was made on 2026-11-15 (see Consequences); no other real request has been made.
+**Status:** Accepted for the MVP and implemented. The foundation is tested offline and on PostgreSQL; AI is **disabled by default** and, since Feature 026, is reached only through the authenticated Copilot endpoint (ADR 0014). One real smoke request was made on 2026-11-15 (see Consequences); no other real request has been made.
 
 ## Decisions
 

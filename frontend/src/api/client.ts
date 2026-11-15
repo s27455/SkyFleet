@@ -53,16 +53,20 @@ export function apiPost<T>(path: string, signal?: AbortSignal): Promise<T> {
   return request<T>(path, { method: 'POST', signal })
 }
 
-/** JSON-body helper for administrative writes (POST create, PATCH update). */
+/**
+ * JSON-body helper for administrative writes (POST create, PATCH update). `headers` adds request
+ * headers (the AI Copilot's `Authorization`); it can never replace the JSON content type.
+ */
 export function apiSend<T>(
   method: 'POST' | 'PATCH',
   path: string,
   body: unknown,
   signal?: AbortSignal,
+  headers?: Record<string, string>,
 ): Promise<T> {
   return request<T>(path, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   })

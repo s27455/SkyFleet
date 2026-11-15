@@ -873,3 +873,131 @@ def test_the_byte_budget_drops_idle_rows_before_active_rows_before_flagged_rows(
 
     assert min(kept_counts) < 5 <= 40  # the sweep reached the point where active rows go too
     assert max(kept_counts) == 40
+
+
+# --- Feature 026: drones named in the question ------------------------------------------------
+
+
+def named(context: FleetContext) -> list[tuple[str, bool, bool]]:
+    return [(n.id, n.exists, n.listed) for n in context.named_drones]
+
+
+def build_named(factory: sessionmaker[Session], settings: Settings, *ids: str) -> FleetContext:
+    return build_fleet_context(factory, settings, NOW + timedelta(seconds=1), named_drones=ids)
+
+
+def test_the_snapshot_is_schema_version_2_with_named_drones_after_omitted(
+    seeded: Session, session_factory: sessionmaker[Session], sim_settings: Settings
+) -> None:
+    alive(seeded)
+
+    context = build(session_factory, sim_settings)
+
+    keys = list(json.loads(serialize(context)))
+    assert context.schema_version == "2" and context.named_drones == []
+    assert keys[keys.index("omitted") + 1] == "named_drones"
+
+
+def test_a_named_idle_drone_is_ranked_right_after_the_flagged_ones_and_survives_the_cap(
+    seeded: Session,
+    session_factory: sessionmaker[Session],
+    sim_settings: Settings,
+    make_drone: DroneMaker,
+) -> None:
+    big_fleet(seeded, make_drone)
+    control = build(session_factory, sim_settings)
+    assert "DRN-044" not in [d.id for d in control.drones]  # cut without the question naming it
+
+    context = build_named(session_factory, sim_settings, "DRN-044")
+
+    ids = [d.id for d in context.drones]
+    assert ids[0] == "DRN-040"  # flagged first
+    assert ids[1] == "DRN-044"  # then the drone the operator named, ahead of the active ones
+    assert ids[2:6] == ACTIVE  # then drones in flight or on a mission
+    assert len(ids) == 40 and context.omitted.drones == 7  # the cap and the reporting are unchanged
+    assert named(context) == [("DRN-044", True, True)]
+
+
+def test_named_drones_that_do_not_exist_or_are_not_listed_are_disclosed(
+    seeded: Session, session_factory: sessionmaker[Session], sim_settings: Settings
+) -> None:
+    alive(seeded)
+
+    context = build_named(session_factory, sim_settings, "DRN-003", "DRN-099", "DRN-004")
+
+    assert named(context) == [
+        ("DRN-003", True, True),
+        ("DRN-099", False, False),  # not in the fleet at all
+        ("DRN-004", True, True),
+    ]
+    assert "DRN-099" not in [d.id for d in context.drones]  # nothing is invented for it
+    assert (
+        context.data_status.value == "complete"
+    )  # a typo in a question is not a degraded snapshot
+
+
+def test_a_named_flagged_drone_keeps_its_flag_rank(
+    seeded: Session,
+    session_factory: sessionmaker[Session],
+    sim_settings: Settings,
+    make_drone: DroneMaker,
+) -> None:
+    big_fleet(seeded, make_drone)
+    drone(seeded, "DRN-020").battery_pct = 5  # flagged as well (low battery), lower id
+    seeded.commit()
+
+    context = build_named(session_factory, sim_settings, "DRN-040", "DRN-020")
+
+    assert [d.id for d in context.drones[:2]] == ["DRN-020", "DRN-040"]  # flagged tier, by id
+    assert named(context) == [("DRN-040", True, True), ("DRN-020", True, True)]
+
+
+def test_named_drones_are_dropped_last_by_the_byte_budget_and_the_disclosure_follows(
+    seeded: Session,
+    session_factory: sessionmaker[Session],
+    sim_settings: Settings,
+    make_drone: DroneMaker,
+) -> None:
+    big_fleet(seeded, make_drone)
+    context = build_named(session_factory, sim_settings, "DRN-044", "DRN-099")
+
+    budget = len(serialize(context).encode("utf-8"))
+    steps = 0
+    flipped_at: int | None = None
+    while budget > 0:
+        try:
+            result = render_context(context, budget).context
+        except FleetContextTooLargeError:
+            break
+        steps += 1
+        kept = [d.id for d in result.drones]
+        listed = {n.id: n.listed for n in result.named_drones}
+        # the disclosure always describes the rows that are really in the text
+        assert listed["DRN-044"] == ("DRN-044" in kept)
+        assert listed["DRN-099"] is False and "DRN-099" not in kept
+        assert [n.exists for n in result.named_drones] == [True, False]
+        # the named drone outlives every other unflagged row (idle, charging, in flight)
+        if "DRN-044" not in kept:
+            flipped_at = flipped_at or len(kept)
+            assert not [i for i in kept if i not in {"DRN-040", "DRN-044"}], (budget, kept)
+        budget -= 40
+
+    assert steps > 10 and flipped_at is not None  # the sweep did reach the point where it goes
+
+
+def test_a_named_drone_that_is_itself_beyond_the_flagged_cap_is_reported_as_not_listed(
+    seeded: Session,
+    session_factory: sessionmaker[Session],
+    sim_settings: Settings,
+    make_drone: DroneMaker,
+) -> None:
+    """Flagged drones outrank named ones (the approved order). With more than 40 flagged drones a
+    named flagged drone can fall outside the cap; the disclosure says so instead of hiding it."""
+    seeded.add_all([make_drone(id=f"DRN-{n}", battery_pct=10) for n in range(100, 145)])
+    seeded.commit()
+    alive(seeded)
+
+    context = build_named(session_factory, sim_settings, "DRN-100", "DRN-144")
+
+    assert named(context) == [("DRN-100", True, True), ("DRN-144", True, False)]
+    assert "DRN-144" not in [d.id for d in context.drones] and context.truncated

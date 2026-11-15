@@ -122,6 +122,20 @@ const okMissions: Handler = () => Promise.resolve(jsonResponse([]))
 const okStart: Handler = () =>
   Promise.resolve(jsonResponse({ ...ASSIGNED_MISSION, status: 'IN_FLIGHT' }))
 
+// Feature 026: a Copilot that is available and answers one fixed question.
+const COPILOT_ANSWER = {
+  answer: 'Two drones are charging.',
+  answer_cut_off: false,
+  snapshot: {
+    captured_at: '2026-11-15T14:03:07Z',
+    data_status: 'complete',
+    truncated: false,
+    limitations: [],
+    omitted: { drones: 0, hubs: 0, active_incidents: 0, recovered_alerts: 0 },
+    named_drones: [],
+  },
+}
+
 interface Handlers {
   hubs?: Handler
   drones?: Handler
@@ -144,6 +158,8 @@ function stubBackend(
   const flightsCalls = vi.fn(more.flights ?? okFlights)
   const missionsCalls = vi.fn(more.missions ?? okMissions)
   const startCalls = vi.fn(more.start ?? okStart)
+  const copilotStatusCalls = vi.fn()
+  const copilotAskCalls = vi.fn()
   vi.stubGlobal(
     'fetch',
     vi.fn((url: string) => {
@@ -172,6 +188,14 @@ function stubBackend(
       }
       if (url.endsWith('/api/orders/generate')) {
         return Promise.resolve(jsonResponse({ ...ORDER_RESPONSES[0], id: 'ORD-NEW00001' }, 201))
+      }
+      if (url.endsWith('/api/ai/copilot/status')) {
+        copilotStatusCalls()
+        return Promise.resolve(jsonResponse({ available: true }))
+      }
+      if (url.endsWith('/api/ai/copilot/ask')) {
+        copilotAskCalls()
+        return Promise.resolve(jsonResponse(COPILOT_ANSWER))
       }
       if (url.endsWith('/start')) return startCalls()
       if (url.endsWith('/api/orders?active=true')) return ordersCalls()
@@ -209,6 +233,8 @@ function stubBackend(
     flightsCalls,
     missionsCalls,
     startCalls,
+    copilotStatusCalls,
+    copilotAskCalls,
   }
 }
 
@@ -1841,5 +1867,80 @@ describe('App map focus from the Operations lists (Feature 023)', () => {
     expect(button.tagName).toBe('BUTTON') // Enter and Space activate it, like a click
     button.focus()
     expect(button).toHaveFocus()
+  })
+})
+
+describe('App Copilot', () => {
+  const COPILOT_TOKEN = 'app-test-token-' + 'x'.repeat(30)
+  const pause = (ms = 30) => new Promise((done) => setTimeout(done, ms))
+
+  async function renderApp() {
+    const backend = stubBackend()
+    render(<App />)
+    await waitFor(() => expect(dockedCount('Centrum Riviera')).toBe('3'))
+    fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+    return backend
+  }
+
+  it('sends no Copilot request on page load, when the panel opens, or on any other tab', async () => {
+    const { copilotStatusCalls, copilotAskCalls } = await renderApp()
+
+    for (const name of [/^Drones/, /^Hubs/, /^Orders/, 'Events']) {
+      fireEvent.click(screen.getByRole('tab', { name }))
+    }
+    await pause()
+
+    expect(copilotStatusCalls).not.toHaveBeenCalled() // not even the availability probe
+    expect(copilotAskCalls).not.toHaveBeenCalled()
+  })
+
+  it('offers the Copilot as the fifth tab and only probes availability when it is shown', async () => {
+    const { copilotStatusCalls, copilotAskCalls } = await renderApp()
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      expect.stringMatching(/^Drones \(\d+\)$/),
+      'Hubs (4)',
+      expect.stringMatching(/^Orders/),
+      'Events',
+      'Copilot',
+    ])
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Copilot' }))
+
+    expect(await screen.findByLabelText('Access token')).toBeInTheDocument()
+    expect(screen.getByText('Read-only AI Copilot — cannot control drones')).toBeInTheDocument()
+    expect(copilotStatusCalls).toHaveBeenCalledTimes(1)
+    expect(copilotAskCalls).not.toHaveBeenCalled()
+  })
+
+  it('keeps the conversation when a map selection switches the Operations tab', async () => {
+    const { copilotStatusCalls, copilotAskCalls } = await renderApp()
+    fireEvent.click(screen.getByRole('tab', { name: 'Copilot' }))
+    fireEvent.change(await screen.findByLabelText('Access token'), {
+      target: { value: COPILOT_TOKEN },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Use token' }))
+    fireEvent.change(await screen.findByLabelText('Question'), {
+      target: { value: 'Which drones need attention?' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }))
+    expect(await screen.findByTestId('copilot-answer')).toHaveTextContent(
+      'Two drones are charging.',
+    )
+
+    // a click on the map selects a Hub, and the Operations panel follows the selection
+    fireEvent.click(screen.getByRole('button', { name: 'Marker Centrum Riviera' }))
+    expect(screen.getByRole('tab', { name: /^Hubs/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByTestId('copilot-answer')).toBeNull() // the tab is not shown ...
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Copilot' }))
+
+    // ... and everything is still there when it comes back, with nothing asked again
+    expect(await screen.findByTestId('copilot-answer')).toHaveTextContent(
+      'Two drones are charging.',
+    )
+    expect(screen.getByText(/Access token set/)).toBeInTheDocument()
+    expect(copilotAskCalls).toHaveBeenCalledTimes(1)
+    expect(copilotStatusCalls).toHaveBeenCalledTimes(1)
+    expect(localStorage.length + sessionStorage.length).toBe(0)
   })
 })

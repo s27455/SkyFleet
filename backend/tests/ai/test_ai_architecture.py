@@ -80,9 +80,14 @@ def test_only_the_fleet_context_package_uses_the_ai_package_yet() -> None:
         and any(m == "app.ai" or m.startswith("app.ai.") for m in imported_modules(path))
     ]
 
-    # Feature 025: `app/fleet_context` (its orchestrator and errors) is the one permitted user.
-    # Nothing else may: no route, no worker, no other service (no endpoint exists yet).
-    assert sorted(users) == ["fleet_context/errors.py", "fleet_context/service.py"]
+    # Features 025 and 026: `app/fleet_context` (orchestrator, errors, question preparation) and
+    # the Copilot service are the only permitted users. No route, no worker, nothing else.
+    assert sorted(users) == [
+        "copilot/service.py",
+        "fleet_context/errors.py",
+        "fleet_context/question.py",
+        "fleet_context/service.py",
+    ]
 
 
 def test_the_application_has_no_ai_route() -> None:

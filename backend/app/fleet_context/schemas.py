@@ -20,13 +20,14 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 # Hard caps of the builder (a rendered snapshot may be reduced further to fit the byte budget).
 MAX_HUBS = 12
 MAX_DRONES = 40
 MAX_INCIDENTS = 10
 MAX_RECOVERED_ALERTS = 10
+MAX_NAMED_DRONES = 8  # drone ids taken from the question
 HISTORY_WINDOW_SECONDS = 3600  # "last 60 min"
 STATEMENT_TIMEOUT_MS = 2000  # a slower snapshot fails closed
 LABEL_MAX_CHARS = 40
@@ -210,6 +211,19 @@ class DroneRow(Frozen):
     flags: list[DroneFlag]
 
 
+class NamedDrone(Frozen):
+    """A drone the operator named in the question, and what the snapshot can say about it.
+
+    `exists` false: no such drone is in the fleet. `listed` false: the drone exists but its row is
+    not in this snapshot (cap or byte budget), so nothing may be claimed about it. Recomputed after
+    every reduction, so it always describes the text the model actually sees.
+    """
+
+    id: str
+    exists: bool
+    listed: bool
+
+
 class FleetContext(Frozen):
     schema_version: str
     captured_at: str
@@ -217,6 +231,7 @@ class FleetContext(Frozen):
     limitations: list[str]
     truncated: bool
     omitted: Omitted
+    named_drones: list[NamedDrone]
     simulation: Simulation
     summary: Summary
     active_incidents: list[Incident]
@@ -249,9 +264,15 @@ def apply_omissions(context: FleetContext, omitted: Omitted) -> FleetContext:
     ]
     codes = [code for code in codes if code]
     limitations = [*base, *codes]
+    listed_ids = {row.id for row in context.drones}
+    named = [
+        item.model_copy(update={"listed": item.exists and item.id in listed_ids})
+        for item in context.named_drones
+    ]
     return context.model_copy(
         update={
             "omitted": omitted,
+            "named_drones": named,
             "limitations": limitations,
             "truncated": bool(codes),
             "data_status": DataStatus.DEGRADED if limitations else DataStatus.COMPLETE,

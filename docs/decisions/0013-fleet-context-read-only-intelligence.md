@@ -1,6 +1,6 @@
 # 0013 — Fleet context for the AI gateway (Feature 025)
 
-**Status:** Accepted, implemented and finalized (2026-11-15). Nothing calls it yet: there is no endpoint, no UI, no agent and no model tool, and no paid Anthropic request was made for this feature (the tests use fake transports only).
+**Status:** Accepted, implemented and finalized (2026-11-15). When finalized nothing called it; Feature 026 (ADR 0014) is now its first caller, through an authenticated endpoint and an Operations tab (still no agent and no model tool). No paid Anthropic request was made for this feature (the tests use fake transports only).
 
 ## Decisions
 
