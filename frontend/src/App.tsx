@@ -1,40 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 
-import { startMission } from './api/missions'
 import { AutoDispatchControl } from './features/dispatch/AutoDispatchControl'
 import { ResourceStatusBanner } from './features/data/ResourceStatusBanner'
 import { DroneDetailPanel } from './features/drones/DroneDetailPanel'
 import { DroneInspector } from './features/drones/DroneInspector'
 import { resolveInspectorData } from './features/drones/inspectorData'
 import { useDrones } from './features/drones/useDrones'
-import {
-  droneEmergencies as deriveDroneEmergencies,
-  emergencyPoints as deriveEmergencyPoints,
-  interruptedOrderIds as deriveInterruptedOrderIds,
-} from './features/flights/emergencyPoints'
-import {
-  canAnimateFlights,
-  flightsByDrone,
-  isActiveFlight,
-  isFailable,
-  isRecipientTargetable,
-} from './features/flights/flightStatus'
-import type { FlightVisual } from './features/flights/interpolation'
+import { isActiveFlight } from './features/flights/flightStatus'
 import { useLpr } from './features/lpr/useLpr'
 import { RainWarningBanner } from './features/weather/RainWarningBanner'
 import { TakeoffsSuspendedProvider } from './features/weather/TakeoffGate'
 import { useRainWarning } from './features/weather/useRainWarning'
 import { LiveDataNotices } from './features/flights/LiveDataNotices'
 import { useFlights } from './features/flights/useFlights'
-import { usePrefersReducedMotion } from './features/flights/usePrefersReducedMotion'
+import { useFlightView } from './features/flights/useFlightView'
 import { HubDetailPanel } from './features/hubs/HubDetailPanel'
 import { useHubs } from './features/hubs/useHubs'
 import { computeDroneOffsets } from './features/map/droneMarkers'
 import { partitionFleet } from './features/map/fleetPlacement'
-import { FocusNotice, type FocusNoticeData } from './features/map/FocusNotice'
-import { type FocusKind, type FocusRequest, resolveFocusTarget } from './features/map/focusTarget'
+import { FocusNotice } from './features/map/FocusNotice'
 import { OrderMarkerLegend } from './features/map/OrderMarkerLegend'
-import { type LprView, MapView } from './features/map/MapView'
+import { MapView } from './features/map/MapView'
 import { computeOrderOffsets } from './features/map/orderMarkers'
 import { DronesManager } from './features/management/DronesManager'
 import { ManagementPanel } from './features/management/ManagementPanel'
@@ -54,7 +40,8 @@ import { EventsTab } from './features/operations/EventsTab'
 import { HubsList } from './features/operations/HubsList'
 import { buildNotices } from './features/operations/notices'
 import { OperationsPanel } from './features/operations/OperationsPanel'
-import type { OperationsTab } from './features/operations/tabs'
+import { useRefreshActions } from './features/operations/useRefreshActions'
+import { useSelection } from './features/operations/useSelection'
 import { useOrders } from './features/orders/useOrders'
 import { BackendStatus } from './features/system-status/BackendStatus'
 import type { Drone } from './types/drone'
@@ -69,17 +56,12 @@ const NO_ORDERS: readonly Order[] = []
 const NO_FLIGHTS: readonly Flight[] = []
 const NO_MISSIONS: readonly Mission[] = []
 
-/** Only one Hub, drone or order is selected at a time, so only one detail panel can be open. */
-type Selection =
-  { kind: 'hub'; id: string } | { kind: 'drone'; id: string } | { kind: 'order'; id: string }
-
 function App() {
   const hubsResource = useHubs()
   const dronesResource = useDrones()
   const ordersResource = useOrders()
   const flightsResource = useFlights()
   const missionsResource = useMissions()
-  const reducedMotion = usePrefersReducedMotion()
   const hubs = hubsResource.state.status === 'ready' ? hubsResource.state.data : NO_HUBS
   const drones = dronesResource.state.status === 'ready' ? dronesResource.state.data : NO_DRONES
   const orders = ordersResource.state.status === 'ready' ? ordersResource.state.data : NO_ORDERS
@@ -90,92 +72,40 @@ function App() {
   const missions =
     missionsResource.state.status === 'ready' ? missionsResource.state.data : NO_MISSIONS
 
-  const [selection, setSelection] = useState<Selection | null>(null)
   const [managementOpen, setManagementOpen] = useState(false)
-  // The inspector opens above the selected drone's panel; the selection itself is never touched.
-  const [inspectedDroneId, setInspectedDroneId] = useState<string | null>(null)
-  // The Operations panel follows the selection (even while it is closed); the operator can still
-  // switch tabs by hand without touching the selection.
-  const [operationsTab, setOperationsTab] = useState<OperationsTab>('orders')
   // Feature 026: the Copilot's state lives here, above the tabs, so switching tabs (or a map
   // selection that does) never loses a draft, an answer or a request still on its way.
   const copilot = useCopilot()
-  const selectHub = useCallback((id: string) => {
-    setSelection({ kind: 'hub', id })
-    setOperationsTab('hubs')
-  }, [])
-  const selectDrone = useCallback((id: string) => {
-    setSelection({ kind: 'drone', id })
-    setOperationsTab('drones')
-  }, [])
-  const selectOrder = useCallback((id: string) => {
-    setSelection({ kind: 'order', id })
-    setOperationsTab('orders')
-  }, [])
-  const clearSelection = useCallback(() => {
-    setInspectedDroneId(null)
-    setSelection(null)
-  }, [])
-  const closeInspector = useCallback(() => setInspectedDroneId(null), [])
-
-  // Feature 023: a click in an Operations list also moves the map camera there, once. A marker click
-  // keeps the plain select above and never moves the camera. Every click gets a new `seq`, so
-  // clicking the same row again flies again; a re-render or a data refresh keeps the same request
-  // and moves nothing. An entity without a usable location leaves the camera alone and says so.
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
-  const [focusNotice, setFocusNotice] = useState<FocusNoticeData | null>(null)
-  const focusSeq = useRef(0)
-  const dismissFocusNotice = useCallback(() => setFocusNotice(null), [])
-  const locate = useCallback(
-    (kind: FocusKind, id: string) => {
-      const { label, position } = resolveFocusTarget(kind, id, { hubs, drones, orders })
-      focusSeq.current += 1
-      const seq = focusSeq.current
-      if (position === null) {
-        setFocusNotice({ seq, text: `The location of ${label} is not available.` })
-        return
-      }
-      setFocusNotice(null)
-      setFocusRequest({ kind, id, position, seq })
-    },
-    [hubs, drones, orders],
-  )
-  const focusHub = useCallback(
-    (id: string) => {
-      selectHub(id)
-      locate('hub', id)
-    },
-    [selectHub, locate],
-  )
-  const focusDrone = useCallback(
-    (id: string) => {
-      selectDrone(id)
-      locate('drone', id)
-    },
-    [selectDrone, locate],
-  )
-  const focusOrder = useCallback(
-    (id: string) => {
-      selectOrder(id)
-      locate('order', id)
-    },
-    [selectOrder, locate],
-  )
-
-  const selectedHub =
-    selection?.kind === 'hub' ? hubs.find((hub) => hub.id === selection.id) : undefined
-  const selectedDrone =
-    selection?.kind === 'drone' ? drones.find((drone) => drone.id === selection.id) : undefined
-  const selectedOrder =
-    selection?.kind === 'order' ? orders.find((order) => order.id === selection.id) : undefined
-  // An order can leave the active list while selected (its delivered window ended). Drop the
-  // selection then, once the orders are known, so no stale selection lingers. Adjusting state while
-  // rendering is allowed.
-  if (selection?.kind === 'order' && ordersResource.state.status === 'ready' && !selectedOrder) {
-    setSelection(null)
-  }
-  // The inspector exists only for a drone that is still selected and still in the data.
-  const inspectorOpen = selectedDrone !== undefined && inspectedDroneId === selectedDrone.id
+  // Selection, drone inspector, Operations tab and map focus (Feature 023): see useSelection.
+  const {
+    hasSelection,
+    selectedHub,
+    selectedDrone,
+    selectedOrder,
+    selectedHubId,
+    selectedDroneId,
+    selectedOrderId,
+    selectHub,
+    selectDrone,
+    selectOrder,
+    clearSelection,
+    inspectorOpen,
+    inspectDrone,
+    closeInspector,
+    operationsTab,
+    setOperationsTab,
+    focusRequest,
+    focusNotice,
+    dismissFocusNotice,
+    focusHub,
+    focusDrone,
+    focusOrder,
+  } = useSelection({
+    hubs,
+    drones,
+    orders,
+    ordersReady: ordersResource.state.status === 'ready',
+  })
   const inspectorData = useMemo(
     () =>
       selectedDrone
@@ -221,66 +151,30 @@ function App() {
   )
   const droneOffsets = useMemo(() => computeDroneOffsets(markerDrones, hubs), [markerDrones, hubs])
 
-  // Flights: the backend's snapshots. The map only glides between them (and not at all for reduced
-  // motion or a worker that stopped updating); phase, battery and landing come from the backend.
-  const flightByDrone = useMemo(() => flightsByDrone(flights), [flights])
-  // Drone failures (Feature 018C), all derived from the backend's flights and drones.
-  const emergencyPoints = useMemo(() => deriveEmergencyPoints(flights, drones), [flights, drones])
-  const droneEmergencies = useMemo(() => deriveDroneEmergencies(emergencyPoints), [emergencyPoints])
-  const interruptedOrderIds = useMemo(() => deriveInterruptedOrderIds(flights), [flights])
-  const canFailDrone = useMemo(() => flights.some(isFailable), [flights])
-  const canMarkRecipient = useMemo(() => flights.some(isRecipientTargetable), [flights])
-  // The LPR helicopter (Feature 018E): the backend's scenario and which drones wait for it.
   const lprResource = useLpr()
   const randomIncidents = useRandomIncidents() // one poll, read by the Scenarios menu
   const orderSimulation = useOrderSimulation() // one poll, shared by the header switch and Management
   const rainResource = useRainWarning()
   const rainWarningActive = rainResource.state.status === 'ready' && rainResource.state.data.active
-  const refreshRainWarning = rainResource.refresh
   const lprScenario = lprResource.state.status === 'ready' ? lprResource.state.data.scenario : null
-  const lprReceivedAt = lprResource.receivedAt
-  const lprStale = lprResource.stale
-  const lprView = useMemo<LprView | null>(
-    () =>
-      lprScenario === null || lprReceivedAt === null
-        ? null
-        : {
-            scenario: lprScenario,
-            receivedAt: lprReceivedAt,
-            animate: canAnimateFlights({
-              reducedMotion,
-              workerStale: false, // the helicopter is computed from the clock, not by the worker
-              refreshFailed: lprStale,
-            }),
-          },
-    [lprScenario, lprReceivedAt, reducedMotion, lprStale],
-  )
-  const yieldingDroneIds = useMemo(
-    () => new Set(flights.filter((flight) => flight.yieldingToLpr).map((flight) => flight.droneId)),
-    [flights],
-  )
-  const receivedAt = flightsResource.receivedAt
-  const flightsStale = flightsResource.stale
-  const flightVisuals = useMemo<FlightVisual[]>(
-    () =>
-      receivedAt === null
-        ? []
-        : flights.filter(isActiveFlight).map((flight) => ({
-            droneId: flight.droneId,
-            motion: {
-              position: flight.position,
-              target: flight.target,
-              snapshotAgeS: flight.snapshotAgeS,
-            },
-            receivedAt,
-            animate: canAnimateFlights({
-              reducedMotion,
-              workerStale,
-              refreshFailed: flightsStale,
-            }),
-          })),
-    [flights, receivedAt, reducedMotion, workerStale, flightsStale],
-  )
+  const {
+    flightByDrone,
+    emergencyPoints,
+    droneEmergencies,
+    interruptedOrderIds,
+    canFailDrone,
+    canMarkRecipient,
+    lprView,
+    yieldingDroneIds,
+    flightVisuals,
+  } = useFlightView({
+    drones,
+    flights,
+    workerStale,
+    flightsReceivedAt: flightsResource.receivedAt,
+    flightsStale: flightsResource.stale,
+    lpr: { scenario: lprScenario, receivedAt: lprResource.receivedAt, stale: lprResource.stale },
+  })
 
   // The temporary Start Mission control: only missions that are already assigned.
   const assignedMissions = useMemo(
@@ -307,66 +201,19 @@ function App() {
 
   const refreshDrones = dronesResource.refresh
   const refreshOrders = ordersResource.refresh
-  const refreshFlights = flightsResource.refresh
-  const refreshLpr = lprResource.refresh
   const refreshMissions = missionsResource.refresh
-  const [activityTick, setActivityTick] = useState(0)
-  const refreshAfterIncident = useCallback(() => {
-    setActivityTick((tick) => tick + 1) // the Activity timeline re-reads at once
-    // A cancellation can recall a flying drone and cancel an assigned mission.
-    refreshOrders()
-    refreshMissions()
-    refreshDrones()
-    refreshFlights()
-    refreshLpr()
-    refreshRainWarning()
-  }, [
-    refreshOrders,
-    refreshMissions,
-    refreshDrones,
-    refreshFlights,
-    refreshLpr,
-    refreshRainWarning,
-  ])
-  // A relocation changes the drone, its flight and its Activity; read them at once (Feature 019A).
-  const refreshAfterRelocation = useCallback(() => {
-    setActivityTick((tick) => tick + 1)
-    refreshMissions()
-    refreshDrones()
-    refreshFlights()
-  }, [refreshMissions, refreshDrones, refreshFlights])
-  const startAssignedMission = useCallback(
-    async (missionId: string) => {
-      try {
-        await startMission(missionId)
-      } finally {
-        // Show the outcome now instead of waiting for the next poll, whatever it was: a refused
-        // or unreadable answer may still mean the state changed.
-        refreshMissions()
-        refreshDrones()
-        refreshOrders()
-        refreshFlights()
-      }
-    },
-    [refreshMissions, refreshDrones, refreshOrders, refreshFlights],
-  )
-
-  // A takeoff or a landing changes drones, orders and missions together. When the set of flying
-  // missions changes, read them at once so markers, Hub counts and statuses agree with the flights.
-  const flyingKey = flights
-    .filter(isActiveFlight)
-    .map((flight) => flight.missionId)
-    .sort()
-    .join('|')
-  const previousFlyingKey = useRef<string | null>(null)
-  useEffect(() => {
-    if (previousFlyingKey.current !== null && previousFlyingKey.current !== flyingKey) {
-      refreshDrones()
-      refreshOrders()
-      refreshMissions()
-    }
-    previousFlyingKey.current = flyingKey
-  }, [flyingKey, refreshDrones, refreshOrders, refreshMissions])
+  const { activityTick, refreshAfterIncident, refreshAfterRelocation, startAssignedMission } =
+    useRefreshActions({
+      flights,
+      refresh: {
+        drones: refreshDrones,
+        orders: refreshOrders,
+        flights: flightsResource.refresh,
+        lpr: lprResource.refresh,
+        missions: refreshMissions,
+        rainWarning: rainResource.refresh,
+      },
+    })
 
   const notices = useMemo(
     () =>
@@ -436,16 +283,16 @@ function App() {
         <main className="relative min-h-0 flex-1">
           <MapView
             hubs={hubs}
-            selectedHubId={selection?.kind === 'hub' ? selection.id : null}
+            selectedHubId={selectedHubId}
             onSelectHub={selectHub}
             drones={markerDrones}
             dockedCounts={dockedCounts}
-            selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
+            selectedDroneId={selectedDroneId}
             onSelectDrone={selectDrone}
             droneOffsets={droneOffsets}
             flights={flightVisuals}
             orders={orders}
-            selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+            selectedOrderId={selectedOrderId}
             onSelectOrder={selectOrder}
             orderOffsets={orderOffsets}
             emergencyPoints={emergencyPoints}
@@ -456,7 +303,7 @@ function App() {
             focusRequest={focusRequest}
           />
           <OrderMarkerLegend
-            hideOnNarrow={selection !== null}
+            hideOnNarrow={hasSelection}
             showEmergency={emergencyPoints.length > 0}
             showLpr={lprScenario !== null}
           />
@@ -496,13 +343,13 @@ function App() {
                 events: 'Events',
                 copilot: 'Copilot',
               }}
-              hideOnNarrow={selection !== null}
+              hideOnNarrow={hasSelection}
             >
               {operationsTab === 'drones' && (
                 <DronesList
                   drones={drones}
                   hubs={hubs}
-                  selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
+                  selectedDroneId={selectedDroneId}
                   onSelectDrone={focusDrone}
                 />
               )}
@@ -510,7 +357,7 @@ function App() {
                 <HubsList
                   hubs={hubs}
                   dockedCounts={dockedCounts}
-                  selectedHubId={selection?.kind === 'hub' ? selection.id : null}
+                  selectedHubId={selectedHubId}
                   onSelectHub={focusHub}
                 />
               )}
@@ -518,7 +365,7 @@ function App() {
                 <OrdersList
                   orders={orders}
                   hubs={hubs}
-                  selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+                  selectedOrderId={selectedOrderId}
                   onSelectOrder={focusOrder}
                 />
               )}
@@ -576,7 +423,7 @@ function App() {
                         resource={orderSimulation}
                       />
                       <OrdersManager
-                        selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+                        selectedOrderId={selectedOrderId}
                         onSelectOrder={selectOrder}
                         orders={orders}
                         hubs={hubs}
@@ -619,7 +466,7 @@ function App() {
               onStartMission={startAssignedMission}
               onRelocationChanged={refreshAfterRelocation}
               activityRefreshKey={activityTick}
-              onInspect={() => setInspectedDroneId(selectedDrone.id)}
+              onInspect={() => inspectDrone(selectedDrone.id)}
               closeOnEscape={!inspectorOpen}
             />
           )}
