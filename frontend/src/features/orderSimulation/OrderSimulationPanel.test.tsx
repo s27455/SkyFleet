@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { jsonResponse } from '../../test/hubFixtures'
 import { ORDER_RESPONSES } from '../../test/orderFixtures'
+import { OrderGenerationControl } from './OrderGenerationControl'
 import { OrderSimulationPanel } from './OrderSimulationPanel'
+import { useOrderSimulation } from './useOrderSimulation'
 
 interface ServerStatus {
   enabled: boolean
@@ -72,14 +74,25 @@ function stubServer(initial = OFF, options: Options = {}) {
   return calls
 }
 
-const toggle = () => screen.findByRole('switch', { name: 'Order simulation' })
+const toggle = () => screen.findByRole('switch', { name: 'Automatic orders' })
+
+/** The header switch and the Management panel share one poll, as in the app. */
+function Harness({ onGenerated }: { onGenerated: () => void }) {
+  const resource = useOrderSimulation()
+  return (
+    <>
+      <OrderGenerationControl resource={resource} />
+      <OrderSimulationPanel resource={resource} onGenerated={onGenerated} />
+    </>
+  )
+}
 const generateButton = () => screen.getByRole('button', { name: /Generate One Order|Generating/ })
 const noop = () => undefined
 
 describe('OrderSimulationPanel', () => {
   it('shows what the server reports, OFF by default, with the backlog and no outcome yet', async () => {
     stubServer()
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     expect(screen.getByRole('status')).toHaveTextContent('loading')
     const button = await toggle()
@@ -92,7 +105,7 @@ describe('OrderSimulationPanel', () => {
 
   it('shows ON with the last outcome when the server is already ON', async () => {
     stubServer(ON)
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     expect(await toggle()).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText('7 / 20')).toBeInTheDocument()
@@ -101,7 +114,7 @@ describe('OrderSimulationPanel', () => {
 
   it('turns on only after the backend confirms, then shows the server state', async () => {
     const calls = stubServer()
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     fireEvent.click(await toggle())
 
@@ -112,7 +125,7 @@ describe('OrderSimulationPanel', () => {
 
   it('turns off again', async () => {
     const calls = stubServer(ON)
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     fireEvent.click(await toggle())
 
@@ -122,7 +135,7 @@ describe('OrderSimulationPanel', () => {
 
   it('never touches Automatic Dispatch', async () => {
     const calls = stubServer()
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     fireEvent.click(await toggle())
     await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true'))
@@ -147,7 +160,7 @@ describe('OrderSimulationPanel', () => {
           ),
         ),
     })
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     fireEvent.click(await toggle())
 
@@ -163,7 +176,7 @@ describe('OrderSimulationPanel', () => {
     const calls = stubServer(OFF, {
       enableResponse: () => new Promise<Response>((resolve) => (release = resolve)),
     })
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     const button = await toggle()
     fireEvent.click(button)
@@ -178,7 +191,7 @@ describe('OrderSimulationPanel', () => {
 
   it('warns and cannot enable while the worker is not running, but can still generate one order', async () => {
     const calls = stubServer({ ...OFF, worker_running: false })
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     const button = await toggle()
 
@@ -198,7 +211,7 @@ describe('OrderSimulationPanel', () => {
         Promise.resolve(healthy ? jsonResponse(OFF) : jsonResponse({ detail: 'x' }, 500)),
       ),
     )
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
 
     const retry = await screen.findByRole('button', { name: 'Retry order simulation' })
     healthy = true
@@ -216,7 +229,7 @@ describe('OrderSimulationPanel', () => {
         return Promise.resolve(statusWorks ? jsonResponse(OFF) : jsonResponse({}, 500))
       }),
     )
-    render(<OrderSimulationPanel onGenerated={noop} />)
+    render(<Harness onGenerated={noop} />)
     await toggle()
     statusWorks = false
 
@@ -230,7 +243,7 @@ describe('OrderSimulationPanel', () => {
     it('calls the backend exactly once, confirms it and tells the list to refresh', async () => {
       const calls = stubServer() // automatic generation is OFF
       const onGenerated = vi.fn()
-      render(<OrderSimulationPanel onGenerated={onGenerated} />)
+      render(<Harness onGenerated={onGenerated} />)
       await toggle()
 
       fireEvent.click(generateButton())
@@ -247,7 +260,7 @@ describe('OrderSimulationPanel', () => {
       const calls = stubServer(OFF, {
         generateResponse: () => new Promise<Response>((resolve) => (release = resolve)),
       })
-      render(<OrderSimulationPanel onGenerated={noop} />)
+      render(<Harness onGenerated={noop} />)
       await toggle()
 
       fireEvent.click(generateButton())
@@ -265,7 +278,7 @@ describe('OrderSimulationPanel', () => {
         generateResponse: () => Promise.resolve(jsonResponse({ detail: 'database down' }, 500)),
       })
       const onGenerated = vi.fn()
-      render(<OrderSimulationPanel onGenerated={onGenerated} />)
+      render(<Harness onGenerated={onGenerated} />)
       await toggle()
 
       fireEvent.click(generateButton())
@@ -278,7 +291,7 @@ describe('OrderSimulationPanel', () => {
 
     it('says the backlog limit applies to automatic generation only', async () => {
       stubServer()
-      render(<OrderSimulationPanel onGenerated={noop} />)
+      render(<Harness onGenerated={noop} />)
       await toggle()
 
       expect(screen.getByText(/pauses automatic generation only/)).toBeInTheDocument()

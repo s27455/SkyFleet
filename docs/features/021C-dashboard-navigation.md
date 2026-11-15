@@ -2,7 +2,10 @@
 
 **Execution order:** 2 of 3  
 **Requirements:** #9, #10  
-**Dependency:** Prefer after 021B is reviewed and stable.
+**Dependency:** Prefer after 021B is reviewed and stable.  
+**Status:** Implemented (frontend only); automated checks passed (799 tests, typecheck, lint, format, build); manual browser QA pending; not committed.
+
+**Approved decisions:** the Events tab is frontend-only (current alerts plus the selected drone's or order's activity, not labelled a full history, no new endpoint); a selection switches the tab but never opens a closed panel; the scenario menu is a compact bounded list that cannot be dismissed while a confirmation or request is pending; Random incidents stays disabled (021D).
 
 ## Goal
 

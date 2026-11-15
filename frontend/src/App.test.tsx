@@ -560,7 +560,7 @@ describe('App selection', () => {
 })
 
 const orderMarkers = () => screen.queryAllByRole('button', { name: /^Order marker / })
-const ordersToggle = () => screen.getByRole('button', { name: /^Orders \(/ })
+const ordersToggle = () => screen.getByRole('button', { name: 'Operations' })
 
 describe('App orders', () => {
   beforeEach(() => {
@@ -580,15 +580,15 @@ describe('App orders', () => {
 
     expect(screen.getByText('Loading orders…')).toBeInTheDocument()
     expect(orderMarkers()).toHaveLength(0)
-    expect(screen.queryByRole('button', { name: /^Orders \(/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^ORD-/ })).not.toBeInTheDocument()
   })
 
   it('puts all ten orders on the map and keeps the orders list closed by default', async () => {
     await renderLoaded()
 
     expect(orderMarkers()).toHaveLength(10)
-    expect(ordersToggle()).toHaveTextContent('Orders (10)')
     expect(ordersToggle()).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('tab')).toBeNull()
     expect(screen.queryByRole('button', { name: /ORD-001.*Ready for pickup/ })).toBeNull()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
@@ -598,7 +598,11 @@ describe('App orders', () => {
 
     fireEvent.click(ordersToggle())
     expect(ordersToggle()).toHaveAttribute('aria-expanded', 'true')
-    const rows = within(screen.getByRole('region', { name: 'Orders' })).getAllByRole('button', {
+    expect(screen.getByRole('tab', { name: 'Orders (10)' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    const rows = within(screen.getByRole('list', { name: 'Orders' })).getAllByRole('button', {
       name: /ORD-/,
     })
     expect(rows).toHaveLength(10)
@@ -672,7 +676,8 @@ describe('App orders', () => {
 
       expect(screen.queryByRole('button', { name: 'Order marker ORD-003' })).toBeNull()
       expect(screen.queryByRole('complementary', { name: 'Order details: ORD-003' })).toBeNull()
-      expect(ordersToggle()).toHaveTextContent('Orders (9)')
+      fireEvent.click(ordersToggle())
+      expect(screen.getByRole('tab', { name: 'Orders (9)' })).toBeInTheDocument()
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       // The other orders are still selectable afterwards.
       fireEvent.click(screen.getByRole('button', { name: 'Order marker ORD-004' }))
@@ -716,7 +721,7 @@ describe('App orders', () => {
 
   it('hides the list on narrow screens while a panel is open, keeping its open state', async () => {
     await renderLoaded()
-    const section = () => screen.getByRole('region', { name: 'Orders', hidden: true })
+    const section = () => screen.getByRole('region', { name: 'Operations', hidden: true })
 
     fireEvent.click(ordersToggle())
     expect(section()).not.toHaveClass('max-sm:hidden')
@@ -964,7 +969,7 @@ describe('App live flights', () => {
     stubBackend(okHubs, okDrones, () => Promise.resolve(jsonResponse(orders)))
 
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: /^Orders \(/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Operations' }))
 
     expect(screen.getByRole('button', { name: /^ORD-001/ })).toHaveTextContent('Out for delivery')
     expect(screen.getByRole('button', { name: /^ORD-002/ })).toHaveTextContent('Delivered')
@@ -1423,5 +1428,143 @@ describe('App drone inspector', () => {
 
     expect(viewerMounts.count).toBe(1)
     expect(screen.getByRole('dialog', { name: 'DRN-002' })).toBe(dialog)
+  })
+})
+
+describe('App operations panel and header controls (Feature 021C)', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const maintenanceDrones = () =>
+    DRONE_RESPONSES.map((drone) =>
+      drone.id === 'DRN-010'
+        ? { ...drone, status: 'MAINTENANCE' as const, longitude: 18.6012, latitude: 54.3821 }
+        : drone,
+    )
+  const tabSelected = (name: RegExp | string) =>
+    screen.getByRole('tab', { name }).getAttribute('aria-selected')
+
+  it('puts Auto dispatch, Automatic orders and Scenarios in the header', async () => {
+    stubBackend()
+    render(<App />)
+
+    const header = screen.getByRole('banner')
+    expect(await within(header).findByRole('switch', { name: 'Auto dispatch' })).toBeInTheDocument()
+    expect(await within(header).findByRole('switch', { name: 'Automatic orders' })).toBeVisible()
+    expect(within(header).getByRole('button', { name: /Scenarios/ })).toBeInTheDocument()
+  })
+
+  it('moved the scenarios and the switch out of Management, keeping Generate One Order there', async () => {
+    stubBackend()
+    render(<App />)
+    await waitFor(() => expect(hubMarkers()).toHaveLength(4))
+    fireEvent.click(screen.getByRole('button', { name: 'Management' }))
+    const dialog = screen.getByRole('dialog', { name: 'Management' })
+
+    expect(await within(dialog).findByRole('button', { name: 'Generate One Order' })).toBeVisible()
+    expect(within(dialog).queryByRole('switch', { name: 'Automatic orders' })).toBeNull()
+    expect(within(dialog).queryByRole('region', { name: 'Simulation events' })).toBeNull()
+  })
+
+  it('polls the order simulation state once for both the switch and Management', async () => {
+    stubBackend()
+    render(<App />)
+    await screen.findByRole('switch', { name: 'Automatic orders' })
+    fireEvent.click(screen.getByRole('button', { name: 'Management' }))
+    await screen.findByRole('button', { name: 'Generate One Order' })
+
+    const reads = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) => String(url).endsWith('/api/orders/simulation/status'))
+    expect(reads).toHaveLength(1)
+  })
+
+  it('follows a map selection with the tab, without opening the closed panel', async () => {
+    stubBackend(okHubs, () => Promise.resolve(jsonResponse(maintenanceDrones())))
+    render(<App />)
+    await waitFor(() => expect(hubMarkers()).toHaveLength(4))
+    const toggle = () => screen.getByRole('button', { name: 'Operations' })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Marker Forum Gdańsk' }))
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false') // not opened by the selection
+    expect(screen.queryByRole('tab')).toBeNull()
+    fireEvent.click(toggle())
+    expect(tabSelected(/^Hubs/)).toBe('true')
+    fireEvent.click(toggle())
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Drone marker DRN-010' }))
+    fireEvent.click(toggle())
+    expect(tabSelected(/^Drones/)).toBe('true')
+    fireEvent.click(toggle())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Order marker ORD-004' }))
+    fireEvent.click(toggle())
+    expect(tabSelected(/^Orders/)).toBe('true')
+  })
+
+  it('keeps the selection and its details when the tab is switched by hand', async () => {
+    stubBackend()
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-004' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+
+    fireEvent.click(screen.getByRole('tab', { name: /^Drones/ }))
+    fireEvent.click(screen.getByRole('tab', { name: /^Hubs/ }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Events' }))
+
+    expect(screen.getByRole('complementary', { name: 'Order details: ORD-004' })).toBeVisible()
+  })
+
+  it('selects from the Drones and Hubs tabs and opens the usual details', async () => {
+    stubBackend()
+    render(<App />)
+    await waitFor(() => expect(hubMarkers()).toHaveLength(4))
+    fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+
+    fireEvent.click(screen.getByRole('tab', { name: /^Drones/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^DRN-002/ }))
+    expect(screen.getByRole('complementary', { name: 'Drone details: DRN-002' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('tab', { name: /^Hubs/ }))
+    fireEvent.click(
+      within(screen.getByRole('tabpanel')).getByRole('button', { name: /Forum Gdańsk/ }),
+    )
+    expect(screen.getByRole('complementary', { name: 'Hub details: Forum Gdańsk' })).toBeVisible()
+  })
+
+  it('keeps an emergency alert visible outside the tabs and lists it in Events', async () => {
+    stubBackend(okHubs, () => Promise.resolve(jsonResponse(maintenanceDrones())), okOrders, {
+      flights: () => Promise.resolve(jsonResponse(flightsResponse([EMERGENCY_FLIGHT]))),
+    })
+    render(<App />)
+    const alert = await screen.findByRole('alert')
+    fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+
+    fireEvent.click(screen.getByRole('tab', { name: /^Drones/ }))
+    expect(alert).toBeVisible() // still over the map on another tab
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Events' }))
+    expect(screen.getByRole('tabpanel')).toHaveTextContent('Emergency: DRN-010')
+    expect(screen.getByText(/Select a drone or an order/)).toBeInTheDocument()
+  })
+
+  it('shows the selected drone’s activity, not a global history, in Events', async () => {
+    stubBackend()
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Order marker ORD-004' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Operations' }))
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Events' }))
+
+    expect(
+      await within(screen.getByRole('tabpanel')).findByRole('region', { name: 'Activity' }),
+    ).toBeInTheDocument()
+    const eventReads = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) => String(url).includes('/api/events?'))
+    expect(eventReads.map(([url]) => String(url))).toEqual(
+      expect.arrayContaining([expect.stringContaining('/api/events?order_id=ORD-004')]),
+    )
   })
 })

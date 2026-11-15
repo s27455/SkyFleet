@@ -1,26 +1,27 @@
 import { useState } from 'react'
 
-import { disableOrderSimulation, enableOrderSimulation } from '../../api/orderSimulation'
 import { generateOrder } from '../../api/orders'
 import { PRIMARY_BUTTON_CLASS, SECONDARY_BUTTON_CLASS } from '../management/formStyles'
 import { useAction } from '../management/useAction'
 import { formatUtcTimestamp } from '../orders/orderStatus'
-import { useOrderSimulation } from './useOrderSimulation'
+import type { OrderSimulationStatus } from '../../types/orderSimulation'
+import type { PolledResource } from '../data/usePolledResource'
 
 interface OrderSimulationPanelProps {
   /** Called after a manual order was created, so the orders list is re-read at once. */
   onGenerated: () => void
+  /** The shared poll of the order simulation state (the header switch reads the same one). */
+  resource: PolledResource<OrderSimulationStatus>
 }
 
 /**
- * Operator controls for simulated customer orders (Features 015A/015B). Separate from Automatic
+ * Order statistics and manual generation (Features 015A/015B); the Automatic orders switch is in the header. Separate from Automatic
  * Dispatch: it only starts and stops order arrivals and never touches dispatch, drones or flights.
  * It always shows what the server reports; after a click it waits for the backend's answer and
  * then re-reads the status instead of assuming success.
  */
-export function OrderSimulationPanel({ onGenerated }: OrderSimulationPanelProps) {
-  const { state, stale, retry, refresh } = useOrderSimulation()
-  const mode = useAction()
+export function OrderSimulationPanel({ onGenerated, resource }: OrderSimulationPanelProps) {
+  const { state, stale, retry, refresh } = resource
   const generation = useAction()
   const [createdId, setCreatedId] = useState<string | null>(null)
 
@@ -46,22 +47,8 @@ export function OrderSimulationPanel({ onGenerated }: OrderSimulationPanelProps)
     )
   }
 
-  const {
-    enabled,
-    workerRunning,
-    lastCheckAt,
-    lastOutcome,
-    outstandingOrders,
-    maxOutstandingOrders,
-  } = state.data
-  const cannotEnable = !enabled && !workerRunning
-
-  const toggle = async () => {
-    mode.clearError()
-    await mode.run(() => (enabled ? disableOrderSimulation() : enableOrderSimulation()))
-    // Either way, show what the server really says now (a refused change leaves it unchanged).
-    refresh()
-  }
+  const { workerRunning, lastCheckAt, lastOutcome, outstandingOrders, maxOutstandingOrders } =
+    state.data
   const generateOne = async () => {
     setCreatedId(null)
     const ok = await generation.run(async () => {
@@ -79,25 +66,10 @@ export function OrderSimulationPanel({ onGenerated }: OrderSimulationPanelProps)
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Order simulation</h3>
-        <span className="text-xs text-fg-muted">Separate from Automatic Dispatch</span>
+        <span className="text-xs text-fg-muted">Switch: Automatic orders in the header</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-        <div className="flex items-center gap-2">
-          <span className="text-fg-muted">Automatic orders</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            aria-label="Order simulation"
-            className={SECONDARY_BUTTON_CLASS}
-            disabled={mode.busy || cannotEnable}
-            title={cannotEnable ? 'The simulation worker is not running' : undefined}
-            onClick={() => void toggle()}
-          >
-            {mode.busy ? 'Working…' : enabled ? 'ON' : 'OFF'}
-          </button>
-        </div>
         <span>
           <span className="text-fg-muted">Worker: </span>
           {workerRunning ? 'Available' : 'Unavailable'}
@@ -116,19 +88,14 @@ export function OrderSimulationPanel({ onGenerated }: OrderSimulationPanelProps)
         </button>
       </div>
 
-      {mode.error && (
-        <p role="alert" className="text-xs text-status-critical">
-          {mode.error}
-        </p>
-      )}
       {generation.error && (
         <p role="alert" className="text-xs text-status-critical">
           Could not generate an order: {generation.error}
         </p>
       )}
-      {!mode.error && !generation.error && !workerRunning && (
+      {!generation.error && !workerRunning && (
         <p role="status" className="text-xs text-status-warning">
-          Simulation worker is not running; automatic generation cannot be enabled.
+          Simulation worker is not running; automatic orders cannot be enabled.
         </p>
       )}
       {createdId && !generation.error && (

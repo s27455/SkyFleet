@@ -38,10 +38,18 @@ import { DronesManager } from './features/management/DronesManager'
 import { ManagementPanel } from './features/management/ManagementPanel'
 import { OrdersManager } from './features/management/OrdersManager'
 import { useMissions } from './features/missions/useMissions'
-import { SimulationEventsPanel } from './features/incidents/SimulationEventsPanel'
+import { ScenarioMenu } from './features/incidents/ScenarioMenu'
 import { OrderSimulationPanel } from './features/orderSimulation/OrderSimulationPanel'
 import { OrderDetailPanel } from './features/orders/OrderDetailPanel'
 import { OrdersList } from './features/orders/OrdersList'
+import { OrderGenerationControl } from './features/orderSimulation/OrderGenerationControl'
+import { useOrderSimulation } from './features/orderSimulation/useOrderSimulation'
+import { DronesList } from './features/operations/DronesList'
+import { EventsTab } from './features/operations/EventsTab'
+import { HubsList } from './features/operations/HubsList'
+import { buildNotices } from './features/operations/notices'
+import { OperationsPanel } from './features/operations/OperationsPanel'
+import type { OperationsTab } from './features/operations/tabs'
 import { useOrders } from './features/orders/useOrders'
 import { BackendStatus } from './features/system-status/BackendStatus'
 import type { Drone } from './types/drone'
@@ -81,9 +89,21 @@ function App() {
   const [managementOpen, setManagementOpen] = useState(false)
   // The inspector opens above the selected drone's panel; the selection itself is never touched.
   const [inspectedDroneId, setInspectedDroneId] = useState<string | null>(null)
-  const selectHub = useCallback((id: string) => setSelection({ kind: 'hub', id }), [])
-  const selectDrone = useCallback((id: string) => setSelection({ kind: 'drone', id }), [])
-  const selectOrder = useCallback((id: string) => setSelection({ kind: 'order', id }), [])
+  // The Operations panel follows the selection (even while it is closed); the operator can still
+  // switch tabs by hand without touching the selection.
+  const [operationsTab, setOperationsTab] = useState<OperationsTab>('orders')
+  const selectHub = useCallback((id: string) => {
+    setSelection({ kind: 'hub', id })
+    setOperationsTab('hubs')
+  }, [])
+  const selectDrone = useCallback((id: string) => {
+    setSelection({ kind: 'drone', id })
+    setOperationsTab('drones')
+  }, [])
+  const selectOrder = useCallback((id: string) => {
+    setSelection({ kind: 'order', id })
+    setOperationsTab('orders')
+  }, [])
   const clearSelection = useCallback(() => {
     setInspectedDroneId(null)
     setSelection(null)
@@ -160,6 +180,7 @@ function App() {
   const canMarkRecipient = useMemo(() => flights.some(isRecipientTargetable), [flights])
   // The LPR helicopter (Feature 018E): the backend's scenario and which drones wait for it.
   const lprResource = useLpr()
+  const orderSimulation = useOrderSimulation() // one poll, shared by the header switch and Management
   const rainResource = useRainWarning()
   const rainWarningActive = rainResource.state.status === 'ready' && rainResource.state.data.active
   const refreshRainWarning = rainResource.refresh
@@ -294,12 +315,35 @@ function App() {
     previousFlyingKey.current = flyingKey
   }, [flyingKey, refreshDrones, refreshOrders, refreshMissions])
 
+  const notices = useMemo(
+    () =>
+      buildNotices({
+        emergencies: flights.filter((flight) => flight.emergency),
+        rainWarningActive,
+        lprActive: lprScenario !== null,
+        flightsUnavailable: flightsResource.state.status === 'error',
+        flightsStale: flightsResource.state.status === 'ready' && flightsResource.stale,
+        fleetStale: dronesResource.stale || ordersResource.stale,
+        workerStoppedWhileFlying: workerStale && flights.some(isActiveFlight),
+      }),
+    [
+      flights,
+      rainWarningActive,
+      lprScenario,
+      flightsResource.state.status,
+      flightsResource.stale,
+      dronesResource.stale,
+      ordersResource.stale,
+      workerStale,
+    ],
+  )
+
   return (
     <TakeoffsSuspendedProvider value={rainWarningActive}>
       <div className="flex h-dvh flex-col">
         <header
           inert={inspectorOpen}
-          className="flex items-center justify-between gap-4 border-b border-line bg-surface px-4 py-3 sm:px-6"
+          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-line bg-surface px-4 py-3 sm:px-6"
         >
           <div className="flex items-baseline gap-3">
             <h1 className="text-lg font-semibold tracking-tight">
@@ -307,8 +351,21 @@ function App() {
             </h1>
             <span className="hidden text-sm text-fg-muted sm:inline">Operations Center</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
             <AutoDispatchControl />
+            <OrderGenerationControl resource={orderSimulation} />
+            <ScenarioMenu
+              selectedOrder={selectedOrder ?? null}
+              onOrderCancelled={refreshAfterIncident}
+              canFailDrone={canFailDrone}
+              onDroneFailed={refreshAfterIncident}
+              canMarkRecipient={canMarkRecipient}
+              onRecipientMarked={refreshAfterIncident}
+              lprActive={lprScenario !== null}
+              onLprTriggered={refreshAfterIncident}
+              rainWarningActive={rainWarningActive}
+              onRainWarningChanged={refreshAfterIncident}
+            />
             <button
               type="button"
               aria-expanded={managementOpen}
@@ -373,13 +430,55 @@ function App() {
                 refreshOrders()
               }}
             />
-            <OrdersList
-              orders={orders}
-              hubs={hubs}
-              selectedOrderId={selection?.kind === 'order' ? selection.id : null}
-              onSelectOrder={selectOrder}
+            <OperationsPanel
+              tab={operationsTab}
+              onTabChange={setOperationsTab}
+              labels={{
+                drones: `Drones (${drones.length})`,
+                hubs: `Hubs (${hubs.length})`,
+                orders: `Orders (${orders.length})`,
+                events: 'Events',
+              }}
               hideOnNarrow={selection !== null}
-            />
+            >
+              {operationsTab === 'drones' && (
+                <DronesList
+                  drones={drones}
+                  hubs={hubs}
+                  selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
+                  onSelectDrone={selectDrone}
+                />
+              )}
+              {operationsTab === 'hubs' && (
+                <HubsList
+                  hubs={hubs}
+                  dockedCounts={dockedCounts}
+                  selectedHubId={selection?.kind === 'hub' ? selection.id : null}
+                  onSelectHub={selectHub}
+                />
+              )}
+              {operationsTab === 'orders' && (
+                <OrdersList
+                  orders={orders}
+                  hubs={hubs}
+                  selectedOrderId={selection?.kind === 'order' ? selection.id : null}
+                  onSelectOrder={selectOrder}
+                />
+              )}
+              {operationsTab === 'events' && (
+                <EventsTab
+                  notices={notices}
+                  activity={
+                    selectedDrone
+                      ? { kind: 'drone', id: selectedDrone.id }
+                      : selectedOrder
+                        ? { kind: 'order', id: selectedOrder.id }
+                        : null
+                  }
+                  activityRefreshKey={activityTick}
+                />
+              )}
+            </OperationsPanel>
           </div>
           {selectedHub && (
             <HubDetailPanel
@@ -414,18 +513,9 @@ function App() {
                   label: 'Orders',
                   content: (
                     <div className="flex flex-col gap-4">
-                      <OrderSimulationPanel onGenerated={refreshOrders} />
-                      <SimulationEventsPanel
-                        selectedOrder={selectedOrder ?? null}
-                        onOrderCancelled={refreshAfterIncident}
-                        canFailDrone={canFailDrone}
-                        onDroneFailed={refreshAfterIncident}
-                        canMarkRecipient={canMarkRecipient}
-                        onRecipientMarked={refreshAfterIncident}
-                        lprActive={lprScenario !== null}
-                        onLprTriggered={refreshAfterIncident}
-                        rainWarningActive={rainWarningActive}
-                        onRainWarningChanged={refreshAfterIncident}
+                      <OrderSimulationPanel
+                        onGenerated={refreshOrders}
+                        resource={orderSimulation}
                       />
                       <OrdersManager
                         selectedOrderId={selection?.kind === 'order' ? selection.id : null}

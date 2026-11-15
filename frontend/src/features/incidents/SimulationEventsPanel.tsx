@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import {
   activateRainWarning,
@@ -85,7 +85,7 @@ const LPR_ICON = (
   </Icon>
 )
 
-interface SimulationEventsPanelProps {
+export interface SimulationEventsPanelProps {
   /** The order the operator has selected on the map or in the list, if any. */
   selectedOrder?: Order | null
   /** Called after a successful cancellation so the operational views are re-read at once. */
@@ -106,6 +106,11 @@ interface SimulationEventsPanelProps {
   rainWarningActive?: boolean
   /** Called after an activate or clear request (whatever the answer) so the views refresh. */
   onRainWarningChanged?: () => void
+  /**
+   * Reports whether an action is waiting for the operator's answer (a cancel confirmation) or for
+   * the backend, so a menu around this panel does not close and lose it by accident.
+   */
+  onPendingChange?: (pending: boolean) => void
 }
 
 /**
@@ -128,6 +133,7 @@ export function SimulationEventsPanel({
   onLprTriggered,
   rainWarningActive = false,
   onRainWarningChanged,
+  onPendingChange,
 }: SimulationEventsPanelProps) {
   const cancellation = useAction()
   const rainAction = useAction()
@@ -147,6 +153,17 @@ export function SimulationEventsPanel({
 
   const eligible = selectedOrder !== null && isCancellable(selectedOrder)
   const confirming = eligible && confirmingId === selectedOrder.id
+
+  const pending =
+    confirming ||
+    cancellation.busy ||
+    failure.busy ||
+    recipient.busy ||
+    lprAction.busy ||
+    rainAction.busy
+  useEffect(() => {
+    onPendingChange?.(pending)
+  }, [pending, onPendingChange])
 
   let hint = 'Select an order (map, Orders list or table)'
   if (selectedOrder && eligible) hint = `Cancel ${selectedOrder.id}`
@@ -232,11 +249,11 @@ export function SimulationEventsPanel({
   }
 
   return (
-    <section aria-label="Simulation events" className="rounded border border-line p-3">
+    <section aria-label="Simulation events" className="p-3">
       <h3 className="text-sm font-semibold">
         Simulation events <span className="font-normal text-fg-muted">(demo only)</span>
       </h3>
-      <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <ul className="mt-2 flex flex-col gap-1.5">
         <li>
           <button
             type="button"
@@ -247,7 +264,7 @@ export function SimulationEventsPanel({
               setCancelled(null)
               if (selectedOrder) setConfirmingId(selectedOrder.id)
             }}
-            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+            className="grid min-h-10 w-full grid-cols-[auto_1fr] items-center gap-x-3 rounded border border-line px-2 py-1.5 text-left text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent [&>svg]:row-span-2"
           >
             {CANCEL_ICON}
             <span>Cancel order</span>
@@ -260,7 +277,7 @@ export function SimulationEventsPanel({
             disabled={!canFailDrone || failure.busy}
             title={canFailDrone ? 'Fail one flying drone' : 'No drone is flying'}
             onClick={failDrone}
-            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+            className="grid min-h-10 w-full grid-cols-[auto_1fr] items-center gap-x-3 rounded border border-line px-2 py-1.5 text-left text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent [&>svg]:row-span-2"
           >
             {DRONE_FAILURE_ICON}
             <span>Drone failure</span>
@@ -283,7 +300,7 @@ export function SimulationEventsPanel({
                 : 'No delivery is on its way'
             }
             onClick={markRecipient}
-            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+            className="grid min-h-10 w-full grid-cols-[auto_1fr] items-center gap-x-3 rounded border border-line px-2 py-1.5 text-left text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent [&>svg]:row-span-2"
           >
             {RECIPIENT_ICON}
             <span>Recipient unavailable</span>
@@ -306,7 +323,7 @@ export function SimulationEventsPanel({
                 : 'Start the LPR helicopter'
             }
             onClick={startLpr}
-            className="flex w-full flex-col items-center gap-1 rounded border border-line px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent"
+            className="grid min-h-10 w-full grid-cols-[auto_1fr] items-center gap-x-3 rounded border border-line px-2 py-1.5 text-left text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:text-fg-muted disabled:opacity-60 disabled:hover:bg-transparent [&>svg]:row-span-2"
           >
             {LPR_ICON}
             <span>LPR helicopter</span>
@@ -330,7 +347,7 @@ export function SimulationEventsPanel({
                 : 'Suspend new takeoffs (flights in the air continue)'
             }
             onClick={toggleRainWarning}
-            className={`flex w-full flex-col items-center gap-1 rounded border px-2 py-2 text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`grid min-h-10 w-full grid-cols-[auto_1fr] items-center gap-x-3 rounded border px-2 py-1.5 text-left text-xs text-fg hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-60 [&>svg]:row-span-2 ${
               rainWarningActive ? 'border-status-warning bg-status-warning/15' : 'border-line'
             }`}
           >
