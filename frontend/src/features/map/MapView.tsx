@@ -8,6 +8,7 @@ import type { LprScenario } from '../../types/lpr'
 import type { Order } from '../../types/order'
 import type { EmergencyLevel, EmergencyPoint } from '../flights/emergencyPoints'
 import { type FlightVisual, interpolatePosition } from '../flights/interpolation'
+import { usePrefersReducedMotion } from '../flights/usePrefersReducedMotion'
 import { helicopterPosition, zoneFeature } from '../lpr/helicopter'
 import { LPR_ZONE_COLOR, createHelicopterMarkerElement } from '../lpr/lprMarkers'
 import {
@@ -19,6 +20,8 @@ import {
   setDroneMarkerYielding,
 } from './droneMarkers'
 import { createEmergencyMarkerElement } from './emergencyMarkers'
+import type { FocusRequest } from './focusTarget'
+import { focusCamera, isNarrowViewport } from './mapCamera'
 import {
   createOrderMarkerElement,
   setOrderMarkerSelected,
@@ -143,6 +146,11 @@ interface MapViewProps {
   lpr?: LprView | null
   /** Drones standing still outside the helicopter's zone (an amber outline and a label). */
   yieldingDroneIds?: ReadonlySet<string>
+  /**
+   * A one-time "show me this" command from a list click (Feature 023). Each new `seq` moves the
+   * camera once; the same command on a re-render moves nothing. Selection is not part of it.
+   */
+  focusRequest?: FocusRequest | null
 }
 
 /**
@@ -170,6 +178,7 @@ export function MapView({
   interruptedOrderIds = NO_ORDER_IDS,
   lpr = null,
   yieldingDroneIds = NO_ORDER_IDS,
+  focusRequest = null,
 }: MapViewProps) {
   const token = getMapboxToken()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -186,10 +195,24 @@ export function MapView({
   const onSelectHubRef = useRef(onSelectHub)
   const onSelectDroneRef = useRef(onSelectDrone)
   const [status, setStatus] = useState<MapStatus>('loading')
+  const reducedMotion = usePrefersReducedMotion()
+  // The last focus command that was carried out: a command moves the camera exactly once.
+  const handledFocusSeqRef = useRef(0)
 
   useEffect(() => {
     onSelectHubRef.current = onSelectHub
   }, [onSelectHub])
+
+  // Feature 023: fly to the latest list click. A command that arrives before the map is ready waits
+  // (only the latest one is kept) and is carried out when the map is ready. Data refreshes and
+  // selection changes do not change `focusRequest`, so they never move the camera.
+  useEffect(() => {
+    const map = mapRef.current
+    if (status !== 'ready' || !map || !focusRequest) return
+    if (focusRequest.seq <= handledFocusSeqRef.current) return
+    handledFocusSeqRef.current = focusRequest.seq
+    focusCamera(map, focusRequest.position, { reducedMotion, narrow: isNarrowViewport() })
+  }, [focusRequest, status, reducedMotion])
 
   useEffect(() => {
     onSelectDroneRef.current = onSelectDrone

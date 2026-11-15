@@ -31,6 +31,8 @@ import { HubDetailPanel } from './features/hubs/HubDetailPanel'
 import { useHubs } from './features/hubs/useHubs'
 import { computeDroneOffsets } from './features/map/droneMarkers'
 import { partitionFleet } from './features/map/fleetPlacement'
+import { FocusNotice, type FocusNoticeData } from './features/map/FocusNotice'
+import { type FocusKind, type FocusRequest, resolveFocusTarget } from './features/map/focusTarget'
 import { OrderMarkerLegend } from './features/map/OrderMarkerLegend'
 import { type LprView, MapView } from './features/map/MapView'
 import { computeOrderOffsets } from './features/map/orderMarkers'
@@ -110,6 +112,50 @@ function App() {
     setSelection(null)
   }, [])
   const closeInspector = useCallback(() => setInspectedDroneId(null), [])
+
+  // Feature 023: a click in an Operations list also moves the map camera there, once. A marker click
+  // keeps the plain select above and never moves the camera. Every click gets a new `seq`, so
+  // clicking the same row again flies again; a re-render or a data refresh keeps the same request
+  // and moves nothing. An entity without a usable location leaves the camera alone and says so.
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
+  const [focusNotice, setFocusNotice] = useState<FocusNoticeData | null>(null)
+  const focusSeq = useRef(0)
+  const dismissFocusNotice = useCallback(() => setFocusNotice(null), [])
+  const locate = useCallback(
+    (kind: FocusKind, id: string) => {
+      const { label, position } = resolveFocusTarget(kind, id, { hubs, drones, orders })
+      focusSeq.current += 1
+      const seq = focusSeq.current
+      if (position === null) {
+        setFocusNotice({ seq, text: `The location of ${label} is not available.` })
+        return
+      }
+      setFocusNotice(null)
+      setFocusRequest({ kind, id, position, seq })
+    },
+    [hubs, drones, orders],
+  )
+  const focusHub = useCallback(
+    (id: string) => {
+      selectHub(id)
+      locate('hub', id)
+    },
+    [selectHub, locate],
+  )
+  const focusDrone = useCallback(
+    (id: string) => {
+      selectDrone(id)
+      locate('drone', id)
+    },
+    [selectDrone, locate],
+  )
+  const focusOrder = useCallback(
+    (id: string) => {
+      selectOrder(id)
+      locate('order', id)
+    },
+    [selectOrder, locate],
+  )
 
   const selectedHub =
     selection?.kind === 'hub' ? hubs.find((hub) => hub.id === selection.id) : undefined
@@ -402,6 +448,7 @@ function App() {
             interruptedOrderIds={interruptedOrderIds}
             lpr={lprView}
             yieldingDroneIds={yieldingDroneIds}
+            focusRequest={focusRequest}
           />
           <OrderMarkerLegend
             hideOnNarrow={selection !== null}
@@ -424,6 +471,7 @@ function App() {
               state={ordersResource.state}
               onRetry={ordersResource.retry}
             />
+            <FocusNotice notice={focusNotice} onDismiss={dismissFocusNotice} />
             <LiveDataNotices
               flights={flightsResource}
               missions={missionsResource}
@@ -449,7 +497,7 @@ function App() {
                   drones={drones}
                   hubs={hubs}
                   selectedDroneId={selection?.kind === 'drone' ? selection.id : null}
-                  onSelectDrone={selectDrone}
+                  onSelectDrone={focusDrone}
                 />
               )}
               {operationsTab === 'hubs' && (
@@ -457,7 +505,7 @@ function App() {
                   hubs={hubs}
                   dockedCounts={dockedCounts}
                   selectedHubId={selection?.kind === 'hub' ? selection.id : null}
-                  onSelectHub={selectHub}
+                  onSelectHub={focusHub}
                 />
               )}
               {operationsTab === 'orders' && (
@@ -465,7 +513,7 @@ function App() {
                   orders={orders}
                   hubs={hubs}
                   selectedOrderId={selection?.kind === 'order' ? selection.id : null}
-                  onSelectOrder={selectOrder}
+                  onSelectOrder={focusOrder}
                 />
               )}
               {operationsTab === 'events' && (

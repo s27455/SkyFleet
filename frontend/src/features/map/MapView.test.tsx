@@ -7,6 +7,7 @@ import type { Hub } from '../../types/hub'
 import type { LprScenario } from '../../types/lpr'
 import type { Order } from '../../types/order'
 import type { FlightVisual } from '../flights/interpolation'
+import type { FocusRequest } from './focusTarget'
 import { MapView } from './MapView'
 
 type Handler = () => void
@@ -18,6 +19,9 @@ const fake = vi.hoisted(() => {
     remove: () => void
     resize: () => void
     options?: Record<string, unknown>
+    flyTo: ReturnType<typeof vi.fn>
+    zoom: number
+    height: number
   }[] = []
   const markers: {
     element: HTMLElement
@@ -58,6 +62,15 @@ vi.mock('mapbox-gl', () => {
     handlers: Record<string, Handler> = {}
     remove = vi.fn()
     resize = vi.fn()
+    flyTo = vi.fn()
+    zoom = 11
+    height = 800
+    getZoom() {
+      return this.zoom
+    }
+    getContainer() {
+      return { clientHeight: this.height }
+    }
     options?: Record<string, unknown>
     constructor(options?: Record<string, unknown>) {
       this.options = options
@@ -1113,5 +1126,161 @@ describe('MapView LPR helicopter (Feature 018E)', () => {
 
     rerender(<MapView drones={[drone]} yieldingDroneIds={new Set()} />)
     expect(screen.getByRole('button', { name: /DRN-010/ }).dataset.yielding).toBeUndefined()
+  })
+})
+
+describe('MapView focus (Feature 023)', () => {
+  beforeEach(() => {
+    fake.instances.length = 0
+    fake.markers.length = 0
+    fake.sources.clear()
+    fake.layers.length = 0
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    )
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test')
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  const loadMap = () => act(() => fake.instances[0].handlers.load())
+  const map = () => fake.instances[0]
+  const request = (seq: number, position: [number, number] = [18.6, 54.38]): FocusRequest => ({
+    kind: 'drone',
+    id: 'DRN-1',
+    position,
+    seq,
+  })
+  const media = ({ wide = true, reduced = false } = {}) =>
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query.includes('reduce') ? reduced : wide,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+
+  it('does not move the camera when there is no request', () => {
+    render(<MapView />)
+    loadMap()
+
+    expect(map().flyTo).not.toHaveBeenCalled()
+  })
+
+  it('waits for the map to be ready and then flies once to the request', () => {
+    render(<MapView focusRequest={request(1, [18.55, 54.4])} />)
+    expect(map().flyTo).not.toHaveBeenCalled() // not ready yet
+
+    loadMap()
+
+    expect(map().flyTo).toHaveBeenCalledOnce()
+    expect(map().flyTo.mock.calls[0][0]).toMatchObject({
+      center: [18.55, 54.4],
+      zoom: 15,
+      duration: 900,
+    })
+  })
+
+  it('keeps only the latest request that arrived before the map was ready', () => {
+    const { rerender } = render(<MapView focusRequest={request(1, [18.5, 54.3])} />)
+    rerender(<MapView focusRequest={request(2, [18.7, 54.4])} />)
+    rerender(<MapView focusRequest={request(3, [18.6, 54.5])} />)
+
+    loadMap()
+
+    expect(map().flyTo).toHaveBeenCalledOnce()
+    expect(map().flyTo.mock.calls[0][0].center).toEqual([18.6, 54.5])
+  })
+
+  it('does not move again on a re-render, a data refresh or a selection change', () => {
+    const same = request(1)
+    const { rerender } = render(<MapView focusRequest={same} />)
+    loadMap()
+    expect(map().flyTo).toHaveBeenCalledOnce()
+
+    rerender(<MapView focusRequest={same} orders={[]} />) // a poll with the same data
+    rerender(<MapView focusRequest={same} selectedDroneId="DRN-1" />) // a selection change
+    rerender(<MapView focusRequest={{ ...same }} selectedDroneId="DRN-2" />) // same seq, new object
+
+    expect(map().flyTo).toHaveBeenCalledOnce()
+  })
+
+  it('moves again for a new request to the same entity (a repeated click)', () => {
+    const { rerender } = render(<MapView focusRequest={request(1)} />)
+    loadMap()
+
+    rerender(<MapView focusRequest={request(2)} />)
+    rerender(<MapView focusRequest={request(3)} />)
+
+    expect(map().flyTo).toHaveBeenCalledTimes(3)
+  })
+
+  it('ends on the latest request after rapid requests, and never goes back to an older one', () => {
+    const { rerender } = render(<MapView focusRequest={request(1, [18.5, 54.3])} />)
+    loadMap()
+    rerender(<MapView focusRequest={request(2, [18.6, 54.4])} />)
+    rerender(<MapView focusRequest={request(3, [18.7, 54.5])} />)
+    rerender(<MapView focusRequest={request(2, [18.6, 54.4])} />) // a stale command arrives late
+
+    const calls = map().flyTo.mock.calls
+    expect(calls.map((call) => call[0].center)).toEqual([
+      [18.5, 54.3],
+      [18.6, 54.4],
+      [18.7, 54.5],
+    ])
+  })
+
+  it("keeps the operator's closer zoom and zooms in from further out", () => {
+    const { rerender } = render(<MapView />)
+    loadMap()
+
+    map().zoom = 17.2
+    rerender(<MapView focusRequest={request(1)} />)
+    map().zoom = 10.5
+    rerender(<MapView focusRequest={request(2)} />)
+
+    expect(map().flyTo.mock.calls.map((call) => call[0].zoom)).toEqual([17.2, 15])
+  })
+
+  it('shows the target above the centre on a phone', () => {
+    media({ wide: false })
+    const { rerender } = render(<MapView />)
+    loadMap()
+    map().height = 800
+
+    rerender(<MapView focusRequest={request(1)} />)
+
+    expect(map().flyTo.mock.calls[0][0].offset).toEqual([0, -200])
+  })
+
+  it('uses no offset on a wide screen', () => {
+    media({ wide: true })
+    const { rerender } = render(<MapView />)
+    loadMap()
+
+    rerender(<MapView focusRequest={request(1)} />)
+
+    expect(map().flyTo.mock.calls[0][0].offset).toEqual([0, 0])
+  })
+
+  it('moves immediately with reduced motion', () => {
+    media({ reduced: true })
+    const { rerender } = render(<MapView />)
+    loadMap()
+
+    rerender(<MapView focusRequest={request(1)} />)
+
+    expect(map().flyTo.mock.calls[0][0]).toMatchObject({ duration: 0, essential: true })
+  })
+
+  it('does nothing, and does not fail, when the page is closed before the map is ready', () => {
+    const { unmount } = render(<MapView focusRequest={request(1)} />)
+    const removed = map()
+
+    expect(() => unmount()).not.toThrow()
+
+    expect(removed.remove).toHaveBeenCalledOnce()
+    expect(removed.flyTo).not.toHaveBeenCalled() // the request never reached a map
   })
 })
