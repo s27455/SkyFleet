@@ -12,6 +12,14 @@ dashboard open.
 SkyFleet is a full-stack recruitment project. It is built to show a clean, testable architecture
 behind a polished, map-first interface.
 
+## 🎬 Demo Video
+
+Watch the SkyFleet application in action, including drone delivery operations, live simulation, and the AI Copilot.
+
+**[Watch or download the SkyFleet demo (MP4)](https://github.com/s27455/SkyFleet/releases/tag/v1.0.0)**
+
+The video is available as an attachment in the GitHub Release. No installation is required to view the demonstration.
+
 ## Features
 
 **A live operations map.** The dark Mapbox map shows the four Hubs with their docked-drone counts,
